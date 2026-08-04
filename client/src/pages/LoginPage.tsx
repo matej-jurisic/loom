@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Zap } from 'lucide-react'
 import { authApi, ApiError } from '@/lib/api'
 import { useAuthStore } from '@/store/auth'
 import { isNative, getServerUrl, setServerUrl, setNativeRefreshToken } from '@/lib/server-config'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
+import { LoomMark } from '@/components/layout/LoomMark'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -37,7 +37,7 @@ export function LoginPage() {
       <div className="w-full max-w-sm rounded-xl border border-border bg-background p-8">
         <div className="mb-6 flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Zap className="h-4 w-4" strokeWidth={2.5} />
+            <LoomMark className="h-4 w-4" />
           </div>
           <span className="text-base font-semibold tracking-tight text-foreground">Loom</span>
         </div>

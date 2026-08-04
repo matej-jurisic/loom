@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-  <rect width="48" height="48" rx="10" fill="#8499B1"/>
-  <g transform="translate(6, 6) scale(1.5)" fill="white">
-    <!-- Loom mark: a plain weave, warp and weft strands alternating over/under -->
+<svg xmlns="http://www.w3.org/2000/svg" width="2732" height="2732" viewBox="0 0 2732 2732">
+  <rect width="2732" height="2732" fill="#F3F4F6"/>
+  <rect x="1066" y="1066" width="600" height="600" rx="120" fill="#8499B1"/>
+  <g transform="translate(1141, 1141) scale(18.75)" fill="white">
     <rect x="6.5" y="2" width="3" height="12.5" rx="1.5"/>
     <rect x="6.5" y="17.5" width="3" height="4.5" rx="1.5"/>
     <rect x="14.5" y="2" width="3" height="4.5" rx="1.5"/>

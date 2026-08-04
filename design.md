@@ -32,6 +32,16 @@ Modern, clean, minimalist web-based dashboard. Spacious, organized, strictly pro
   - Bench Goals: Neutral Gray
 - Event blocks use a very light (low-opacity) background of their parent goal's color, with a solid 1px border of the same color. Events without goals use neutral gray.
 
+### Brand Mark
+
+A plain weave: two strands crossing, each alternately over and under the other, drawn as eight
+rounded bars on a 24x24 grid (`client/src/components/layout/LoomMark.tsx`). Filled, not stroked -
+it reads as a mark, not a UI icon, and stays legible down to a 16px favicon. White on the primary
+Slate Blue `#8499B1`, inside an `h-8 w-8 rounded-lg` tile, next to the wordmark in the sidebar and
+both auth pages. The same mark backs `public/favicon.svg` and the native app icon/splash sources in
+`client/assets/` (`icon-only`, `icon-foreground` + `icon-background` for Android's adaptive icon,
+`splash` + `splash-dark`) - one shape everywhere the app identifies itself.
+
 ---
 
 ## Typography
@@ -60,7 +70,7 @@ The panes are separated by a 1px `border-[var(--border)]` vertical divider. No g
 ### 1. Left Sidebar (240px fixed)
 
 - White background (`--card`).
-- **Top:** Brand name "Loom" in `text-primary`, semibold. Bottom border.
+- **Top:** Brand mark (see below) + name "Loom" in `text-primary`, semibold. Bottom border.
 - **Middle:** Vertical nav. Items: icon + label. Gap `gap-0.5` between items. Padding `px-3 py-4`.
 - **Active nav item:** `bg-accent` (gray tint) pill. Icon in `text-primary`. Label in `text-foreground font-semibold`.
 - **Inactive nav item:** Icon and label both in `text-muted-foreground`. Hover: `bg-accent`.

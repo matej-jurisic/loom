@@ -126,6 +126,9 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `components/layout/Sidebar.tsx` — desktop nav: five page items, then the category list (`Active` =
   `/categories?all=true`, `No category`, one per category with inline add/edit/delete), Settings pinned at the bottom.
 - `components/layout/BottomNav.tsx` — mobile nav: 4 tabs + "More" bottom sheet (Activities, Insights, Settings). Max 5 slots; new pages go in the sheet.
+- `components/layout/LoomMark.tsx` — the brand mark (fill-based weave glyph, not a stroked lucide
+  icon), used in `Sidebar.tsx` and both auth pages. Mirrored by hand in `public/favicon.svg` and the
+  native icon/splash sources in `client/assets/*.svg` — edit all of them together if the mark changes.
 - `components/activities/ActivityHistoryModal.tsx` — read-only "have I been doing this", opened from an
   activity row's action menu. Reads `['events', 'activity', id]`, the same key `ActivityDetailPage`
   fills, so the two warm each other. **Every figure is derived in the component** from that activity's

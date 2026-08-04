@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { CalendarRange, CalendarDays, ChartColumn, CircleDashed, LayoutList, Target, Settings, Zap, Pencil, Trash2, Plus, Layers } from 'lucide-react'
+import { CalendarRange, CalendarDays, ChartColumn, CircleDashed, LayoutList, Target, Settings, Pencil, Trash2, Plus, Layers } from 'lucide-react'
 import { categoriesApi } from '@/lib/api'
+import { LoomMark } from './LoomMark'
 import { toastError } from '@/store/toasts'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
 import { CategoryModal } from '@/components/categories/CategoryModal'
@@ -188,7 +189,7 @@ export function Sidebar() {
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-5 py-5">
         <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Zap className="h-4 w-4" strokeWidth={2.5} />
+          <LoomMark className="h-4 w-4" />
         </div>
         <span className="text-base font-semibold tracking-tight text-foreground">Loom</span>
       </div>
