@@ -3005,7 +3005,7 @@ export function CalendarPage() {
           <button
             onClick={cycleView}
             aria-label={`Calendar range: ${VIEW_OPTIONS.find((o) => o.value === view)?.label}. Tap to change.`}
-            className="sm:hidden flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-foreground hover:bg-muted transition-colors"
+            className="sm:hidden flex h-8 w-[86px] shrink-0 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-foreground hover:bg-muted transition-colors"
           >
             <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" fill="none">
               <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" className="text-muted-foreground/40" />
