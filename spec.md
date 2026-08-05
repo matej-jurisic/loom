@@ -213,8 +213,9 @@ a goal.
 | Icon | Optional icon key |
 
 Activities carry an optional `CategoryId`; deleting a category set-nulls it. Categories are managed
-inline from the sidebar (desktop) or the page's drawer (mobile) - there is no separate management
-page. The category's colour drives every occurrence row and calendar block for its activities.
+inline from the sidebar (desktop) or the Categories page's own list view (mobile) - there is no
+separate management page. The category's colour drives every occurrence row and calendar block for
+its activities.
 
 ---
 

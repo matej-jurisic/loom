@@ -3,14 +3,14 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { ClipboardList, CalendarDays, Tags, Target, Layers, Settings, ChartColumn, Ellipsis } from 'lucide-react'
 
 const tabs = [
-  { to: '/plan',                label: 'Plan',       Icon: ClipboardList },
-  { to: '/categories?all=true', label: 'Categories', Icon: Tags },
-  { to: '/calendar',            label: 'Calendar',   Icon: CalendarDays },
-  { to: '/goals',               label: 'Goals',      Icon: Target },
+  { to: '/plan',       label: 'Plan',       Icon: ClipboardList },
+  { to: '/activities', label: 'Activities', Icon: Layers },
+  { to: '/calendar',   label: 'Calendar',   Icon: CalendarDays },
+  { to: '/goals',      label: 'Goals',      Icon: Target },
 ]
 
 const moreItems = [
-  { to: '/activities', label: 'Activities', Icon: Layers },
+  { to: '/categories', label: 'Categories', Icon: Tags },
   { to: '/insights',   label: 'Insights',   Icon: ChartColumn },
   { to: '/settings',   label: 'Settings',   Icon: Settings },
 ]
@@ -66,7 +66,7 @@ function MoreSheet({ onClose }: { onClose: () => void }) {
 export function BottomNav() {
   const [moreOpen, setMoreOpen] = useState(false)
   const { pathname } = useLocation()
-  const moreActive = moreItems.some(({ to }) => pathname.startsWith(to))
+  const moreActive = moreItems.some(({ to }) => pathname.startsWith(to.split('?')[0]))
 
   return (
     <>

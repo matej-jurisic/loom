@@ -105,6 +105,13 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   `GoalsPreviewPage` (**this is `/goals`**), `GoalDetailPage`, `ActivitiesPage`, `ActivityDetailPage`,
   `InsightsPage`, `SettingsPage`. The `*PreviewPage` names are historical — they are the live pages.
   `/activities`'s static segment outranks `/activities/:id`.
+- `pages/CategoriesPage.tsx` — desktop always shows the filtered occurrence list (nav is the
+  sidebar's category list). On mobile, bare `/categories` (no query params) renders a full-page
+  category list instead — `isRoot` in the component — with the header's `+` creating a category;
+  tapping an entry (`?all=true`, `?category=none` for "No category", or `?category=<id>`) switches
+  to the same occurrence-list view desktop uses, now with a back chevron in place of the `+`'s
+  sibling. `?category=none` exists only for this mobile round-trip; bare `/categories` already means
+  "no category" on desktop since the sidebar is always visible there.
 - `lib/api.ts` — `request<T>` (bearer + one-shot 401 refresh). Key namespaces: `activitiesApi`, `occurrencesApi`, `categoriesApi`, `goalsApi`, `checkpointsApi`, `insightsApi`.
 - `lib/types.ts` — mirrors backend DTOs. Key types: `Activity`, `Occurrence` (has `effectiveTitle`), `Goal`, `Category`, `Insights`.
 - `lib/theme.ts` — light/dark/system preference (localStorage `loom-theme`).
@@ -125,7 +132,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   predicate in `lib/categories.ts`). Currently unreferenced: neither nav renders a badge.
 - `components/layout/Sidebar.tsx` — desktop nav: five page items, then the category list (`Active` =
   `/categories?all=true`, `No category`, one per category with inline add/edit/delete), Settings pinned at the bottom.
-- `components/layout/BottomNav.tsx` — mobile nav: 4 tabs + "More" bottom sheet (Activities, Insights, Settings). Max 5 slots; new pages go in the sheet.
+- `components/layout/BottomNav.tsx` — mobile nav: 4 tabs (Plan, Activities, Calendar, Goals) + "More"
+  bottom sheet (Categories, Insights, Settings). Max 5 slots; new pages go in the sheet.
 - `components/layout/LoomMark.tsx` — the brand mark (fill-based weave glyph, not a stroked lucide
   icon), used in `Sidebar.tsx` and both auth pages. Mirrored by hand in `public/favicon.svg` and the
   native icon/splash sources in `client/assets/*.svg` — edit all of them together if the mark changes.
@@ -143,11 +151,13 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   additionally requires `lastPointerTypeRef.current === 'mouse'`: a touch reaches it a second time as a
   compatibility mouse event, which would otherwise walk straight past all four.
 - `lib/timeScale.ts` — the grid's minute↔pixel map, one `TimeScale` per visible day. `linearScale` is
-  the plain 0-24 map; `compactScale` elides empty stretches into fixed-height bands. **Every grid
-  coordinate goes through `toPx`/`toMin`** — event tops, hour lines, overlays, the now line, snapping
-  (`snapToGrid` takes the scale, not `hourPx`). Two invariants the calendar leans on:
+  the plain 0-24 map; `compactScale` drops empty stretches entirely, stacking a day's events directly
+  against one another (each block keeps its real duration-proportional height; only the gap between
+  blocks disappears). **Every grid coordinate goes through `toPx`/`toMin`** — event tops, hour lines,
+  overlays, the now line, snapping (`snapToGrid` takes the scale, not `hourPx`). Two invariants the
+  calendar leans on:
   1. **Any drag expands first.** `expandForDrag` swaps in the linear scale via `flushSync` before the
-     gesture reads a coordinate, so no drag code reasons about bands; `collapseAfterDrag` in each
+     gesture reads a coordinate, so no drag code reasons about the stack; `collapseAfterDrag` in each
      gesture's `cleanup` restores it. Collapsing is a plain `setState`, so the drop still reads
      expanded geometry. Expansion fires at each gesture's *commit* point (mouse drag threshold, touch
      long press, resize-handle press), never on pointerdown — that would flicker on every click.
@@ -158,8 +168,9 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   caller: record the minute to hold still *before* any state is queued, apply it after layout. Zoom
   and the compact toggle use it too. Three things about it are load-bearing:
   - **Capture before queueing state.** It converts a pixel to a minute through the *current* scale,
-    and in a compacted one a 20px band spans hours — measuring after the grid has moved (the FLOAT /
-    all-day rows appear on drag start) turns a ~150px shift into a several-hour error.
+    and a compact scale can pack hours of real time into a very short run of pixels — measuring after
+    the grid has moved (the FLOAT / all-day rows appear on drag start) turns a small pixel shift into
+    a several-hour error.
   - **The anchor is not one-shot.** One gesture moves the grid across more than one render, and which
     render gets what depends on React's batching. Re-applying drives the delta to zero, so it is left
     in place and every render converges. It expires after `ANCHOR_TTL_MS` instead of being consumed.

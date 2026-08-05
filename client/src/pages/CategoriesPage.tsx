@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { X, Pencil, Trash2, Plus, Menu, CircleDashed, LayoutList } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Pencil, Trash2, Plus, CircleDashed, LayoutList } from 'lucide-react'
 import { occurrencesApi, categoriesApi } from '@/lib/api'
 import { isUncategorized } from '@/lib/categories'
 import { toastError } from '@/store/toasts'
@@ -10,6 +10,7 @@ import { CategoryIcon } from '@/components/categories/categoryIcons'
 import { EventModal } from '@/components/events/EventModal'
 import { OccurrenceListRow } from '@/components/events/OccurrenceListRow'
 import { CategoryModal } from '@/components/categories/CategoryModal'
+import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { PageHeader } from '@/components/layout/PageHeader'
 
@@ -93,7 +94,14 @@ const GROUP_LABELS: Record<Group, string> = {
 
 export function CategoriesPage() {
   const [searchParams] = useSearchParams()
-  const categoryId = searchParams.get('category')
+  const categoryParam = searchParams.get('category')
+  // 'none' is the explicit "No category" filter (used by the mobile list); a real category id
+  // resolves to itself; absent means either "No category" (desktop, bare path is its default view)
+  // or, on mobile with no other params at all, the category list root.
+  const categoryId = categoryParam && categoryParam !== 'none' ? categoryParam : null
+  const showActive = searchParams.get('all') === 'true'
+  // Mobile only: bare `/categories` with no params shows the category list instead of a filter.
+  const isRoot = !categoryParam && !showActive
   const navigate = useNavigate()
   const qc = useQueryClient()
 
@@ -101,7 +109,6 @@ export function CategoriesPage() {
   const [editingOccurrence, setEditingOccurrence] = useState<Occurrence | undefined>()
   const [scheduleMode, setScheduleMode] = useState(false)
 
-  const [drawerOpen, setDrawerOpen] = useState(false)
   const [catModalOpen, setCatModalOpen] = useState(false)
   const [editingCategory, setEditingCategory] = useState<Category | undefined>()
   const [deletingCategory, setDeletingCategory] = useState<Category | null>(null)
@@ -147,7 +154,6 @@ export function CategoriesPage() {
     setCatModalOpen(true)
   }
 
-  const showActive = searchParams.get('all') === 'true'
   const activeCategory = categoryId ? categories.find((c) => c.id === categoryId) : null
 
   const visibleOccurrences = showActive
@@ -191,6 +197,92 @@ export function CategoriesPage() {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
+      {/* Mobile: bare /categories shows a category list instead of a filter. Tapping an entry
+          navigates into the detail view below; on desktop the sidebar covers this job, so this
+          block never gets past md:hidden. */}
+      {isRoot && (
+        <div className="flex flex-1 flex-col overflow-hidden md:hidden">
+          <PageHeader
+            title="Categories"
+            action={
+              <button
+                onClick={openAddCat}
+                className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground hover:bg-muted transition-colors"
+                aria-label="Add category"
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+              </button>
+            }
+          />
+          <div className="flex-1 overflow-y-auto px-3 py-4">
+            <div className="rounded-lg border border-border">
+              <ul>
+                <li className="border-b border-border last:border-b-0">
+                  <Link
+                    to="/categories?all=true"
+                    className="flex items-center gap-3 px-3 py-3 hover:bg-muted/40 transition-colors"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <LayoutList className="h-[15px] w-[15px] text-muted-foreground" strokeWidth={2} />
+                    </span>
+                    <span className="flex-1 text-sm font-medium text-foreground">Active</span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2} />
+                  </Link>
+                </li>
+                <li className="border-b border-border last:border-b-0">
+                  <Link
+                    to="/categories?category=none"
+                    className="flex items-center gap-3 px-3 py-3 hover:bg-muted/40 transition-colors"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
+                      <CircleDashed className="h-[15px] w-[15px] text-muted-foreground" strokeWidth={2} />
+                    </span>
+                    <span className="flex-1 text-sm font-medium text-foreground">No category</span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2} />
+                  </Link>
+                </li>
+                {categories.map((cat) => (
+                  <li key={cat.id} className="border-b border-border last:border-b-0">
+                    <div className="flex items-center gap-1">
+                      <Link
+                        to={`/categories?category=${cat.id}`}
+                        className="flex flex-1 items-center gap-3 px-3 py-3 pr-1 hover:bg-muted/40 transition-colors"
+                      >
+                        <span
+                          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted"
+                          style={{ backgroundColor: `${cat.color}1f` }}
+                        >
+                          <CategoryIcon icon={cat.icon} color={cat.color} size={15} strokeWidth={2} />
+                        </span>
+                        <span className="flex-1 truncate text-sm font-medium text-foreground">{cat.name}</span>
+                      </Link>
+                      <div className="shrink-0 pr-2">
+                        <ActionMenu
+                          ariaLabel={`Actions for ${cat.name}`}
+                          iconClassName="h-3.5 w-3.5"
+                          items={[
+                            { icon: Pencil, label: 'Edit', onClick: () => openEditCat(cat) },
+                            { icon: Trash2, label: 'Delete', onClick: () => setDeletingCategory(cat), destructive: true },
+                          ]}
+                        />
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button
+              onClick={openAddCat}
+              className="mt-3 flex h-9 w-full items-center justify-center gap-1.5 rounded-md border border-border text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+              Add category
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={`flex-1 flex-col overflow-hidden ${isRoot ? 'hidden md:flex' : 'flex'}`}>
       <PageHeader
         title={
           showActive ? (
@@ -209,11 +301,11 @@ export function CategoriesPage() {
         }
         leading={
           <button
-            onClick={() => setDrawerOpen(true)}
+            onClick={() => navigate('/categories')}
             className="md:hidden flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-            aria-label="Open categories"
+            aria-label="Back to categories"
           >
-            <Menu className="h-4 w-4" strokeWidth={2} />
+            <ChevronLeft className="h-4 w-4" strokeWidth={2} />
           </button>
         }
         action={
@@ -289,6 +381,7 @@ export function CategoriesPage() {
           )}
         </div>
       </div>
+      </div>
 
       <EventModal
         key={`${editingOccurrence?.id ?? 'new'}-${scheduleMode}`}
@@ -314,106 +407,6 @@ export function CategoriesPage() {
         title="Delete category?"
         message={`"${deletingCategory?.name ?? ''}" will be deleted. Activities in this category will be kept without a category.`}
       />
-
-      {/* Mobile category drawer */}
-      {drawerOpen && (
-        <div className="md:hidden fixed inset-0 z-40 flex">
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-modal-overlay"
-            onClick={() => setDrawerOpen(false)}
-          />
-          <div className="relative z-10 flex w-64 flex-col bg-background border-r border-border animate-modal-panel-left">
-            <div className="flex items-center justify-between px-4 py-4 border-b border-border">
-              <span className="text-sm font-semibold text-foreground">Categories</span>
-              <button
-                onClick={() => setDrawerOpen(false)}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <X className="h-4 w-4" strokeWidth={2} />
-              </button>
-            </div>
-
-            <nav className="flex-1 overflow-y-auto px-3 py-2">
-              <Link
-                to="/categories?all=true"
-                onClick={() => setDrawerOpen(false)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                  showActive
-                    ? 'bg-muted font-semibold text-foreground'
-                    : 'font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-                }`}
-              >
-                <span className="h-[18px] w-[18px] shrink-0 flex items-center justify-center">
-                  <LayoutList className={`h-[15px] w-[15px] ${showActive ? 'text-primary' : ''}`} strokeWidth={2} />
-                </span>
-                Active
-              </Link>
-
-              <div className="my-2 border-t border-border" />
-
-              <Link
-                to="/categories"
-                onClick={() => setDrawerOpen(false)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-                  !categoryId && !showActive
-                    ? 'bg-muted font-semibold text-foreground'
-                    : 'font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-                }`}
-              >
-                <span className="h-[18px] w-[18px] shrink-0 flex items-center justify-center">
-                  <CircleDashed className="h-[15px] w-[15px]" strokeWidth={2} />
-                </span>
-                No category
-              </Link>
-
-              {categories.length > 0 && <div className="my-2 border-t border-border" />}
-
-              {categories.map((cat) => {
-                const active = categoryId === cat.id
-                return (
-                  <div key={cat.id} className="flex items-center gap-1">
-                    <Link
-                      to={`/categories?category=${cat.id}`}
-                      onClick={() => setDrawerOpen(false)}
-                      className={`flex flex-1 items-center gap-3 rounded-lg px-3 py-2 pr-2 text-sm transition-colors ${
-                        active
-                          ? 'bg-muted font-semibold text-foreground'
-                          : 'font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-                      }`}
-                    >
-                      <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center">
-                        <CategoryIcon icon={cat.icon} color={active ? cat.color : 'currentColor'} size={15} strokeWidth={2} />
-                      </span>
-                      <span className="truncate">{cat.name}</span>
-                    </Link>
-                    <button
-                      onClick={() => { openEditCat(cat); setDrawerOpen(false) }}
-                      className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-                    >
-                      <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
-                    </button>
-                    <button
-                      onClick={() => { setDeletingCategory(cat); setDrawerOpen(false) }}
-                      aria-label={`Delete ${cat.name}`}
-                      className="shrink-0 rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
-                    </button>
-                  </div>
-                )
-              })}
-
-              <button
-                onClick={() => { openAddCat(); setDrawerOpen(false) }}
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-              >
-                <Plus className="h-[18px] w-[18px] shrink-0" strokeWidth={2} />
-                Add category
-              </button>
-            </nav>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

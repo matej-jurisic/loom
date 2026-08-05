@@ -109,11 +109,6 @@ function hourLabel(h: number): string {
   return `${String(h).padStart(2, '0')}:00`
 }
 
-function minLabel(min: number): string {
-  const m = Math.round(min)
-  return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
-}
-
 function timeLabel(iso: string): string {
   const d = new Date(iso)
   const h = d.getHours()
@@ -625,29 +620,18 @@ function DayColumn({ day, allEvents, onEventClick, overlay, moveOverlay, resizeO
       className={`relative flex-1 ${borderLeft ? 'border-l' : ''} ${borderRight ? 'border-r' : ''}`}
       style={{ minHeight: gridHeight, borderColor: 'var(--calendar-line)' }}
     >
-      {/* Collapsed stretches — hatched so an elided run of hours never reads as empty grid */}
-      {scale.segments.map((seg, i) => seg.collapsed && (
-        <div
-          key={`band${i}`}
-          className="absolute inset-x-0 flex items-center justify-center overflow-hidden border-y border-border bg-muted/40"
-          style={{
-            top: seg.topPx,
-            height: seg.px,
-            backgroundImage:
-              'repeating-linear-gradient(135deg, transparent 0 5px, var(--color-border) 5px 6px)',
-          }}
-        >
-          <span className="rounded-sm bg-background/80 px-1 text-[9px] leading-none text-muted-foreground select-none">
-            {minLabel(seg.startMin)} – {minLabel(seg.endMin)}
-          </span>
-        </div>
+      {/* Segment breaks — compact mode drops the empty time between two clusters
+          of events instead of drawing it, so a plain border marks where the
+          stack actually jumps forward; without it the join would read as
+          continuous elapsed time. */}
+      {scale.isCompact && scale.segments.slice(1).map((seg, i) => (
+        <div key={`brk${i}`} className="absolute inset-x-0 border-t" style={{ top: seg.topPx }} />
       ))}
       {/* Hour + half-hour lines. Stepped from absolute half-hours, not from the
           segment's own start, because segment edges land on quarter hours - the
           rhythm has to stay on the clock. The m=0 line is skipped: the sticky
           header's border-b already provides that separator. */}
       {scale.segments.flatMap((seg, i) => {
-        if (seg.collapsed) return []
         const lines: React.ReactNode[] = []
         for (let m = Math.ceil(seg.startMin / 30) * 30; m <= seg.endMin; m += 30) {
           if (m === 0) continue
@@ -662,18 +646,12 @@ function DayColumn({ day, allEvents, onEventClick, overlay, moveOverlay, resizeO
                 // Set inline, not as a border-* utility: the unlayered `*` rule in
                 // index.css sets border-color on everything, and unlayered CSS beats
                 // Tailwind's @layer utilities, so a class here silently does nothing.
-                //
-                // Expanded, the full hours carry the rhythm and read stronger than the
-                // half-hours. Compact leaves them level: its bands already break the
-                // grid up, and a second emphasis there is just noise.
                 borderTopColor:
                   m % 60 !== 0
                     ? // The half-hours sit at exactly the weight of the column borders,
                       // so the grid reads as two shades and not three.
                       'var(--calendar-line)'
-                    : scale.isCompact
-                      ? 'var(--calendar-line)'
-                      : 'color-mix(in oklab, var(--muted-foreground) 30%, transparent)',
+                    : 'color-mix(in oklab, var(--muted-foreground) 30%, transparent)',
               }}
             />,
           )
@@ -3164,10 +3142,10 @@ export function CalendarPage() {
             {/* Hour labels. One shared gutter can only speak for one scale: with a
                 single column that is always true, and expanded every column shares
                 the linear scale, so it labels those. Only compact multi-day - where
-                each column collapses its own emptiness - leaves it blank. */}
+                each column drops its own empty stretches independently - leaves it
+                blank. */}
             <div className="relative w-12 shrink-0">
               {!(compactActive && days.length > 1) && scales[0].segments.flatMap((seg, i) => {
-                if (seg.collapsed) return []
                 const out: React.ReactNode[] = []
                 for (let m = Math.ceil(seg.startMin / 60) * 60; m <= seg.endMin; m += 60) {
                   if (m === 0 || m === DAY_MIN) continue

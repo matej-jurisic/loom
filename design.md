@@ -200,29 +200,26 @@ Mobile: single column.
 The grid runs on its own line colour, `--calendar-line`, lighter than the app's `border` because these
 rules sit under content for the whole visible day. Half-hour lines, the column borders and the header's
 bottom rule all share it, so the grid reads as two shades and not three; full hours are the second
-shade, `muted-foreground` at 30% (dropping to `--calendar-line` in compact view, where the collapsed
-bands already break the grid up). The current time is a `destructive` hairline with
+shade, `muted-foreground` at 30%. The current time is a `destructive` hairline with
 a dot in the gutter. Blocks carry their category's colour; the grid itself stays neutral so colour
 means category and nothing else.
 
-**Collapsed bands** (compact mode) mark a stretch of the day that has been elided. A band is 20px
-tall, `bg-muted/40` under a 135° 1px `border` hatch, closed top and bottom by a full-width `border`
-line, with its range ("09:15 – 10:30") centred in `9px` `muted-foreground` on a `background/80` chip
-so it stays legible over the hatch. The hatch is the whole point: an elided run must never read as
-empty grid, because empty grid is a meaningful thing to see on this calendar.
+**Compact mode** drops empty stretches of the day rather than shrinking them: a day's events sit in a
+straight stack, each block keeping its real duration-proportional height, with no space at all between
+one item and the next. Where the stack actually jumps forward in time - the join between one cluster of
+events and the next - gets a plain full-width `border` line, so the seam doesn't read as continuous
+elapsed time. Nothing states the size of the gap that was dropped; the point of compact mode is that the
+gap isn't shown at all.
 
-The band's height is a hard constraint, not a taste call: at the minimum zoom an hour of grid is only
-32px, so a band any taller stops being worth substituting exactly where the day is most cramped.
-
-Band edges land on the quarter hour, not the hour, so the hour and half-hour lines are drawn at
-absolute positions rather than stepped from a segment's start. The rhythm stays on the clock even
-though the segments do not.
+Segment edges land on the quarter hour, not the hour, so the hour and half-hour lines within a segment
+are drawn at absolute positions rather than stepped from the segment's own start. The rhythm stays on
+the clock even though the segments do not.
 
 The left gutter carries the hour labels whenever one scale can speak for the whole grid — always in
 day view, and in every view while expanded, since expanded columns share the linear scale. **Only
-compact multi-day blanks it**, where each column collapses its own emptiness and no single set of
-labels would be true. Nothing replaces them there: the band labels give the boundaries and each block
-carries its own time, so per-column hour labels would only be clutter in a narrow column.
+compact multi-day blanks it**, where each column drops its own empty stretches independently and no
+single set of labels would be true. Nothing replaces them there: each block carries its own time, so
+per-column hour labels would only be clutter in a narrow column.
 
 The compact toggle sits left of the range switch in the toolbar: `FoldVertical` when the grid is full,
 `UnfoldVertical` when it is collapsed, tinted `bg-muted` while active.
@@ -231,8 +228,9 @@ The compact toggle sits left of the range switch in the toolbar: `FoldVertical` 
 
 ## Mobile Navigation
 
-- **Bottom tab bar is capped at 5 slots**, icon-only: Plan, Categories, Calendar, Goals, and a "More" button (`Ellipsis` icon). New pages go in the More sheet, never a 6th tab.
-- **More sheet:** bottom sheet (same overlay + slide-up animation as mobile modals: `bg-black/40 backdrop-blur-sm`, `rounded-t-2xl`, drag handle) listing secondary destinations — Activities, Insights, Settings — as icon + label rows styled like sidebar nav items. Closes on backdrop tap, Escape, or navigation. The More button shows the active (primary) tint when the current route is one of its items.
+- **Bottom tab bar is capped at 5 slots**, icon-only: Plan, Activities, Calendar, Goals, and a "More" button (`Ellipsis` icon). New pages go in the More sheet, never a 6th tab.
+- **More sheet:** bottom sheet (same overlay + slide-up animation as mobile modals: `bg-black/40 backdrop-blur-sm`, `rounded-t-2xl`, drag handle) listing secondary destinations — Categories, Insights, Settings — as icon + label rows styled like sidebar nav items. Closes on backdrop tap, Escape, or navigation. The More button shows the active (primary) tint when the current route is one of its items.
+- **Categories page on mobile** has no sidebar to lean on, so it is two screens instead of one: bare `/categories` is a full-page list of categories (`Active`, `No category`, then each category as an icon-tile row with an edit/delete `ActionMenu`), with the header `+` creating a category. Tapping a row drills into the same filtered occurrence list the desktop layout shows inline, with the header `+` now creating an occurrence and a `ChevronLeft` back button in place of the (removed) drawer trigger.
 
 ---
 
