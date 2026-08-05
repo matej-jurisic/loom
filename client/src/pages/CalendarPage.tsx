@@ -1104,6 +1104,10 @@ const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
   { value: 'week', label: 'Week' },
 ]
 
+// Dial needle angle per range, for the mobile dial control - clockwise as the
+// range grows, so cycling forward always reads as "advancing" visually.
+const VIEW_ANGLE: Record<ViewMode, number> = { day: 0, '3day': 120, week: 240 }
+
 export function CalendarPage() {
   const [view, setView] = useState<ViewMode>(() => {
     const saved = localStorage.getItem('loom-calendar-view')
@@ -1505,6 +1509,13 @@ export function CalendarPage() {
     localStorage.setItem('loom-calendar-view', v)
     // Week always starts on the week boundary, so switching into it keeps the viewed day on screen.
     if (v === 'week') setCurrent((d) => startOfWeek(d))
+  }
+
+  // Mobile dial control: one button steps forward through the three ranges
+  // instead of picking directly, so there's only one tap target to place.
+  function cycleView() {
+    const idx = VIEW_OPTIONS.findIndex((o) => o.value === view)
+    changeView(VIEW_OPTIONS[(idx + 1) % VIEW_OPTIONS.length].value)
   }
 
   function openCreate(startAt?: string, endAt?: string) {
@@ -2969,8 +2980,10 @@ export function CalendarPage() {
               : <FoldVertical className="h-3.5 w-3.5" strokeWidth={2} />}
           </button>
 
-          {/* View switch: all three ranges visible, so the current one is readable at a glance */}
-          <div role="group" aria-label="Calendar range" className="flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-border">
+          {/* View switch, desktop: all three ranges visible, so the current one is readable at a glance.
+              Below sm there isn't room for three labelled segments next to the fold toggle and +,
+              so mobile gets a single dial button instead (below). */}
+          <div role="group" aria-label="Calendar range" className="hidden sm:flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-border">
             {VIEW_OPTIONS.map(({ value, label }) => (
               <button
                 key={value}
@@ -2986,6 +2999,37 @@ export function CalendarPage() {
               </button>
             ))}
           </div>
+
+          {/* View switch, mobile: one dial button steps forward through the ranges.
+              The needle rotates to the current position instead of listing three labels. */}
+          <button
+            onClick={cycleView}
+            aria-label={`Calendar range: ${VIEW_OPTIONS.find((o) => o.value === view)?.label}. Tap to change.`}
+            className="sm:hidden flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-foreground hover:bg-muted transition-colors"
+          >
+            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" fill="none">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" className="text-muted-foreground/40" />
+              {(['day', '3day', 'week'] as ViewMode[]).map((v) => (
+                <line
+                  key={v}
+                  x1="8" y1="8" x2="8" y2="4"
+                  stroke="currentColor"
+                  strokeWidth="1"
+                  strokeLinecap="round"
+                  className="text-muted-foreground/40"
+                  style={{ transform: `rotate(${VIEW_ANGLE[v]}deg)`, transformOrigin: '8px 8px' }}
+                />
+              ))}
+              <line
+                x1="8" y1="8" x2="8" y2="3"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                style={{ transform: `rotate(${VIEW_ANGLE[view]}deg)`, transformOrigin: '8px 8px', transition: 'transform 200ms ease' }}
+              />
+            </svg>
+            {VIEW_OPTIONS.find((o) => o.value === view)?.label}
+          </button>
 
           <button
             onClick={() => openCreate()}

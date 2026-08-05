@@ -153,10 +153,14 @@ body {
   min-height: 100vh;
 }
 
-/* Slim overlay-style scrollbar: invisible until the container is hovered. */
+/* Slim overlay-style scrollbar: invisible until the container is hovered.
+   scrollbar-gutter keeps the track's space reserved even when content doesn't
+   overflow, so toggling compact/expanded (which can flip scroll <-> no-scroll)
+   doesn't shift the grid width. */
 .scroll-slim {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
+  scrollbar-gutter: stable;
 }
 .scroll-slim:hover {
   scrollbar-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent) transparent;
