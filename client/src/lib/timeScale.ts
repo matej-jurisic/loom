@@ -96,7 +96,11 @@ export function linearScale(hourPx: number): TimeScale {
  * there is no placeholder band, the point of compact mode is that empty time
  * simply isn't drawn.
  */
-export function compactScale(ranges: Array<[number, number]>, hourPx: number): TimeScale {
+export function compactScale(
+  ranges: Array<[number, number]>,
+  hourPx: number,
+  anchorMin?: number,
+): TimeScale {
   const padded = ranges
     .map(([s, e]) => [
       Math.max(0, Math.floor((s - OCCUPIED_PAD_MIN) / SNAP_MIN) * SNAP_MIN),
@@ -114,6 +118,20 @@ export function compactScale(ranges: Array<[number, number]>, hourPx: number): T
     const last = merged[merged.length - 1]
     if (last && s <= last[1]) last[1] = Math.max(last[1], e)
     else merged.push([s, e])
+  }
+
+  // The now line needs a segment to land on even when "now" sits in a gap with
+  // nothing scheduled nearby. Giving it the same OCCUPIED_PAD_MIN treatment as a
+  // real event would reserve up to an hour of blank grid just to hold a 1px
+  // line, so if it isn't already covered by an event's segment it gets a
+  // hairline of its own instead - just enough width for buildScale's
+  // start/end interpolation to be well-defined.
+  if (anchorMin != null && !merged.some(([s, e]) => anchorMin >= s && anchorMin <= e)) {
+    const s = Math.max(0, anchorMin - 1)
+    const e = Math.min(DAY_MIN, anchorMin + 1)
+    const idx = merged.findIndex(([ms]) => ms > s)
+    if (idx === -1) merged.push([s, e])
+    else merged.splice(idx, 0, [s, e])
   }
 
   const parts = merged.map(([startMin, endMin]) => ({ startMin, endMin }))

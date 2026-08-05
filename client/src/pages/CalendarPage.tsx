@@ -2715,12 +2715,13 @@ export function CalendarPage() {
         ranges.push([Math.max(0, (startMs - ds) / 60000), Math.min(DAY_MIN, (endMs - ds) / 60000)])
       }
       // The now line has to land somewhere visible on the column that draws it -
-      // which is the day-boundary-aware today, not necessarily the clock's.
-      if (isSameDay(day, effectiveToday)) {
-        const nowMin = now.getHours() * 60 + now.getMinutes()
-        ranges.push([nowMin, nowMin])
-      }
-      return compactScale(ranges, hourPx)
+      // which is the day-boundary-aware today, not necessarily the clock's. Passed
+      // as an anchor rather than folded into ranges, so it only reserves space of
+      // its own when it actually falls in a gap (see compactScale).
+      const anchorMin = isSameDay(day, effectiveToday)
+        ? now.getHours() * 60 + now.getMinutes()
+        : undefined
+      return compactScale(ranges, hourPx, anchorMin)
     })
     // eventsKey stands in for calendarEvents, which is a fresh array every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
