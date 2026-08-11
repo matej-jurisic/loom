@@ -84,6 +84,8 @@ The panes are separated by a 1px `border-[var(--border)]` vertical divider. No g
 - **View toggle, desktop (`sm` and up):** Day / 3 days / Week as three segments in one `h-8 rounded-md border border-border` shell, matching the other header buttons - no track fill, the active segment is just `bg-muted`, which is also the header buttons' hover state. Only colour changes between states - never the font weight, which would resize the segment and shift the whole control on every switch. All three sit on the bar at every width, with full labels, so the current range is readable without opening anything.
 - **View toggle, mobile (below `sm`):** three labelled segments don't fit next to the fold toggle and `+` on a phone header, so this is a single dial button instead: a small circular needle icon (pointing up/right/down for Day/3 days/Week, clockwise as the range grows) plus the current range's label as text, in the same `h-8 rounded-md border border-border` shell as the other header buttons. Fixed width (sized to the longest label, "3 days"), for the same reason the desktop segments never change font weight: a button that resizes on every tap is distracting. Tapping steps forward through the three ranges (wrapping from Week back to Day); the needle rotates to its new position with a 200ms transition. One tap target instead of three, and the label still makes the state unambiguous.
 - **Floating row:** All-day row pinned above the time grid — shows floating occurrences as compact chips. Overdue occurrences are rendered in a separate sticky band at the top of the scroll container so they stay visible while scrolling.
+- **The tray** (`.calendar-tray`): the DUE / SOON / FLOAT / all-day rows as one band, each labelled in the gutter, divided by `--calendar-line` hairlines. It stays on the page surface - it is not a separate panel - and closes with `--calendar-edge`, which doubles as the grid's 00:00 rule. That edge separates by colour alone, at the same hairline width as every other rule, so the band reads as closed without a divider thick enough to make it look like its own panel. Those rows are drop targets whenever something is being dragged, and on the grid's own hairlines they otherwise read as more grid. The band renders only when one of its rows has content or a drag is in progress. The DUE row is the exception: it lists what is already overdue and nothing can be dropped on it, so it is withdrawn for the length of a drag - otherwise it pushes the live drop targets down into the grid's edge-scroll zone, and the grid starts scrolling while the pointer is still over a row that cannot take the drop.
+- **Due pins row:** the same band treatment upside down, pinned to the bottom of the scroll container: chips for occurrences due today, closed off the grid by `--calendar-edge` on its top side. Both bands are chips rather than time, so both are fenced off from the grid the same way.
 - **Content:** Time-based vertical grid. Hours listed on the far left. Event blocks placed in their time slots.
 - **Event blocks:** Light-tinted background + solid 1px colored left border, matching the event's goal color. Title + time range inside.
 - **Clicking empty grid creates** a 30-minute occurrence there, pre-filled in the create modal. The calendar's job is to show what you decided and to make adding something cheap, so the cheapest gesture does the most common thing. A drag still sets an exact span, and a long press does it on touch, for when the length matters.
@@ -199,22 +201,25 @@ Mobile: single column.
 ## Calendar Grid
 
 The grid runs on its own line colour, `--calendar-line`, lighter than the app's `border` because these
-rules sit under content for the whole visible day. Half-hour lines, the column borders and the header's
-bottom rule all share it, so the grid reads as two shades and not three; full hours are the second
-shade, `muted-foreground` at 30%. The current time is a `destructive` hairline with
-a dot in the gutter. Blocks carry their category's colour; the grid itself stays neutral so colour
-means category and nothing else.
+rules sit under content for the whole visible day. Every rule of the grid is that one shade - half hours,
+full hours, the column borders and the header's bottom rule alike - so the grid is a single flat texture
+and nothing inside it competes with the blocks for attention. Hours are told apart by the gutter labels,
+not by line weight. The only line that breaks from it is the one meaning something other than "time
+passes here": `--calendar-edge`, which fences off the chip bands at either end of the grid. The current
+time is a `destructive` hairline with a dot in the gutter. Blocks carry their category's colour; the grid
+itself stays neutral so colour means category and nothing else.
 
 **Compact mode** drops empty stretches of the day rather than shrinking them: a day's events sit in a
-straight stack, each block keeping its real duration-proportional height, with no space at all between
-one item and the next. Where the stack actually jumps forward in time - the join between one cluster of
-events and the next - gets a plain full-width `border` line, so the seam doesn't read as continuous
-elapsed time. Nothing states the size of the gap that was dropped; the point of compact mode is that the
-gap isn't shown at all.
+straight stack, each block keeping its real duration-proportional height, with nothing between one item
+and the next but the 2px gutter every block carries. Nothing states the size of the gap that was
+dropped; the point of compact mode is that the gap isn't shown at all.
 
-Segment edges land on the quarter hour, not the hour, so the hour and half-hour lines within a segment
-are drawn at absolute positions rather than stepped from the segment's own start. The rhythm stays on
-the clock even though the segments do not.
+**Compact mode draws no grid lines at all** - no hour rules, no half hours, and no seam at the joins.
+The stack is exactly the blocks, so every rule would either land on a block's edge or run through the
+block itself, and the blocks' own edges already say where one thing ends and the next begins.
+
+In expanded mode the hour and half-hour lines are drawn at absolute positions rather than stepped from a
+segment's own start, so the rhythm stays on the clock.
 
 The left gutter carries the hour labels whenever one scale can speak for the whole grid — always in
 day view, and in every view while expanded, since expanded columns share the linear scale. **Only

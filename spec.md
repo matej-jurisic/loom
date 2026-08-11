@@ -328,16 +328,30 @@ expects you to complete. Empty grid means nothing in particular.
   it stops when its bottom edge reaches midnight, however deep into the block it was grabbed. So an
   occurrence cannot be dragged across midnight - the model and the grid both still handle ones that
   do, they are just made in the edit modal.
+- **Dropping a pending occurrence on a different date asks first**, since that gesture reads two ways:
+  *Move* changes the occurrence's date, and *Skip & reschedule* marks the original day skipped and puts
+  a new pending copy on the new date. Dismissing the dialog leaves it where it was. A same-day drag is
+  only a time change and commits with no prompt, as does moving a done or skipped occurrence - only a
+  pending one can be skipped.
 - A sticky **Due** row keeps due pins and overdue items visible while scrolling.
+- The header's **DUE** and **SOON** rows are anchored to *today*, not to the view: DUE lists all-day
+  planned occurrences still pending from before today, SOON lists due pins from today onward. Both
+  drop anything the visible range already draws, so a row only ever adds what is off-screen. Paging
+  forward a week therefore does not mark that week's untouched tasks overdue, and paging backwards
+  does not hide the ones that really are. Both rows disappear for the length of a drag, since neither
+  accepts a drop and their height alone pushes the real targets into the autoscroll zone.
 - Adjustable slot height (zoom controls and pinch, persisted).
-- **Compact mode** (toolbar toggle, persisted) elides each day's empty stretches into labelled bands
-  a few pixels tall, leaving the day's actual content at the same scale it always had. A stretch is
-  collapsed when it is at least 45 minutes long *and* would have been at least half again the band's
-  own height, so the threshold tracks the zoom and a band never costs more grid than it saves.
-  Occupied ranges keep a quarter hour of breathing room either side and snap out to the quarter hour.
+- **Compact mode** (toolbar toggle, persisted) drops each day's empty stretches entirely rather than
+  shrinking them, leaving the day's actual content at the same scale it always had. However long the
+  emptiness between two items, it costs no grid at all: the day's events sit in a straight stack,
+  each block keeping its real duration-proportional height and sitting directly against the one
+  before it. Only events that genuinely overlap or touch keep their relative position within a run.
+  The grid draws no hour lines in this mode - there is no continuous axis for them to sit on.
   In a multi-day view **every column collapses its own emptiness**, so hours do not line up across
   columns - two days with nothing in common have nothing to align on, and a shared scale could only
-  collapse what every visible day agreed was empty. The current time always stays visible.
+  collapse what every visible day agreed was empty. The **now line is not drawn in compact mode**:
+  between two stacked blocks the grid jumps forward by however long the dropped gap was, so a marker
+  at "now" would sit at a position that means nothing. Elided time is elided, marker included.
 - **Any drag restores the full 0-24 grid** for the length of the gesture, so moving, resizing,
   creating and dropping in from the header rows all address real times. The grid re-collapses on
   release. Whatever was under the pointer holds its position across both switches, and across zoom.

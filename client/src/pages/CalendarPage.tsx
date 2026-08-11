@@ -7,6 +7,8 @@ import { toastError } from '@/store/toasts'
 import type { Activity, Occurrence } from '@/lib/types'
 import { EventModal } from '@/components/events/EventModal'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
+import { MoveOrSkipModal } from '@/components/events/MoveOrSkipModal'
+import type { PendingMove } from '@/components/events/MoveOrSkipModal'
 import { ActivityModal } from '@/components/activities/ActivityModal'
 import { DAY_MIN, linearScale, compactScale } from '@/lib/timeScale'
 import type { TimeScale } from '@/lib/timeScale'
@@ -620,18 +622,15 @@ function DayColumn({ day, allEvents, onEventClick, overlay, moveOverlay, resizeO
       className={`relative flex-1 ${borderLeft ? 'border-l' : ''} ${borderRight ? 'border-r' : ''}`}
       style={{ minHeight: gridHeight, borderColor: 'var(--calendar-line)' }}
     >
-      {/* Segment breaks — compact mode drops the empty time between two clusters
-          of events instead of drawing it, so a plain border marks where the
-          stack actually jumps forward; without it the join would read as
-          continuous elapsed time. */}
-      {scale.isCompact && scale.segments.slice(1).map((seg, i) => (
-        <div key={`brk${i}`} className="absolute inset-x-0 border-t" style={{ top: seg.topPx }} />
-      ))}
-      {/* Hour + half-hour lines. Stepped from absolute half-hours, not from the
-          segment's own start, because segment edges land on quarter hours - the
-          rhythm has to stay on the clock. The m=0 line is skipped: the sticky
-          header's border-b already provides that separator. */}
-      {scale.segments.flatMap((seg, i) => {
+      {/* Hour + half-hour lines, all one weight. Stepped from absolute half-hours,
+          not from the segment's own start, because segment edges land on quarter
+          hours - the rhythm has to stay on the clock. The m=0 line is skipped: the
+          sticky header's border-b already provides that separator.
+          Compact mode draws none of them, and no segment-break line either: a
+          segment is exactly one block's span there, so every line would land on a
+          block edge or run straight through the block itself. The stack of blocks
+          is the only structure that column needs. */}
+      {!scale.isCompact && scale.segments.flatMap((seg, i) => {
         const lines: React.ReactNode[] = []
         for (let m = Math.ceil(seg.startMin / 30) * 30; m <= seg.endMin; m += 30) {
           if (m === 0) continue
@@ -641,25 +640,23 @@ function DayColumn({ day, allEvents, onEventClick, overlay, moveOverlay, resizeO
               className="absolute inset-x-0 border-t"
               style={{
                 // Rounded: toPx lands on fractions, and a 1px border smeared across
-                // two device pixels loses exactly the weight difference below.
+                // two device pixels reads lighter than one that lands on a pixel.
                 top: Math.round(scale.toPx(m)),
                 // Set inline, not as a border-* utility: the unlayered `*` rule in
                 // index.css sets border-color on everything, and unlayered CSS beats
                 // Tailwind's @layer utilities, so a class here silently does nothing.
-                borderTopColor:
-                  m % 60 !== 0
-                    ? // The half-hours sit at exactly the weight of the column borders,
-                      // so the grid reads as two shades and not three.
-                      'var(--calendar-line)'
-                    : 'color-mix(in oklab, var(--muted-foreground) 30%, transparent)',
+                borderTopColor: 'var(--calendar-line)',
               }}
             />,
           )
         }
         return lines
       })}
-      {/* Current time indicator */}
-      {isToday && (
+      {/* Current time indicator. Compact mode has no continuous time axis to place
+          it on: between two stacked blocks the grid jumps forward by however long
+          the dropped gap was, so a line drawn at "now" would sit at a position that
+          means nothing. Elided time is elided, marker included. */}
+      {isToday && !scale.isCompact && (
         <div
           className="pointer-events-none absolute inset-x-0 z-[5] flex items-center"
           style={{ top: nowPx }}
@@ -812,7 +809,7 @@ function FloatingTasksRow({
   return (
     <div
       ref={rowRef}
-      className={`flex border-b border-border transition-colors ${isHighlighted ? 'bg-primary/10' : ''}`}
+      className={`flex transition-colors ${isHighlighted ? 'bg-primary/10' : ''}`}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={cancelPending}
@@ -939,7 +936,7 @@ function DueRow({
 
   return (
     <div
-      className="flex border-b border-border"
+      className="flex"
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={cancelPending}
@@ -1063,7 +1060,7 @@ function UpcomingRow({
 
   return (
     <div
-      className="flex border-b border-border"
+      className="flex"
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={cancelPending}
@@ -1136,6 +1133,7 @@ export function CalendarPage() {
   const [activityModalOpen, setActivityModalOpen] = useState(false)
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>()
   const [duplicateFromOccurrence, setDuplicateFromOccurrence] = useState<Occurrence | undefined>()
+  const [pendingMove, setPendingMove] = useState<PendingMove | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const timeGridRef = useRef<HTMLDivElement>(null)
@@ -1300,36 +1298,52 @@ export function CalendarPage() {
     [rawFloatingTasks],
   )
 
+  // Both tray rows are measured against *now*, never against the visible range:
+  // paging a week forward must not turn this week's untouched tasks into a red Due
+  // row, and Soon means "still ahead of you", not "after whatever week you opened".
+  const overdueCutoff = effectiveToday.toISOString()
+
   const { data: rawUpcomingDue = [] } = useQuery({
-    queryKey: ['events', 'upcoming', rangeEnd.toISOString()],
-    queryFn: () => occurrencesApi.list({ startFrom: rangeEnd.toISOString(), status: 'pending' }),
+    queryKey: ['events', 'upcoming', overdueCutoff],
+    queryFn: () => occurrencesApi.list({ startFrom: overdueCutoff, status: 'pending' }),
     staleTime: 30 * 1000,
     placeholderData: keepPreviousData,
   })
 
-  // Pending due-type (no endAt) occurrences that start after the current view.
+  // Pending due-type (no endAt) occurrences still ahead of today. Ones the current
+  // view already draws as pins are dropped, so the row only carries off-screen work.
   const upcomingDueItems = useMemo(
     () =>
       rawUpcomingDue
-        .filter((o) => isDueOccurrence(o) && !o.isAllDay && new Date(o.startAt!).getTime() >= rangeEnd.getTime())
+        .filter((o) => isDueOccurrence(o) && !o.isAllDay && new Date(o.startAt!).getTime() >= effectiveToday.getTime())
+        .filter((o) => {
+          const t = new Date(o.startAt!).getTime()
+          return t < rangeStart.getTime() || t >= rangeEnd.getTime()
+        })
         .sort((a, b) => new Date(a.startAt!).getTime() - new Date(b.startAt!).getTime()),
-    [rawUpcomingDue, rangeEnd.getTime()],
+    [rawUpcomingDue, effectiveToday.getTime(), rangeStart.getTime(), rangeEnd.getTime()],
   )
 
   const { data: rawPastAllDay = [] } = useQuery({
-    queryKey: ['events', 'due-allday', rangeStart.toISOString()],
-    queryFn: () => occurrencesApi.list({ endBefore: rangeStart.toISOString(), status: 'pending' }),
+    queryKey: ['events', 'due-allday', overdueCutoff],
+    queryFn: () => occurrencesApi.list({ endBefore: overdueCutoff, status: 'pending' }),
     staleTime: 30 * 1000,
     placeholderData: keepPreviousData,
   })
 
-  // Past all-day planned occurrences that were never completed — not visible anywhere else.
+  // All-day planned occurrences dated before today that were never completed. Ones
+  // the current view already draws in its own all-day row are dropped, so the Due
+  // row only ever carries what would otherwise be off-screen.
   const overdueAllDayItems = useMemo(
     () =>
       rawPastAllDay
         .filter((o) => o.isAllDay && o.isPlanned && o.startAt !== null)
+        .filter((o) => {
+          const t = new Date(o.startAt!).getTime()
+          return t < rangeStart.getTime() || t >= rangeEnd.getTime()
+        })
         .sort((a, b) => new Date(b.startAt!).getTime() - new Date(a.startAt!).getTime()),
-    [rawPastAllDay],
+    [rawPastAllDay, rangeStart.getTime(), rangeEnd.getTime()],
   )
 
   // Scroll to current time once the grid first becomes visible. Gated on
@@ -1841,7 +1855,30 @@ export function CalendarPage() {
     }
   }
 
+  // A drop that lands on a different date than the occurrence was on is ambiguous:
+  // it can mean "this moved" or "this didn't happen, do it later". Ask; a same-day
+  // drag is just a time change and commits straight away. Only pending occurrences
+  // can be skipped, so a done/skipped one always moves.
+  // Only a pending occurrence can be skipped, so a done/skipped one always just moves.
+  function movesToAnotherDay(ev: Occurrence, newStart: Date): boolean {
+    return ev.status === 'pending' && !!ev.startAt && !isSameDay(new Date(ev.startAt), newStart)
+  }
+
   function rescheduleEvent(ev: Occurrence, newStart: Date, newEnd: Date) {
+    if (movesToAnotherDay(ev, newStart)) {
+      setPendingMove({
+        occurrence: ev,
+        startAt: newStart.toISOString(),
+        endAt: ev.endAt ? newEnd.toISOString() : null,
+        isAllDay: ev.isAllDay,
+        commit: () => commitReschedule(ev, newStart, newEnd),
+      })
+      return
+    }
+    commitReschedule(ev, newStart, newEnd)
+  }
+
+  function commitReschedule(ev: Occurrence, newStart: Date, newEnd: Date) {
     const newEndAt = ev.endAt ? newEnd.toISOString() : null
     // Cancel any in-flight refetch so it doesn't overwrite the optimistic update
     // when the user drags multiple times quickly.
@@ -1868,6 +1905,20 @@ export function CalendarPage() {
   }
 
   function rescheduleFromAllDay(ev: Occurrence, newStart: Date, newEnd: Date) {
+    if (movesToAnotherDay(ev, newStart)) {
+      setPendingMove({
+        occurrence: ev,
+        startAt: newStart.toISOString(),
+        endAt: newEnd.toISOString(),
+        isAllDay: false,
+        commit: () => commitRescheduleFromAllDay(ev, newStart, newEnd),
+      })
+      return
+    }
+    commitRescheduleFromAllDay(ev, newStart, newEnd)
+  }
+
+  function commitRescheduleFromAllDay(ev: Occurrence, newStart: Date, newEnd: Date) {
     queryClient.cancelQueries({ queryKey: ['events'] })
     queryClient.setQueryData<Occurrence[]>(
       ['events', 'calendar', rangeStart.toISOString(), rangeEnd.toISOString()],
@@ -1947,12 +1998,31 @@ export function CalendarPage() {
   }
 
   function makeEventAllDay(ev: Occurrence, day: Date) {
-    const newStart = sod(day)
-    const startAt = newStart.toISOString()
-    // Preserve span for multi-day all-day events
-    const endAt = ev.isAllDay && ev.startAt && ev.endAt
+    if (movesToAnotherDay(ev, sod(day))) {
+      const newStart = sod(day)
+      setPendingMove({
+        occurrence: ev,
+        startAt: newStart.toISOString(),
+        endAt: allDayEndAt(ev, newStart),
+        isAllDay: true,
+        commit: () => commitMakeEventAllDay(ev, day),
+      })
+      return
+    }
+    commitMakeEventAllDay(ev, day)
+  }
+
+  // Preserve span for multi-day all-day events
+  function allDayEndAt(ev: Occurrence, newStart: Date): string | null {
+    return ev.isAllDay && ev.startAt && ev.endAt
       ? new Date(newStart.getTime() + (new Date(ev.endAt).getTime() - new Date(ev.startAt).getTime())).toISOString()
       : null
+  }
+
+  function commitMakeEventAllDay(ev: Occurrence, day: Date) {
+    const newStart = sod(day)
+    const startAt = newStart.toISOString()
+    const endAt = allDayEndAt(ev, newStart)
     queryClient.cancelQueries({ queryKey: ['events'] })
     if (ev.startAt === null) {
       queryClient.setQueryData<Occurrence[]>(
@@ -2714,29 +2784,31 @@ export function CalendarPage() {
       const linear = linearScale(hourPx)
       return days.map(() => linear)
     }
-    const now = new Date()
     return days.map((day) => {
       const ds = sod(day).getTime()
       const de = ds + 86400000
+      // Segments are exactly the spans handed over - nothing is padded - so a
+      // block that draws taller than its own duration (layoutDay's 15-minute
+      // floor, then MIN_EVENT_PX) would spill onto the block stacked under it.
+      // Hand over what the block will really occupy instead of its raw span.
+      const minSpanMin = Math.max(15, (MIN_EVENT_PX / hourPx) * 60)
       const ranges: Array<[number, number]> = []
       for (const e of calendarEvents) {
         if (!occursOnDay(e, ds, de)) continue
         const startMs = new Date(e.startAt!).getTime()
         const endMs = e.endAt ? new Date(e.endAt).getTime() : startMs + DUE_SPAN_MINUTES * 60000
-        ranges.push([Math.max(0, (startMs - ds) / 60000), Math.min(DAY_MIN, (endMs - ds) / 60000)])
+        const startMin = Math.max(0, (startMs - ds) / 60000)
+        const endMin = Math.max((endMs - ds) / 60000, startMin + minSpanMin)
+        ranges.push([startMin, Math.min(DAY_MIN, endMin)])
       }
-      // The now line has to land somewhere visible on the column that draws it -
-      // which is the day-boundary-aware today, not necessarily the clock's. Passed
-      // as an anchor rather than folded into ranges, so it only reserves space of
-      // its own when it actually falls in a gap (see compactScale).
-      const anchorMin = isSameDay(day, effectiveToday)
-        ? now.getHours() * 60 + now.getMinutes()
-        : undefined
-      return compactScale(ranges, hourPx, anchorMin)
+      // No anchor for "now": compact mode doesn't draw the now line, so reserving a
+      // segment for it would only put a stray segment break in the middle of the
+      // stack with nothing to explain it.
+      return compactScale(ranges, hourPx)
     })
     // eventsKey stands in for calendarEvents, which is a fresh array every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compactActive, hourPx, days, eventsKey, effectiveToday])
+  }, [compactActive, hourPx, days, eventsKey])
   scalesRef.current = scales
 
   const gridHeight = useMemo(() => Math.max(...scales.map((s) => s.totalPx)), [scales])
@@ -2795,6 +2867,23 @@ export function CalendarPage() {
     )
     return assignAllDayRows(sorted, days)
   }, [allDayEvents, days, view])
+
+  // A move is in flight: the FLOAT / all-day rows are revealed as drop targets, and
+  // the Due and Soon rows are taken away. They list occurrences from outside the
+  // visible range and neither accepts a drop, so while dragging they are only height
+  // between the pointer and the grid - close enough to the top edge to trip autoscroll
+  // over rows that can't accept the thing being dragged.
+  const trayDragActive = isDraggingGridEvent || isDraggingPill
+
+  // The tray carries its own closing edge and the gap below it, so it may only be
+  // rendered when one of its rows is - otherwise it draws a stray band and a
+  // double line under the day headers.
+  const showTray =
+    (overdueAllDayItems.length > 0 && !trayDragActive) ||
+    (upcomingDueItems.length > 0 && !trayDragActive) ||
+    floatingTasks.length > 0 ||
+    (view === 'day' ? dayAllDayEvents.length > 0 : allDayEvents.length > 0) ||
+    trayDragActive
 
   const duePinsForRow = useMemo(() => {
     const allDue = calendarEvents.filter((e) => isDueOccurrence(e) && e.status === 'pending')
@@ -3067,119 +3156,133 @@ export function CalendarPage() {
                   </div>
                 ))}
               </div>
-              <DueRow
-                tasks={overdueAllDayItems}
-                onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
-                movingEventId={movingEventId}
-                pendingDragId={pendingAllDayDragId}
-              />
-              <UpcomingRow
-                tasks={upcomingDueItems}
-                onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
-                movingEventId={movingEventId}
-                pendingDragId={pendingAllDayDragId}
-              />
-              <FloatingTasksRow
-                tasks={floatingTasks}
-                onSchedule={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, scheduleFloating)}
-                rowRef={floatRowRef}
-                isHighlighted={dragDropTarget === 'float'}
-                forceVisible={isDraggingGridEvent || isDraggingPill}
-                movingEventId={movingEventId}
-                pendingDragId={pendingAllDayDragId}
-              />
-              {(allDayEvents.length > 0 || isDraggingGridEvent || isDraggingPill) && (
-                <div ref={allDayRowRef} className="flex border-b border-border">
-                  <div className="flex w-12 shrink-0 items-center justify-end pr-2 py-0.5">
-                    <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">Today</span>
-                  </div>
-                  <div
-                    className="relative flex-1"
-                    style={{ height: Math.max(26, (allDayLayout.reduce((m, r) => Math.max(m, r.row), -1) + 1) * 24 + 4) }}
-                  >
-                    <div className="pointer-events-none absolute inset-0 flex">
-                      {days.map((day, idx) => (
-                        <div
-                          key={day.toISOString()}
-                          className={`flex-1 transition-colors ${idx === 0 ? 'border-l border-r' : 'border-r'} ${dragDropTarget === 'allday' && dragDropDayIdx === idx ? 'bg-primary/10' : ''}`}
-                          style={{ borderColor: 'var(--calendar-line)' }}
-                        />
-                      ))}
+              {showTray && (
+                <div className="calendar-tray">
+                {!trayDragActive && (
+                  <DueRow
+                    tasks={overdueAllDayItems}
+                    onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
+                    onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
+                    movingEventId={movingEventId}
+                    pendingDragId={pendingAllDayDragId}
+                  />
+                )}
+                {!trayDragActive && (
+                  <UpcomingRow
+                    tasks={upcomingDueItems}
+                    onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
+                    onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
+                    movingEventId={movingEventId}
+                    pendingDragId={pendingAllDayDragId}
+                  />
+                )}
+                <FloatingTasksRow
+                  tasks={floatingTasks}
+                  onSchedule={(o) => { if (!suppressClickRef.current) openDetail(o) }}
+                  onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, scheduleFloating)}
+                  rowRef={floatRowRef}
+                  isHighlighted={dragDropTarget === 'float'}
+                  forceVisible={trayDragActive}
+                  movingEventId={movingEventId}
+                  pendingDragId={pendingAllDayDragId}
+                />
+                {(allDayEvents.length > 0 || isDraggingGridEvent || isDraggingPill) && (
+                  <div ref={allDayRowRef} className="flex">
+                    <div className="flex w-12 shrink-0 items-center justify-end pr-2 py-0.5">
+                      <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">Today</span>
                     </div>
-                    {allDayLayout.map(({ id, row, startIdx, endIdx }) => {
-                      const e = allDayEvents.find((ev) => ev.id === id)!
-                      const n = days.length
-                      const durationLabel = e.durationMinutes ? ` ~${e.durationMinutes >= 60 ? `${Math.floor(e.durationMinutes / 60)}h${e.durationMinutes % 60 ? `${e.durationMinutes % 60}m` : ''}` : `${e.durationMinutes}m`}` : ''
-                      return (
-                        <button
-                          key={e.id}
-                          onPointerDown={(ev) => handleAllDayPillMoveStart(ev, e)}
-                          onClick={() => { if (!suppressClickRef.current) openDetail(e) }}
-                          style={{
-                            position: 'absolute',
-                            left: `calc(${(startIdx / n) * 100}% + 2px)`,
-                            width: `calc(${((endIdx - startIdx) / n) * 100}% - 4px)`,
-                            top: row * 24 + 2,
-                            height: 20,
-                            touchAction: 'none',
-                            ...eventAllDayColors(e).style,
-                          }}
-                          className={`truncate rounded-[3px] px-1.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : e.status === 'skipped' ? 'opacity-30' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`}
-                        >
-                          {e.effectiveTitle}{durationLabel}
-                        </button>
-                      )
-                    })}
+                    <div
+                      className="relative flex-1"
+                      style={{ height: Math.max(26, (allDayLayout.reduce((m, r) => Math.max(m, r.row), -1) + 1) * 24 + 4) }}
+                    >
+                      <div className="pointer-events-none absolute inset-0 flex">
+                        {days.map((day, idx) => (
+                          <div
+                            key={day.toISOString()}
+                            className={`flex-1 transition-colors ${idx === 0 ? 'border-l border-r' : 'border-r'} ${dragDropTarget === 'allday' && dragDropDayIdx === idx ? 'bg-primary/10' : ''}`}
+                            style={{ borderColor: 'var(--calendar-line)' }}
+                          />
+                        ))}
+                      </div>
+                      {allDayLayout.map(({ id, row, startIdx, endIdx }) => {
+                        const e = allDayEvents.find((ev) => ev.id === id)!
+                        const n = days.length
+                        const durationLabel = e.durationMinutes ? ` ~${e.durationMinutes >= 60 ? `${Math.floor(e.durationMinutes / 60)}h${e.durationMinutes % 60 ? `${e.durationMinutes % 60}m` : ''}` : `${e.durationMinutes}m`}` : ''
+                        return (
+                          <button
+                            key={e.id}
+                            onPointerDown={(ev) => handleAllDayPillMoveStart(ev, e)}
+                            onClick={() => { if (!suppressClickRef.current) openDetail(e) }}
+                            style={{
+                              position: 'absolute',
+                              left: `calc(${(startIdx / n) * 100}% + 2px)`,
+                              width: `calc(${((endIdx - startIdx) / n) * 100}% - 4px)`,
+                              top: row * 24 + 2,
+                              height: 20,
+                              touchAction: 'none',
+                              ...eventAllDayColors(e).style,
+                            }}
+                            className={`truncate rounded-[3px] px-1.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : e.status === 'skipped' ? 'opacity-30' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`}
+                          >
+                            {e.effectiveTitle}{durationLabel}
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
+                )}
                 </div>
               )}
             </div>
           )}
 
           {/* Day view all-day row */}
-          {view === 'day' && (dayAllDayEvents.length > 0 || floatingTasks.length > 0 || isDraggingGridEvent || upcomingDueItems.length > 0 || overdueAllDayItems.length > 0) && (
+          {view === 'day' && showTray && (
             <div className="sticky top-0 z-40 bg-background">
-              <DueRow
-                tasks={overdueAllDayItems}
-                onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
-                movingEventId={movingEventId}
-                pendingDragId={pendingAllDayDragId}
-              />
-              <UpcomingRow
-                tasks={upcomingDueItems}
-                onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
-                movingEventId={movingEventId}
-                pendingDragId={pendingAllDayDragId}
-              />
-              <FloatingTasksRow
-                tasks={floatingTasks}
-                onSchedule={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, scheduleFloating)}
-                rowRef={floatRowRef}
-                isHighlighted={dragDropTarget === 'float'}
-                forceVisible={isDraggingGridEvent || isDraggingPill}
-                movingEventId={movingEventId}
-                pendingDragId={pendingAllDayDragId}
-              />
-              {(dayAllDayEvents.length > 0 || isDraggingGridEvent) && (
-                <div ref={allDayRowRef} className={`flex border-b border-border transition-colors ${dragDropTarget === 'allday' ? 'bg-primary/10' : ''}`}>
-                  <div className="w-12 shrink-0 flex items-center justify-end pr-2">
-                    <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">Today</span>
+              <div className="calendar-tray">
+                {!trayDragActive && (
+                  <DueRow
+                    tasks={overdueAllDayItems}
+                    onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
+                    onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
+                    movingEventId={movingEventId}
+                    pendingDragId={pendingAllDayDragId}
+                  />
+                )}
+                {!trayDragActive && (
+                  <UpcomingRow
+                    tasks={upcomingDueItems}
+                    onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
+                    onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
+                    movingEventId={movingEventId}
+                    pendingDragId={pendingAllDayDragId}
+                  />
+                )}
+                <FloatingTasksRow
+                  tasks={floatingTasks}
+                  onSchedule={(o) => { if (!suppressClickRef.current) openDetail(o) }}
+                  onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, scheduleFloating)}
+                  rowRef={floatRowRef}
+                  isHighlighted={dragDropTarget === 'float'}
+                  forceVisible={trayDragActive}
+                  movingEventId={movingEventId}
+                  pendingDragId={pendingAllDayDragId}
+                />
+                {(dayAllDayEvents.length > 0 || isDraggingGridEvent) && (
+                  <div ref={allDayRowRef} className={`flex transition-colors ${dragDropTarget === 'allday' ? 'bg-primary/10' : ''}`}>
+                    <div className="w-12 shrink-0 flex items-center justify-end pr-2">
+                      <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">Today</span>
+                    </div>
+                    <div className="flex flex-1 flex-col gap-0.5 border-l border-r px-0.5 py-0.5 min-h-[26px]" style={{ borderColor: 'var(--calendar-line)' }}>
+                      {dayAllDayEvents.map((e) => (
+                        <button key={e.id} onPointerDown={(ev) => handleAllDayPillMoveStart(ev, e)} onClick={() => { if (!suppressClickRef.current) openDetail(e) }} className={`w-full truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status !== 'pending' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`} style={{ touchAction: 'none', ...eventAllDayColors(e).style }}>
+                          {e.effectiveTitle}{e.durationMinutes ? ` ~${e.durationMinutes >= 60 ? `${Math.floor(e.durationMinutes / 60)}h${e.durationMinutes % 60 ? `${e.durationMinutes % 60}m` : ''}` : `${e.durationMinutes}m`}` : ''}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-1 flex-col gap-0.5 border-l border-r px-0.5 py-0.5 min-h-[26px]" style={{ borderColor: 'var(--calendar-line)' }}>
-                    {dayAllDayEvents.map((e) => (
-                      <button key={e.id} onPointerDown={(ev) => handleAllDayPillMoveStart(ev, e)} onClick={() => { if (!suppressClickRef.current) openDetail(e) }} className={`w-full truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status !== 'pending' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`} style={{ touchAction: 'none', ...eventAllDayColors(e).style }}>
-                        {e.effectiveTitle}{e.durationMinutes ? ` ~${e.durationMinutes >= 60 ? `${Math.floor(e.durationMinutes / 60)}h${e.durationMinutes % 60 ? `${e.durationMinutes % 60}m` : ''}` : `${e.durationMinutes}m`}` : ''}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
 
@@ -3252,7 +3355,7 @@ export function CalendarPage() {
               that stays the last thing in the scroll content. */}
           <div ref={dragSpacerRef} aria-hidden className="shrink-0" style={{ height: 0 }} />
           {duePinsForRow.length > 0 && (
-            <div className="sticky bottom-0 z-40 flex border-t border-border bg-background">
+            <div className="sticky bottom-0 z-40 flex border-t bg-background" style={{ borderTopColor: 'var(--calendar-edge)' }}>
               <div className="w-12 shrink-0 flex items-center justify-end pr-2 py-1">
                 <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">Due</span>
               </div>
@@ -3304,6 +3407,12 @@ export function CalendarPage() {
         onSchedule={(o) => { setDetailOpen(false); openSchedule(o) }}
         onDuplicate={openDuplicate}
         onEditActivity={openEditActivity}
+      />
+
+      <MoveOrSkipModal
+        open={pendingMove !== null}
+        onClose={() => setPendingMove(null)}
+        move={pendingMove}
       />
 
       <ActivityModal

@@ -58,6 +58,11 @@
      lighter than a normal border. Horizontal and vertical lines share this one
      value; only the full hours are drawn stronger. */
   --calendar-line: oklch(0.945 0.004 264);
+  /* Where the grid ends and a band of chips begins - the tray above it, the due
+     pins below. Same hairline width as the rules, darker so it closes the grid
+     instead of joining it. Derived from --muted-foreground, so it follows the
+     theme without a second definition under .dark. */
+  --calendar-edge: color-mix(in srgb, var(--muted-foreground) 50%, transparent);
   --ring: #8499B1;
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
@@ -171,6 +176,19 @@ body {
 .scroll-slim::-webkit-scrollbar-thumb { background: transparent; border-radius: 9999px; }
 .scroll-slim:hover::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, var(--muted-foreground) 40%, transparent);
+}
+
+/* The DUE / SOON / FLOAT / all-day rows above the time grid. They stay on the
+   page surface, but they are drop targets during a drag and on the grid's own
+   hairlines they read as more grid - hence --calendar-edge below them. That edge
+   is also the grid's 00:00 line whenever the tray is present; the hour loop skips
+   m=0. Dividers between the rows live here rather than on the rows, which come
+   and go. */
+.calendar-tray {
+  border-bottom: 1px solid var(--calendar-edge);
+}
+.calendar-tray > * + * {
+  border-top: 1px solid var(--calendar-line);
 }
 
 .notes-content p { margin: 0 0 0.5em; }

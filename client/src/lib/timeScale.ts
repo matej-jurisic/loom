@@ -6,30 +6,23 @@
  * no space at all between one item and the next.
  *
  * Every position on the grid goes through toPx/toMin - event tops, hour lines,
- * drag overlays, the now line, snapping. Two invariants keep the calendar honest:
+ * drag overlays, snapping. (The now line is drawn only on the linear map: compact
+ * mode has no continuous axis to place it on.) Two invariants keep the calendar
+ * honest:
  *
  *   1. Any drag switches the whole grid back to the linear map before it reads a
  *      coordinate (see expandForDrag in CalendarPage), so no gesture code has to
  *      reason about the stack.
  *   2. An event's own span always falls inside one segment, because segments are
- *      built from those spans (padded, then merged wherever two of them touch or
- *      overlap). So a pixel offset measured *within* a block - a grab offset, a
- *      block's height - means the same thing in both modes and survives the
- *      switch untouched.
+ *      built from those spans (merged wherever two of them touch or overlap). So
+ *      a pixel offset measured *within* a block - a grab offset, a block's
+ *      height - means the same thing in both modes and survives the switch
+ *      untouched. Segments carry no padding, so a caller whose block renders
+ *      taller than its raw span (a minimum height, say) has to hand compactScale
+ *      the span the block will really occupy, or it will overlap the next one.
  */
 
 export const DAY_MIN = 24 * 60
-/**
- * Kept either side of an event when deciding what counts as occupied, so two
- * unrelated items in the stack still get a sliver of daylight between them
- * instead of sitting flush against each other.
- */
-export const OCCUPIED_PAD_MIN = 15
-/**
- * Occupied ranges snap outwards to this, matching the quarter-hour the rest of
- * the calendar snaps to.
- */
-export const SNAP_MIN = 15
 
 export interface ScaleSegment {
   startMin: number
@@ -99,39 +92,23 @@ export function linearScale(hourPx: number): TimeScale {
 export function compactScale(
   ranges: Array<[number, number]>,
   hourPx: number,
-  anchorMin?: number,
 ): TimeScale {
-  const padded = ranges
-    .map(([s, e]) => [
-      Math.max(0, Math.floor((s - OCCUPIED_PAD_MIN) / SNAP_MIN) * SNAP_MIN),
-      Math.min(DAY_MIN, Math.ceil((e + OCCUPIED_PAD_MIN) / SNAP_MIN) * SNAP_MIN),
-    ] as [number, number])
+  const sorted = ranges
+    .map(([s, e]) => [Math.max(0, s), Math.min(DAY_MIN, e)] as [number, number])
     .filter(([s, e]) => e > s)
     .sort((a, b) => a[0] - b[0])
 
-  // Merge only where padded ranges actually touch or overlap, so simultaneous
-  // events keep their real relative position within one segment. Everything else
+  // Merge only where ranges actually touch or overlap, so simultaneous events
+  // keep their real relative position within one segment. Everything else
   // becomes its own segment and stacks directly under the one before it - the
-  // gap between them is dropped, not drawn, regardless of how big it is.
+  // gap between them is dropped, not drawn, regardless of how big it is. No
+  // padding is added around a range: a segment is exactly the span it was given,
+  // so consecutive blocks end up flush against one another.
   const merged: Array<[number, number]> = []
-  for (const [s, e] of padded) {
+  for (const [s, e] of sorted) {
     const last = merged[merged.length - 1]
     if (last && s <= last[1]) last[1] = Math.max(last[1], e)
     else merged.push([s, e])
-  }
-
-  // The now line needs a segment to land on even when "now" sits in a gap with
-  // nothing scheduled nearby. Giving it the same OCCUPIED_PAD_MIN treatment as a
-  // real event would reserve up to an hour of blank grid just to hold a 1px
-  // line, so if it isn't already covered by an event's segment it gets a
-  // hairline of its own instead - just enough width for buildScale's
-  // start/end interpolation to be well-defined.
-  if (anchorMin != null && !merged.some(([s, e]) => anchorMin >= s && anchorMin <= e)) {
-    const s = Math.max(0, anchorMin - 1)
-    const e = Math.min(DAY_MIN, anchorMin + 1)
-    const idx = merged.findIndex(([ms]) => ms > s)
-    if (idx === -1) merged.push([s, e])
-    else merged.splice(idx, 0, [s, e])
   }
 
   const parts = merged.map(([startMin, endMin]) => ({ startMin, endMin }))

@@ -127,6 +127,11 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `components/activities/BulkAssignModal.tsx` — sets goal / category on a multi-select. No bulk endpoint exists:
   it fans out over `PUT /api/activities/{id}`, resending unchanged fields from each activity (the PUT is a full replace).
 - `components/events/SkipRescheduleModal.tsx` — opened after skipping; lets user pick a date and creates a new pending copy on that date.
+- `components/events/MoveOrSkipModal.tsx` — asks Move vs Skip & reschedule when a calendar
+  drag lands a **pending** occurrence on another date. The page passes a `PendingMove` carrying the
+  resolved target *and* a `commit` callback, so each drop kind (`rescheduleEvent`,
+  `rescheduleFromAllDay`, `makeEventAllDay`) keeps its own optimistic update; the modal only owns the
+  skip-and-create path. Nothing is written until the user picks, so a cancelled drop just snaps back.
 - `components/goals/OccurrenceBar.tsx` — done/skipped/pending counts bar for ongoing goals; data from `GoalDto.OccurrenceStats`.
 - `components/layout/useUncategorizedCount.ts` — nav badge hook (shares `['events', 'all']` cache with CategoriesPage;
   predicate in `lib/categories.ts`). Currently unreferenced: neither nav renders a badge.
@@ -150,11 +155,24 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   unchanged `scrollTop`) because a scrolling finger produces near-taps constantly, and the mouse path
   additionally requires `lastPointerTypeRef.current === 'mouse'`: a touch reaches it a second time as a
   compatibility mouse event, which would otherwise walk straight past all four.
+  The `DueRow` / `UpcomingRow` / `FloatingTasksRow` / all-day rows are wrapped in one `.calendar-tray`
+  div (`index.css`, gated by `showTray`) that owns the hairlines *between* them and the heavy edge
+  closing the band, so those rows carry no borders of their own. That edge is also **the grid's 00:00
+  line** when the tray is shown (the hour loop skips `m=0`, and the day header's border serves it
+  otherwise), so it can be restyled but not removed. `DueRow` / `UpcomingRow` are anchored to
+  `effectiveToday`, not to `rangeStart`/`rangeEnd` — each queries once against today's start and then
+  drops whatever the visible range already draws, so paging weeks changes neither row's contents.
+  `trayDragActive` (`isDraggingGridEvent || isDraggingPill`) both reveals the FLOAT / all-day rows and
+  **hides `DueRow` and `UpcomingRow`** — neither accepts a drop, and their height alone pushed the
+  real targets into the autoscroll zone. Safe to unmount mid-gesture:
+  pill drags listen on `window`, not the source element, and the anchor absorbs the geometry change.
 - `lib/timeScale.ts` — the grid's minute↔pixel map, one `TimeScale` per visible day. `linearScale` is
   the plain 0-24 map; `compactScale` drops empty stretches entirely, stacking a day's events directly
   against one another (each block keeps its real duration-proportional height; only the gap between
   blocks disappears). **Every grid coordinate goes through `toPx`/`toMin`** — event tops, hour lines,
-  overlays, the now line, snapping (`snapToGrid` takes the scale, not `hourPx`). Two invariants the
+  overlays, snapping (`snapToGrid` takes the scale, not `hourPx`). The now line is the one thing
+  compact mode drops rather than places (`isToday && !scale.isCompact` in `DayColumn`): a collapsed
+  gap makes the axis discontinuous, so there is no honest pixel for "now". Two invariants the
   calendar leans on:
   1. **Any drag expands first.** `expandForDrag` swaps in the linear scale via `flushSync` before the
      gesture reads a coordinate, so no drag code reasons about the stack; `collapseAfterDrag` in each
