@@ -298,9 +298,12 @@ because those rate how much of a day was executed, which is the planner reading 
 
 - **Focus goals** — one chip per focus goal at the top of the page: title, last-session recency, and
   either its milestone percentage or its ongoing occurrence bar. Goals lead the day, not metrics.
-- **Overdue** — on today's view only, every overdue occurrence regardless of the day it was
-  scheduled for, with its date, above the agenda and not in it. One button moves the whole set to
-  tomorrow, preserving each clock time.
+- **Unfinished** — on today's view only, every pending occurrence whose date has passed, regardless
+  of the day it was scheduled for, with its date, above the agenda and not in it. Wider than the
+  overdue rule: planned occurrences are never *overdue*, but a planned one whose date is behind you
+  is listed here too, since not being late is no reason to disappear. Undated (floating) occurrences
+  are not included - they have no date to be behind. One button moves the whole set to tomorrow,
+  preserving each clock time and each occurrence's planned / all-day flags.
 - **Timeline agenda** — the day's timed occurrences as a spine with a time gutter, split by a live
   **now** marker into past and upcoming, with relative labels ("now", "in 40m") on today. Rows carry
   a one-tap done checkbox, a skip action, and an action menu.

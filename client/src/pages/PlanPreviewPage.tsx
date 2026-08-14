@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react'
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, Plus, CalendarCheck, ArrowRight } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { occurrencesApi, goalsApi, settingsApi } from '@/lib/api'
@@ -20,6 +20,13 @@ function addDays(d: Date, n: number): Date {
   const r = new Date(d)
   r.setDate(r.getDate() + n)
   return r
+}
+
+// Sort key for a dated occurrence. Falls back to endAt so deadline-only occurrences
+// (end, no start) sort by their deadline instead of collapsing to NaN.
+function refTime(o: Occurrence): number {
+  const ref = o.startAt ?? o.endAt
+  return ref === null ? 0 : new Date(ref).getTime()
 }
 
 function isSameDay(a: Date, b: Date): boolean {
@@ -265,20 +272,32 @@ export function PlanPreviewPage() {
 
   const { data: focusGoals = [] } = useQuery({ queryKey: ['goals', { status: 'focus' }], queryFn: () => goalsApi.list({ status: 'focus' }) })
 
+  // Anything pending that is already behind you. Wider than isOverdue on purpose: a
+  // planned occurrence is never overdue by design (DayMath.IsOverdue returns early on
+  // IsPlanned), but one whose date has passed still has to be seen, or it is only ever
+  // found by paging back to the day it was on. Floating occurrences have no date and
+  // are not behind anything - they belong to the Floating group.
+  const isBehind = useCallback(
+    (o: Occurrence) => {
+      if (o.status !== 'pending') return false
+      if (o.isOverdue) return true
+      const ref = o.startAt ?? o.endAt
+      return ref !== null && new Date(ref).getTime() < effectiveToday.getTime()
+    },
+    [effectiveToday.getTime()],
+  )
+
   const overdueEvents = useMemo(
-    () =>
-      isToday
-        ? allOccurrences.filter((o) => o.isOverdue).sort((a, b) => new Date(a.startAt!).getTime() - new Date(b.startAt!).getTime())
-        : [],
-    [allOccurrences, isToday],
+    () => (isToday ? allOccurrences.filter(isBehind).sort((a, b) => refTime(a) - refTime(b)) : []),
+    [allOccurrences, isToday, isBehind],
   )
 
   const timedEvents = useMemo(
     () =>
       occurrences
-        .filter((o) => o.startAt !== null && !o.isPlanned && !(isToday && o.isOverdue))
-        .sort((a, b) => new Date(a.startAt!).getTime() - new Date(b.startAt!).getTime()),
-    [occurrences, isToday],
+        .filter((o) => o.startAt !== null && !o.isPlanned && !(isToday && isBehind(o)))
+        .sort((a, b) => refTime(a) - refTime(b)),
+    [occurrences, isToday, isBehind],
   )
 
   const plannedEvents = useMemo(() => occurrences.filter((o) => o.isPlanned), [occurrences])
@@ -301,9 +320,17 @@ export function PlanPreviewPage() {
       const tomorrow = addDays(effectiveToday, 1)
       await Promise.all(
         overdueEvents.map((o) =>
+          // PUT /api/occurrences/{id} is a full replace, so every field that is not
+          // moving has to be resent - omitting isPlanned here would quietly demote a
+          // planned occurrence to a scheduled one on its way to tomorrow. Subtasks are
+          // the exception: the service leaves them alone when the key is absent.
           occurrencesApi.update(o.id, {
+            title: o.title,
             startAt: o.startAt ? shiftToDate(o.startAt, tomorrow) : null,
             endAt: o.endAt ? shiftToDate(o.endAt, tomorrow) : null,
+            isAllDay: o.isAllDay,
+            isPlanned: o.isPlanned,
+            durationMinutes: o.durationMinutes,
           }),
         ),
       )
@@ -413,7 +440,7 @@ export function PlanPreviewPage() {
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-foreground">
-                          {overdueEvents.length} overdue item{overdueEvents.length === 1 ? '' : 's'}
+                          {overdueEvents.length} unfinished item{overdueEvents.length === 1 ? '' : 's'}
                         </p>
                       </div>
                       <button

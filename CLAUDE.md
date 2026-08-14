@@ -227,7 +227,15 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - **Theming:** semantic CSS variables in `index.css` → Tailwind via `@theme inline`. Never hardcode
   `bg-slate-*` / `text-*-600`. Dark mode = `.dark` on `<html>`, controlled by `lib/theme.ts`.
 - **Day math is server-side.** The client consumes `occurrence.isOverdue`; it never recomputes overdue
-  locally. Purely presentational date formatting may stay client-side.
+  locally. Purely presentational date formatting may stay client-side. The one deliberate exception is
+  **"behind you"** — pending and dated before today — which is strictly wider than `isOverdue`
+  (`DayMath.IsOverdue` returns `false` for anything `IsPlanned`). It backs the calendar's DUE row
+  (`dueRowRef`) and the Plan page's Unfinished section (`isBehind`), so a planned occurrence that
+  slipped stays visible without being styled as late.
+- ⚠️ **`PUT /api/occurrences/{id}` is a full replace**: `UpdateAsync` assigns `Title`, `StartAt`,
+  `EndAt`, `IsAllDay`, `IsPlanned` and `DurationMinutes` unconditionally, so any field left out of the
+  body is cleared. Resend everything that isn't changing (see the Plan page sweep). `Subtasks` is the
+  sole exception — `ApplySubtasks` no-ops when the key is absent.
 - **Destructive actions confirm via `ConfirmDialog`** (never inline or immediate); mutations without
   inline error display report failures with `toastError` from `store/toasts.ts`. Row dropdowns use
   `components/ui/ActionMenu.tsx` (portal + flip), not hand-rolled absolute menus.
