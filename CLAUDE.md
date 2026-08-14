@@ -162,6 +162,10 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   otherwise), so it can be restyled but not removed. `DueRow` / `UpcomingRow` are anchored to
   `effectiveToday`, not to `rangeStart`/`rangeEnd` — each queries once against today's start and then
   drops whatever the visible range already draws, so paging weeks changes neither row's contents.
+  `DueRow` carries **everything pending dated before today** (`overduePastItems`), not just what
+  `isOverdue` says: planned occurrences are never overdue by design (`DayMath.IsOverdue` returns early
+  on `IsPlanned`), and the row exists so that rule doesn't make them invisible. It keys off
+  `dueRowRef(o)` (`startAt ?? endAt`) so deadline-only occurrences are carried too.
   `trayDragActive` (`isDraggingGridEvent || isDraggingPill`) both reveals the FLOAT / all-day rows and
   **hides `DueRow` and `UpcomingRow`** — neither accepts a drop, and their height alone pushed the
   real targets into the autoscroll zone. Safe to unmount mid-gesture:

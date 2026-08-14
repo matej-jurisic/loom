@@ -334,8 +334,11 @@ expects you to complete. Empty grid means nothing in particular.
   only a time change and commits with no prompt, as does moving a done or skipped occurrence - only a
   pending one can be skipped.
 - A sticky **Due** row keeps due pins and overdue items visible while scrolling.
-- The header's **DUE** and **SOON** rows are anchored to *today*, not to the view: DUE lists all-day
-  planned occurrences still pending from before today, SOON lists due pins from today onward. Both
+- The header's **DUE** and **SOON** rows are anchored to *today*, not to the view: DUE lists every
+  occurrence still pending and dated before today - all-day or timed, planned or not - so nothing
+  unfinished can scroll out of reach; SOON lists due pins from today onward. DUE is deliberately not
+  the overdue rule: a planned occurrence is never *overdue*, but it is still listed here, because not
+  being late is not a reason to become invisible. Both
   drop anything the visible range already draws, so a row only ever adds what is off-screen. Paging
   forward a week therefore does not mark that week's untouched tasks overdue, and paging backwards
   does not hide the ones that really are. Both rows disappear for the length of a drag, since neither

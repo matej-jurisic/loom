@@ -271,6 +271,13 @@ function isDueOccurrence(o: Occurrence): boolean {
   return !!o.startAt && !o.endAt
 }
 
+// The date the Due row sorts and labels a straggler by. Falls back to endAt so a
+// deadline-only occurrence (end, no start) is carried too - those are exactly the
+// ones you least want to lose track of. Null means fully floating: the FLOAT row's job.
+function dueRowRef(o: Occurrence): string | null {
+  return o.startAt ?? o.endAt ?? null
+}
+
 function isEODDue(o: Occurrence): boolean {
   if (!isDueOccurrence(o)) return false
   const d = new Date(o.startAt!)
@@ -948,7 +955,7 @@ function DueRow({
         <div className="flex gap-1 px-1 py-1">
           {tasks.map((o) => {
             const { className, style } = eventAllDayColors(o)
-            const dateLabel = new Date(o.startAt!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            const dateLabel = new Date(dueRowRef(o)!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
             return (
               <button
                 key={o.id}
@@ -1324,26 +1331,29 @@ export function CalendarPage() {
     [rawUpcomingDue, effectiveToday.getTime(), rangeStart.getTime(), rangeEnd.getTime()],
   )
 
-  const { data: rawPastAllDay = [] } = useQuery({
-    queryKey: ['events', 'due-allday', overdueCutoff],
+  const { data: rawPastPending = [] } = useQuery({
+    queryKey: ['events', 'due-past', overdueCutoff],
     queryFn: () => occurrencesApi.list({ endBefore: overdueCutoff, status: 'pending' }),
     staleTime: 30 * 1000,
     placeholderData: keepPreviousData,
   })
 
-  // All-day planned occurrences dated before today that were never completed. Ones
-  // the current view already draws in its own all-day row are dropped, so the Due
-  // row only ever carries what would otherwise be off-screen.
-  const overdueAllDayItems = useMemo(
+  // Everything still pending that is dated before today, whatever its scheduling
+  // state: all-day or timed, planned or not. The row's job is that nothing you never
+  // finished can fall off the top of the calendar just because you paged forward, so
+  // it deliberately does not consult isOverdue (which is false for planned items by
+  // design - see DayMath.IsOverdue). Ones the current view already draws are dropped,
+  // so the row only ever carries what would otherwise be off-screen.
+  const overduePastItems = useMemo(
     () =>
-      rawPastAllDay
-        .filter((o) => o.isAllDay && o.isPlanned && o.startAt !== null)
+      rawPastPending
+        .filter((o) => dueRowRef(o) !== null)
         .filter((o) => {
-          const t = new Date(o.startAt!).getTime()
+          const t = new Date(dueRowRef(o)!).getTime()
           return t < rangeStart.getTime() || t >= rangeEnd.getTime()
         })
-        .sort((a, b) => new Date(b.startAt!).getTime() - new Date(a.startAt!).getTime()),
-    [rawPastAllDay, rangeStart.getTime(), rangeEnd.getTime()],
+        .sort((a, b) => new Date(dueRowRef(b)!).getTime() - new Date(dueRowRef(a)!).getTime()),
+    [rawPastPending, rangeStart.getTime(), rangeEnd.getTime()],
   )
 
   // Scroll to current time once the grid first becomes visible. Gated on
@@ -2879,7 +2889,7 @@ export function CalendarPage() {
   // rendered when one of its rows is - otherwise it draws a stray band and a
   // double line under the day headers.
   const showTray =
-    (overdueAllDayItems.length > 0 && !trayDragActive) ||
+    (overduePastItems.length > 0 && !trayDragActive) ||
     (upcomingDueItems.length > 0 && !trayDragActive) ||
     floatingTasks.length > 0 ||
     (view === 'day' ? dayAllDayEvents.length > 0 : allDayEvents.length > 0) ||
@@ -3160,7 +3170,7 @@ export function CalendarPage() {
                 <div className="calendar-tray">
                 {!trayDragActive && (
                   <DueRow
-                    tasks={overdueAllDayItems}
+                    tasks={overduePastItems}
                     onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
                     onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
                     movingEventId={movingEventId}
@@ -3242,7 +3252,7 @@ export function CalendarPage() {
               <div className="calendar-tray">
                 {!trayDragActive && (
                   <DueRow
-                    tasks={overdueAllDayItems}
+                    tasks={overduePastItems}
                     onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
                     onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
                     movingEventId={movingEventId}
