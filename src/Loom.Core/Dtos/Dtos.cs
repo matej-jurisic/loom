@@ -158,6 +158,16 @@ public sealed record SetOccurrenceStatusRequest(EventStatus Status);
 // Goals
 public sealed record GoalOccurrenceStats(int Done, int Skipped, int Pending);
 
+/// <summary>One day of an ongoing goal's history. Days with nothing on them are not sent.</summary>
+public sealed record GoalHeatmapDay(DateOnly Date, int Done, int Skipped);
+
+/// <summary>
+/// Trailing window of per-day done/skipped counts for an ongoing goal. <c>Start</c> and <c>End</c>
+/// are days in the user's timezone offset by the day boundary, so the client lays the grid out from
+/// them rather than recomputing "today" locally.
+/// </summary>
+public sealed record GoalHeatmap(DateOnly Start, DateOnly End, List<GoalHeatmapDay> Days);
+
 public sealed record GoalDto(
     Guid Id,
     Guid UserId,
@@ -169,13 +179,18 @@ public sealed record GoalDto(
     DateTimeOffset CreatedAt,
     List<CheckpointDto> Checkpoints,
     GoalOccurrenceStats? OccurrenceStats = null,
-    DateTimeOffset? LastOccurrenceAt = null)
+    DateTimeOffset? LastOccurrenceAt = null,
+    GoalHeatmap? Heatmap = null)
 {
-    public static GoalDto FromEntity(Goal g, GoalOccurrenceStats? stats = null, DateTimeOffset? lastOccurrenceAt = null) => new(
+    public static GoalDto FromEntity(
+        Goal g,
+        GoalOccurrenceStats? stats = null,
+        DateTimeOffset? lastOccurrenceAt = null,
+        GoalHeatmap? heatmap = null) => new(
         g.Id, g.UserId, g.Title, g.Description, g.Notes,
         g.Status.ToString(), g.Kind.ToString(), g.CreatedAt,
         g.Checkpoints.Select(CheckpointDto.FromEntity).ToList(),
-        stats, lastOccurrenceAt);
+        stats, lastOccurrenceAt, heatmap);
 }
 
 public sealed record CreateGoalRequest(string Title, string? Description, GoalKind Kind = GoalKind.milestone, string? Notes = null);

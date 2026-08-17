@@ -262,8 +262,14 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 - **Milestone goals** show a progress ring, a weight-proportional composition bar (one segment per
   checkpoint, sized by its weight, filled when reached), and the checkpoints themselves as chips on
   desktop or a checklist on mobile - each toggling reached in place.
-- **Ongoing goals** show `OccurrenceStats` (done / skipped / pending counts across every activity
-  linked to the goal) as a proportional bar.
+- **Ongoing goals** show a heatmap: one square per day for the last 182 days, across every activity
+  linked to the goal, shaded by how many occurrences were completed that day, with a faint red for a
+  day that only holds skips. Days are bucketed server-side in the user's timezone and day boundary,
+  so the client never decides which day something belongs to. Pending occurrences are not on the
+  grid (nothing has happened yet), and a floating occurrence lands on no day at all. Goals with no
+  linked occurrence show no grid rather than an empty one.
+  They also carry `OccurrenceStats` (lifetime done / skipped / pending counts), rendered as a
+  proportional bar on the Plan page's goal chip.
 - **Every goal** carries `lastOccurrenceAt`, the most recent completion across its activities,
   rendered as "active today" / "3d ago" / "2w since last".
 
@@ -454,6 +460,6 @@ Unauthorized→401, Forbidden→403.
 | `/api/goals/{id}/status` | `POST` |
 | `/api/goals/{goalId}/checkpoints[/{id}[/status]]` | `GET`, `POST`, `PUT`, `DELETE` |
 | `/api/categories[/{id}]` | `GET`, `POST`, `PUT`, `DELETE` |
-| `/api/insights`, `/api/insights/empty-profile` | `GET` (`period`) |
+| `/api/insights` | `GET` (`period`) |
 | `/api/settings` | `GET`, `PUT` |
 | `/api/export` | `GET` |

@@ -132,7 +132,13 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   resolved target *and* a `commit` callback, so each drop kind (`rescheduleEvent`,
   `rescheduleFromAllDay`, `makeEventAllDay`) keeps its own optimistic update; the modal only owns the
   skip-and-create path. Nothing is written until the user picks, so a cancelled drop just snaps back.
-- `components/goals/OccurrenceBar.tsx` — done/skipped/pending counts bar for ongoing goals; data from `GoalDto.OccurrenceStats`.
+- `components/goals/OccurrenceBar.tsx` — done/skipped/pending counts bar for ongoing goals; data from
+  `GoalDto.OccurrenceStats`. Used by the Plan page's goal chip; the Goals page uses the heatmap instead.
+- `components/goals/OccurrenceHeatmap.tsx` — GitHub-style day grid for ongoing goals on the Goals page,
+  from `GoalDto.Heatmap` (a 182-day window of per-day done/skipped counts, days with nothing omitted).
+  The server sends `start`/`end` as day-boundary days, so the client never decides what "today" is; it
+  only lays out Monday-first columns and picks the fill. `weeks` is a prop and the page renders it twice
+  (13 on mobile, 26 from `sm:`) — both draw a suffix of the same payload.
 - `components/layout/useUncategorizedCount.ts` — nav badge hook (shares `['events', 'all']` cache with CategoriesPage;
   predicate in `lib/categories.ts`). Currently unreferenced: neither nav renders a badge.
 - `components/layout/Sidebar.tsx` — desktop nav: five page items, then the category list (`Active` =

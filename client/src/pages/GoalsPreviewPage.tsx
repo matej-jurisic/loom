@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { goalsApi, checkpointsApi, ApiError } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Goal, GoalStatus, Checkpoint, CheckpointSize } from '@/lib/types'
-import { OccurrenceBar } from '@/components/goals/OccurrenceBar'
+import { OccurrenceHeatmap } from '@/components/goals/OccurrenceHeatmap'
 import { GoalModal } from '@/components/goals/GoalModal'
 import { CheckpointModal } from '@/components/goals/CheckpointModal'
 import { ActionMenu, type ActionMenuEntry } from '@/components/ui/ActionMenu'
@@ -319,14 +319,20 @@ function GoalCard({ goal, onView, onEdit, onAddCheckpoint, onEditCheckpoint }: G
       </div>
 
       {/* Body */}
-      {(isMilestone ? hasCheckpoints : !!goal.occurrenceStats) && (
+      {(isMilestone ? hasCheckpoints : !!goal.heatmap) && (
         <div className="mt-3">
           {isMilestone ? (
             <CheckpointBreakdown goal={goal} tierColor={tierColor} onEditCheckpoint={(cp) => onEditCheckpoint(goal.id, cp)} />
           ) : (
-            <div className="flex items-center gap-3">
-              <OccurrenceBar stats={goal.occurrenceStats!} barClassName="flex-1 h-1.5" labelClassName="w-10" />
-            </div>
+            <>
+              {/* Same window either way; the narrow layout just draws the recent end of it. */}
+              <div className="sm:hidden">
+                <OccurrenceHeatmap heatmap={goal.heatmap!} color={tierColor} weeks={13} />
+              </div>
+              <div className="hidden sm:block">
+                <OccurrenceHeatmap heatmap={goal.heatmap!} color={tierColor} weeks={26} />
+              </div>
+            </>
           )}
         </div>
       )}

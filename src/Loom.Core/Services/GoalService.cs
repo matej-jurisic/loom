@@ -27,22 +27,26 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         return Result<GoalDto>.Success(GoalDto.FromEntity(goal));
     }
 
-    public async Task<Result<GoalDto>> GetAsync(Guid id, Guid userId)
+    public async Task<Result<GoalDto>> GetAsync(Guid id, Guid userId, DateTimeOffset? nowUtc = null)
     {
         var goal = await db.Goals
             .AsNoTracking()
             .Include(g => g.Checkpoints)
             .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId);
         if (goal is null) return Result<GoalDto>.Fail(new Error(ErrorType.NotFound, "Goal not found."));
-        var stats = goal.Kind == GoalKind.ongoing ? await GetOccurrenceStatsAsync([goal.Id], userId) : [];
+        var progress = goal.Kind == GoalKind.ongoing
+            ? await GetOngoingProgressAsync([goal.Id], userId, nowUtc ?? DateTimeOffset.UtcNow)
+            : [];
         var lastAt = await GetLastOccurrenceAtAsync([goal.Id], userId);
+        var p = progress.GetValueOrDefault(goal.Id);
         return Result<GoalDto>.Success(GoalDto.FromEntity(
             goal,
-            stats.GetValueOrDefault(goal.Id),
-            lastAt.TryGetValue(goal.Id, out var lat) ? lat : null));
+            p.Stats,
+            lastAt.TryGetValue(goal.Id, out var lat) ? lat : null,
+            p.Heatmap));
     }
 
-    public async Task<List<GoalDto>> ListAsync(Guid userId, GoalStatus? status = null)
+    public async Task<List<GoalDto>> ListAsync(Guid userId, GoalStatus? status = null, DateTimeOffset? nowUtc = null)
     {
         var query = db.Goals
             .AsNoTracking()
@@ -55,7 +59,9 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         var goals = await query.ToListAsync();
 
         var ongoingIds = goals.Where(g => g.Kind == GoalKind.ongoing).Select(g => g.Id).ToList();
-        var stats = ongoingIds.Count > 0 ? await GetOccurrenceStatsAsync(ongoingIds, userId) : [];
+        var progress = ongoingIds.Count > 0
+            ? await GetOngoingProgressAsync(ongoingIds, userId, nowUtc ?? DateTimeOffset.UtcNow)
+            : [];
 
         var allGoalIds = goals.Select(g => g.Id).ToList();
         var lastAt = allGoalIds.Count > 0 ? await GetLastOccurrenceAtAsync(allGoalIds, userId) : [];
@@ -63,10 +69,15 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         return goals
             .OrderBy(g => g.Status)
             .ThenBy(g => g.CreatedAt)
-            .Select(g => GoalDto.FromEntity(
-                g,
-                stats.GetValueOrDefault(g.Id),
-                lastAt.TryGetValue(g.Id, out var lat) ? lat : null))
+            .Select(g =>
+            {
+                var p = progress.GetValueOrDefault(g.Id);
+                return GoalDto.FromEntity(
+                    g,
+                    p.Stats,
+                    lastAt.TryGetValue(g.Id, out var lat) ? lat : null,
+                    p.Heatmap);
+            })
             .ToList();
     }
 
@@ -99,7 +110,19 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         return result;
     }
 
-    private async Task<Dictionary<Guid, GoalOccurrenceStats>> GetOccurrenceStatsAsync(List<Guid> goalIds, Guid userId)
+    /// <summary>
+    /// How wide the heatmap window is. 26 weeks is the widest grid a goal card draws; narrow layouts
+    /// render a suffix of the same window, so one payload serves every breakpoint.
+    /// </summary>
+    private const int HeatmapDays = 182;
+
+    /// <summary>
+    /// Lifetime done/skipped/pending counts and the trailing per-day history for ongoing goals, from
+    /// one pass over their occurrences. Goals with no linked occurrence at all are absent from the
+    /// result, so the card renders no progress section rather than an empty one.
+    /// </summary>
+    private async Task<Dictionary<Guid, (GoalOccurrenceStats? Stats, GoalHeatmap? Heatmap)>> GetOngoingProgressAsync(
+        List<Guid> goalIds, Guid userId, DateTimeOffset nowUtc)
     {
         var activityGoalMap = await db.Activities
             .Where(a => a.UserId == userId && a.GoalId != null && goalIds.Contains(a.GoalId.Value))
@@ -109,31 +132,51 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         if (activityGoalMap.Count == 0) return [];
 
         var activityIds = activityGoalMap.Select(a => a.Id).ToList();
-        var counts = await db.Occurrences
+        var rows = await db.Occurrences
+            .AsNoTracking()
             .Where(o => activityIds.Contains(o.ActivityId))
-            .GroupBy(o => new { o.ActivityId, o.Status })
-            .Select(g => new { g.Key.ActivityId, g.Key.Status, Count = g.Count() })
+            .Select(o => new { o.ActivityId, o.Status, o.StartAt })
             .ToListAsync();
 
-        var lookup = activityGoalMap.ToDictionary(a => a.Id, a => a.GoalId);
-        var result = new Dictionary<Guid, (int Done, int Skipped, int Pending)>();
+        var ctx = await settingsService.GetDayContextAsync(userId);
+        var today = DayMath.Today(ctx, nowUtc);
+        var windowStart = today.AddDays(-(HeatmapDays - 1));
 
-        foreach (var row in counts)
+        var lookup = activityGoalMap.ToDictionary(a => a.Id, a => a.GoalId);
+        var totals = new Dictionary<Guid, (int Done, int Skipped, int Pending)>();
+        var byDay = new Dictionary<Guid, Dictionary<DateOnly, (int Done, int Skipped)>>();
+
+        foreach (var row in rows)
         {
             var goalId = lookup[row.ActivityId];
-            result.TryAdd(goalId, (0, 0, 0));
-            var cur = result[goalId];
-            result[goalId] = row.Status switch
+            totals.TryAdd(goalId, (0, 0, 0));
+            var cur = totals[goalId];
+            totals[goalId] = row.Status switch
             {
-                EventStatus.done    => cur with { Done    = cur.Done    + row.Count },
-                EventStatus.skipped => cur with { Skipped = cur.Skipped + row.Count },
-                _                   => cur with { Pending = cur.Pending + row.Count },
+                EventStatus.done    => cur with { Done    = cur.Done    + 1 },
+                EventStatus.skipped => cur with { Skipped = cur.Skipped + 1 },
+                _                   => cur with { Pending = cur.Pending + 1 },
             };
+
+            // Only settled occurrences land on the grid, and a floating one lands on no day at all.
+            if (row.Status == EventStatus.pending || row.StartAt is null) continue;
+            var day = DayMath.DayOf(row.StartAt.Value, ctx);
+            if (day < windowStart || day > today) continue;
+
+            if (!byDay.TryGetValue(goalId, out var days)) byDay[goalId] = days = [];
+            days.TryAdd(day, (0, 0));
+            var d = days[day];
+            days[day] = row.Status == EventStatus.done
+                ? d with { Done = d.Done + 1 }
+                : d with { Skipped = d.Skipped + 1 };
         }
 
-        return result.ToDictionary(
+        return totals.ToDictionary(
             kv => kv.Key,
-            kv => new GoalOccurrenceStats(kv.Value.Done, kv.Value.Skipped, kv.Value.Pending));
+            kv => ((GoalOccurrenceStats?)new GoalOccurrenceStats(kv.Value.Done, kv.Value.Skipped, kv.Value.Pending),
+                   (GoalHeatmap?)new GoalHeatmap(windowStart, today, byDay.TryGetValue(kv.Key, out var days)
+                       ? days.OrderBy(d => d.Key).Select(d => new GoalHeatmapDay(d.Key, d.Value.Done, d.Value.Skipped)).ToList()
+                       : [])));
     }
 
     public async Task<Result<GoalDto>> UpdateAsync(Guid id, Guid userId, UpdateGoalRequest req)

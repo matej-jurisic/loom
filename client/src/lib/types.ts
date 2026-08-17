@@ -40,6 +40,19 @@ export interface GoalOccurrenceStats {
   pending: number
 }
 
+/** One day of an ongoing goal's history. Days with nothing on them are not sent. */
+export interface GoalHeatmapDay {
+  date: string // yyyy-MM-dd, in the user's timezone offset by the day boundary
+  done: number
+  skipped: number
+}
+
+export interface GoalHeatmap {
+  start: string // yyyy-MM-dd
+  end: string   // yyyy-MM-dd, the server's "today"
+  days: GoalHeatmapDay[]
+}
+
 export interface Goal {
   id: string
   userId: string
@@ -52,6 +65,7 @@ export interface Goal {
   checkpoints: Checkpoint[]
   occurrenceStats: GoalOccurrenceStats | null
   lastOccurrenceAt: string | null
+  heatmap: GoalHeatmap | null
 }
 
 export interface CategorySummary {
