@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Trash2, Plus } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -335,6 +335,15 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
 
   const selectedActivity = activities.find((a) => a.id === form.activityId) ?? defaultActivity ?? duplicateFrom?.activity ?? null
 
+  // Most-used first (occurrences in the last year, from the server), so the activities the user
+  // keeps logging are at the top of the picker. Never-used ones fall to the tail, alphabetically.
+  const activityOptions = useMemo(
+    () => [...activities]
+      .sort((a, b) => (b.recentOccurrenceCount - a.recentOccurrenceCount) || a.title.localeCompare(b.title))
+      .map((a) => ({ value: a.id, label: a.title, sublabel: a.goal?.title })),
+    [activities],
+  )
+
   const segmentClass = (active: boolean) =>
     `flex-1 rounded-md py-2 text-xs font-medium transition-colors ${
       active
@@ -425,11 +434,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
                       setForm((f) => ({ ...f, activityId: v }))
                       setShowNewActivity(false)
                     }}
-                    options={activities.map((a) => ({
-                      value: a.id,
-                      label: a.title,
-                      sublabel: a.goal?.title,
-                    }))}
+                    options={activityOptions}
                     placeholder="Select an activity..."
                     error={Boolean(errors.activityId)}
                     onCreateNew={!isEdit ? () => setShowNewActivity(true) : undefined}

@@ -37,13 +37,17 @@ public sealed record ActivityDto(
     DateTimeOffset CreatedAt,
     CategorySummaryDto? Category,
     GoalSummaryDto? Goal,
-    List<ActivitySubtaskDto> Subtasks)
+    List<ActivitySubtaskDto> Subtasks,
+    // How many occurrences this activity has in the recent window (see ActivityService.RecentWindowDays).
+    // Only the list endpoint fills it; single-activity responses leave it at 0.
+    int RecentOccurrenceCount = 0)
 {
-    public static ActivityDto FromEntity(Activity a) => new(
+    public static ActivityDto FromEntity(Activity a, int recentOccurrenceCount = 0) => new(
         a.Id, a.UserId, a.Title, a.CategoryId, a.GoalId, a.Kind.ToString(), a.CreatedAt,
         a.Category is not null ? CategorySummaryDto.FromEntity(a.Category) : null,
         a.Goal is not null ? GoalSummaryDto.FromEntity(a.Goal) : null,
-        a.Subtasks.OrderBy(s => s.CreatedAt).Select(ActivitySubtaskDto.FromEntity).ToList());
+        a.Subtasks.OrderBy(s => s.CreatedAt).Select(ActivitySubtaskDto.FromEntity).ToList(),
+        recentOccurrenceCount);
 }
 
 public sealed record CreateActivityRequest(string Title, Guid? CategoryId, Guid? GoalId);

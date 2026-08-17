@@ -74,7 +74,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   timezone offset by `DayBoundaryTime`. Get a `DayContext` via `UserSettingsService.GetDayContextAsync`.
   Key methods: `OccurrenceDay(Occurrence, DayContext)`, `IsOverdue(Occurrence, DayContext, DateTimeOffset)`.
 - `Dtos/Dtos.cs` — request/response records with `FromEntity` static factory. Never leak entities.
-  Key DTOs: `ActivityDto` (has `Kind` — internal activity/event split), `OccurrenceDto` (has
+  Key DTOs: `ActivityDto` (has `Kind` — internal activity/event split — and `RecentOccurrenceCount`,
+  filled only by `ActivityService.ListAsync`, which orders the new-occurrence modal's picker), `OccurrenceDto` (has
   `EffectiveTitle = title ?? activity.title`, `IsPlanned`, `DurationMinutes`),
   `CategoryDto`/`CategorySummaryDto`, `CheckpointDto` (has `Size` enum — not numeric progress).
 - `Services/*Service.cs` — ctor-inject `LoomDbContext`; return `Result`/`Result<T>`. Registered in `AddLoomCore`.

@@ -110,6 +110,8 @@ export interface Activity {
   category: CategorySummary | null
   goal: GoalSummary | null
   subtasks: ActivitySubtask[]
+  /** Occurrences in the last year. Only the list endpoint fills it; single-activity responses send 0. */
+  recentOccurrenceCount: number
 }
 
 export interface Occurrence {

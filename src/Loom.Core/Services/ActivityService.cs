@@ -9,6 +9,9 @@ namespace Loom.Core.Services;
 
 public class ActivityService(LoomDbContext db)
 {
+    /// <summary>Window used for <see cref="ActivityDto.RecentOccurrenceCount"/>: how far back "recently used" reaches.</summary>
+    public const int RecentWindowDays = 365;
+
     public async Task<Result<ActivityDto>> GetAsync(Guid id, Guid userId)
     {
         var a = await db.Activities
@@ -33,7 +36,29 @@ public class ActivityService(LoomDbContext db)
             query = query.Where(a => a.GoalId == goalId.Value);
 
         var all = await query.OrderBy(a => a.Title).ToListAsync();
-        return all.Select(ActivityDto.FromEntity).ToList();
+        var counts = await RecentOccurrenceCountsAsync(userId);
+        return all.Select(a => ActivityDto.FromEntity(a, counts.GetValueOrDefault(a.Id))).ToList();
+    }
+
+    /// <summary>
+    /// Occurrences per activity within the recent window, so pickers can offer the activities the
+    /// user actually reaches for first. An occurrence counts from its start, falling back to its
+    /// deadline and then to when it was created, so floating rows are not invisible here. There is
+    /// no upper bound: something scheduled for tomorrow is still evidence the activity is in use.
+    /// SQLite can't translate a DateTimeOffset range WHERE, so the window is applied in memory.
+    /// </summary>
+    private async Task<Dictionary<Guid, int>> RecentOccurrenceCountsAsync(Guid userId)
+    {
+        var since = DateTimeOffset.UtcNow.AddDays(-RecentWindowDays);
+        var refs = await db.Occurrences
+            .Where(o => o.UserId == userId)
+            .Select(o => new { o.ActivityId, o.StartAt, o.EndAt, o.CreatedAt })
+            .ToListAsync();
+
+        return refs
+            .Where(o => (o.StartAt ?? o.EndAt ?? o.CreatedAt) >= since)
+            .GroupBy(o => o.ActivityId)
+            .ToDictionary(g => g.Key, g => g.Count());
     }
 
     public async Task<Result<ActivityDto>> CreateAsync(Guid userId, CreateActivityRequest req)

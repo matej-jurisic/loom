@@ -97,6 +97,11 @@ time. Activities are managed at `/activities`.
 Deleting an activity cascades to its occurrences. Deleting a goal or category set-nulls the link and
 leaves the activity alive.
 
+`GET /api/activities` also returns a derived `recentOccurrenceCount` per activity: its occurrences in
+the last 365 days, each counted from its start, falling back to its deadline and then to when it was
+created, with no upper bound so something scheduled for tomorrow still counts. Single-activity
+responses leave it at 0. It exists to order the activity picker.
+
 ### Kinds: activity vs event
 
 - **`activity`** — a reusable definition. It owns many occurrences and is what `/api/activities`
@@ -176,7 +181,9 @@ An occurrence is overdue when it is pending, not planned, has a start, and:
 ### Creating, editing, scheduling
 
 One modal covers all of it. It creates either an occurrence of an existing activity (activity picker,
-with inline quick-create) or a one-off event (title field). Time mode is a three-way choice - **due**
+with inline quick-create) or a one-off event (title field). The picker is ordered by how many
+occurrences each activity has had in the last year, most first, so the things actually being logged
+sit at the top; ties and never-used activities fall back to alphabetical. Time mode is a three-way choice - **due**
 (end only), **scheduled** (start, optional end), **floating** (neither) - with `all day` and
 `planned` as independent flags. Scheduling an occurrence means giving it a start; rescheduling means
 changing it. From the calendar, blocks can be dragged to move, dragged from the FLOAT or all-day row
