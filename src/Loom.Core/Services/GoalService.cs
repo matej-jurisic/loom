@@ -111,10 +111,11 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
     }
 
     /// <summary>
-    /// How wide the heatmap window is. 26 weeks is the widest grid a goal card draws; narrow layouts
-    /// render a suffix of the same window, so one payload serves every breakpoint.
+    /// How wide the heatmap window is. 40 weeks covers the widest grid a goal card draws (39 columns,
+    /// plus the part-week the first column starts in); narrow layouts render a suffix of the same
+    /// window, so one payload serves every breakpoint.
     /// </summary>
-    private const int HeatmapDays = 182;
+    private const int HeatmapDays = 280;
 
     /// <summary>
     /// Lifetime done/skipped/pending counts and the trailing per-day history for ongoing goals, from

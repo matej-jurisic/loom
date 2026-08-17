@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, X, Pencil, Trash2, CalendarPlus, Clock, ListChecks } from 'lucide-react'
+import { Check, X, Pencil, Trash2, CalendarPlus, Clock, History, ListChecks } from 'lucide-react'
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Occurrence, EventStatus } from '@/lib/types'
@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
 import { OccurrenceSubtasksModal } from '@/components/events/OccurrenceSubtasksModal'
 import { SkipRescheduleModal } from '@/components/events/SkipRescheduleModal'
+import { ActivityHistoryModal } from '@/components/activities/ActivityHistoryModal'
 
 const GOAL_TONE: Record<string, 'focus' | 'active' | 'bench' | 'neutral'> = {
   focus: 'focus',
@@ -30,6 +31,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
   const qc = useQueryClient()
   const [subtasksOpen, setSubtasksOpen] = useState(false)
   const [skipOpen, setSkipOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const isPending = occurrence.status === 'pending'
@@ -84,6 +86,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
     ...(isPending && !occurrence.startAt && onSchedule
       ? [{ icon: CalendarPlus, label: 'Schedule', onClick: () => onSchedule(occurrence) }]
       : []),
+    { icon: History, label: 'History', onClick: () => setHistoryOpen(true) },
     { icon: Pencil, label: 'Edit', onClick: () => onEdit(occurrence) },
     { icon: Trash2, label: 'Delete', onClick: () => setConfirmDelete(true), destructive: true },
   ]
@@ -157,6 +160,15 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
           open={subtasksOpen}
           onClose={() => setSubtasksOpen(false)}
           occurrence={occurrence}
+        />
+      )}
+      {/* Mounted only while open: the modal fetches this activity's whole history, and a plan day can
+          hold dozens of rows. */}
+      {historyOpen && (
+        <ActivityHistoryModal
+          open={historyOpen}
+          activity={occurrence.activity}
+          onClose={() => setHistoryOpen(false)}
         />
       )}
       <SkipRescheduleModal

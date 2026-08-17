@@ -416,8 +416,8 @@ export function PlanPreviewPage() {
         </header>
 
         {/* Canvas */}
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-4 py-5 md:px-6">
+        <div className="flex-1 overflow-y-auto px-4 py-5 md:px-6">
+          <div className="mx-auto max-w-2xl">
             {anyLoading ? (
               <div className="flex items-center justify-center py-10">
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />

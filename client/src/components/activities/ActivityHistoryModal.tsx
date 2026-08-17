@@ -6,12 +6,17 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
+import {
+  OccurrenceHeatmap, addDays, keyOf, parseDay, startOfWeek,
+  type HeatmapDayCounts, type HeatmapWindow,
+} from '@/components/events/OccurrenceHeatmap'
 import { occurrencesApi } from '@/lib/api'
 import type { Activity, Occurrence } from '@/lib/types'
 
-/** Rows in the strip, one per week. 8 is two months: enough to read a weekly rhythm without the grid
- *  dominating the dialog it sits in. */
-const STRIP_WEEKS = 8
+/** Columns in the heatmap, one per week. Both are suffixes of the same window, with counts picked so
+ *  the squares land near 14px inside the modal's fixed width. */
+const HEATMAP_WEEKS_NARROW = 18
+const HEATMAP_WEEKS_WIDE = 26
 const RECENT_LIMIT = 10
 const GOAL_TONE: Record<string, 'focus' | 'active' | 'bench' | 'neutral'> = {
   focus: 'focus', active: 'active', bench: 'bench', closed: 'neutral',
@@ -78,7 +83,7 @@ export function ActivityHistoryModal({
         <Stat label="Usual length" value={durationLabel(summary.usualDurationMinutes)} loading={loading} />
       </div>
 
-      <DayStrip occurrences={occurrences ?? []} loading={loading} />
+      <ActivityHeatmap occurrences={occurrences ?? []} activity={activity} loading={loading} />
 
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
@@ -161,107 +166,67 @@ function RecentSkeleton() {
 }
 
 /**
- * One cell per day for the last eight weeks, laid out the way a calendar is: a column per weekday
- * under its name, a row per week, the current week last. A habit that only ever happens at the
- * weekend is then a vertical stripe, and one that lapsed a month ago stops partway down. This is the
- * part the activities page cannot do: a flat list makes you reconstruct the rhythm yourself.
+ * The same grid the Goals page draws, on this activity's own occurrences: a column per week, a row
+ * per weekday, the current week last. A habit that only ever happens at the weekend is then a
+ * horizontal stripe, and one that lapsed a month ago stops partway across. This is the part the
+ * activities page cannot do: a flat list makes you reconstruct the rhythm yourself.
  *
- * The grid is the same size empty as full, so it renders while loading too - only the fills wait.
+ * Goals get their window from the server; this one is built here, like every other figure in the
+ * dialog, so any caller can open it with just an activity. The grid is the same size empty as full,
+ * so it renders while loading too - only the fills wait.
  */
-function DayStrip({ occurrences, loading }: { occurrences: Occurrence[]; loading?: boolean }) {
-  const { weeks, weekdays } = useMemo(() => buildStrip(occurrences), [occurrences])
+function ActivityHeatmap({
+  occurrences,
+  activity,
+  loading,
+}: {
+  occurrences: Occurrence[]
+  activity: Activity | null
+  loading?: boolean
+}) {
+  const heatmap = useMemo(() => buildHeatmap(loading ? [] : occurrences), [occurrences, loading])
+  const color = activity?.category?.color ?? 'var(--color-primary)'
 
   return (
-    <div className="flex flex-col items-center gap-1.5">
-      <div className={`flex flex-col gap-1 ${loading ? 'animate-pulse' : ''}`}>
-        <div className="flex gap-1">
-          {weekdays.map((label) => (
-            <span key={label} className="w-7 text-center text-[10px] leading-none text-muted-foreground">
-              {label}
-            </span>
-          ))}
-        </div>
-        {weeks.map((week, w) => (
-          <div key={w} className="flex gap-1">
-            {week.map((cell, d) => (
-              <span
-                key={d}
-                title={cell.title}
-                className={`h-7 w-7 rounded-[4px] ${cellCls(cell.kind)}`}
-              />
-            ))}
-          </div>
-        ))}
+    <div className={loading ? 'animate-pulse' : undefined}>
+      <div className="sm:hidden">
+        <OccurrenceHeatmap heatmap={heatmap} color={color} weeks={HEATMAP_WEEKS_NARROW} showWeekdays />
       </div>
-      <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-        <span className="flex items-center gap-1"><span className={`h-2.5 w-2.5 rounded-[3px] ${cellCls('done')}`} /> done</span>
-        <span className="flex items-center gap-1"><span className={`h-2.5 w-2.5 rounded-[3px] ${cellCls('skipped')}`} /> skipped</span>
-        <span className="flex items-center gap-1"><span className={`h-2.5 w-2.5 rounded-[3px] ${cellCls('pending')}`} /> pending</span>
-        <span>last {STRIP_WEEKS} weeks</span>
+      <div className="hidden sm:block">
+        <OccurrenceHeatmap heatmap={heatmap} color={color} weeks={HEATMAP_WEEKS_WIDE} showWeekdays />
       </div>
     </div>
   )
 }
 
-type CellKind = 'empty' | 'outside' | 'done' | 'skipped' | 'pending'
-
-function cellCls(kind: CellKind): string {
-  if (kind === 'done') return 'bg-primary'
-  if (kind === 'skipped') return 'bg-muted-foreground/60'
-  if (kind === 'pending') return 'border border-primary/50 bg-primary/10'
-  if (kind === 'outside') return 'bg-transparent'
-  return 'bg-muted'
-}
-
-interface Cell {
-  kind: CellKind
-  title: string
-}
-
 /**
- * The strip laid out as week rows of seven weekday columns, ending on the week that holds today. A
- * day with more than one occurrence takes the strongest of them: done beats skipped beats pending,
- * since the strip answers "did it happen".
+ * Per-day counts over the widest window either layout draws, ending today. Unlike the goal payload
+ * this keeps `pending` as its own count: an activity's grid is read alongside its upcoming plans,
+ * and a scheduled day is worth telling apart from an empty one.
  */
-function buildStrip(occurrences: Occurrence[]): { weeks: Cell[][]; weekdays: string[] } {
-  const byDay = new Map<string, CellKind>()
-  const rank: Record<string, number> = { pending: 1, skipped: 2, done: 3 }
-  for (const o of occurrences) {
-    if (!o.startAt) continue
-    const key = dayKey(new Date(o.startAt))
-    const kind = o.status as CellKind
-    const held = byDay.get(key)
-    if (!held || rank[kind] > rank[held]) byDay.set(key, kind)
-  }
-
-  // Weeks start on Monday, so the column a day lands in is the one under its own name.
+function buildHeatmap(occurrences: Occurrence[]): HeatmapWindow {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  const mondayOffset = (today.getDay() + 6) % 7
-  const lastMonday = new Date(today)
-  lastMonday.setDate(lastMonday.getDate() - mondayOffset)
-  const first = new Date(lastMonday)
-  first.setDate(first.getDate() - (STRIP_WEEKS - 1) * 7)
+  const first = addDays(startOfWeek(today), -7 * (HEATMAP_WEEKS_WIDE - 1))
 
-  const weeks: Cell[][] = []
-  for (let w = 0; w < STRIP_WEEKS; w++) {
-    const row: Cell[] = []
-    for (let d = 0; d < 7; d++) {
-      const day = new Date(first)
-      day.setDate(day.getDate() + w * 7 + d)
-      if (day > today) {
-        row.push({ kind: 'outside', title: '' })
-        continue
-      }
-      const kind = byDay.get(dayKey(day)) ?? 'empty'
-      const date = day.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })
-      row.push({ kind, title: kind === 'empty' ? date : `${date}: ${kind}` })
+  const byDay = new Map<string, HeatmapDayCounts>()
+  for (const o of occurrences) {
+    if (!o.startAt) continue
+    const day = new Date(o.startAt)
+    day.setHours(0, 0, 0, 0)
+    if (day < first || day > today) continue
+    const key = keyOf(day)
+    let entry = byDay.get(key)
+    if (!entry) {
+      entry = { date: key, done: 0, skipped: 0, pending: 0 }
+      byDay.set(key, entry)
     }
-    weeks.push(row)
+    if (o.status === 'done') entry.done++
+    else if (o.status === 'skipped') entry.skipped++
+    else entry.pending = (entry.pending ?? 0) + 1
   }
 
-  const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  return { weeks, weekdays }
+  return { start: keyOf(first), end: keyOf(today), days: [...byDay.values()] }
 }
 
 function RecentRow({ occ }: { occ: Occurrence }) {
@@ -344,8 +309,8 @@ function cadenceLabel(summary: Summary): string | null {
  * day's worth of the habit, and counting them separately would report a zero-day cadence.
  */
 function medianGap(doneDatesDesc: Date[]): number | null {
-  const days = [...new Set(doneDatesDesc.map(dayKey))]
-    .map((k) => { const [y, m, d] = k.split('-').map(Number); return new Date(y, m, d).getTime() })
+  const days = [...new Set(doneDatesDesc.map(keyOf))]
+    .map((k) => parseDay(k).getTime())
     .sort((a, b) => a - b)
   if (days.length < 2) return null
   return median(days.slice(1).map((t, i) => Math.round((t - days[i]) / 86400000)))
@@ -414,10 +379,6 @@ function daysBetween(from: Date, to: Date): number {
   const a = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime()
   const b = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime()
   return Math.round((b - a) / 86400000)
-}
-
-function dayKey(d: Date): string {
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
 }
 
 function hhmm(d: Date): string {

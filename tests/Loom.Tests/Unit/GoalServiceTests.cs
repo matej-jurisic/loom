@@ -72,16 +72,17 @@ public class GoalServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ListAsync_heatmap_spans_182_days_back_from_today()
+    public async Task ListAsync_heatmap_spans_280_days_back_from_today()
     {
         var (userId, _, activity) = await SetupOngoingGoalAsync();
         await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.done);
 
-        var goals = await _ctx.GoalService.ListAsync(userId, nowUtc: Now);
+        var heatmap = (await _ctx.GoalService.ListAsync(userId, nowUtc: Now))[0].Heatmap!;
 
-        var heatmap = goals[0].Heatmap!;
         Assert.Equal(new DateOnly(2026, 7, 7), heatmap.End);
-        Assert.Equal(new DateOnly(2026, 7, 7).AddDays(-181), heatmap.Start);
+        Assert.Equal(new DateOnly(2026, 7, 7).AddDays(-279), heatmap.Start);
+        // The widest grid is 39 Monday-first columns; the window has to reach the first of them.
+        Assert.True(heatmap.Start <= new DateOnly(2026, 7, 6).AddDays(-7 * 38));
     }
 
     [Fact]

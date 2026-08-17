@@ -319,7 +319,7 @@ export function CategoriesPage() {
       />
 
       <div className="flex-1 overflow-y-auto px-3 py-4 md:px-6 md:py-6">
-        <div>
+        <div className="mx-auto max-w-2xl">
           {isLoading ? (
             <div className="flex justify-center py-16">
               <span className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />

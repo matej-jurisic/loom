@@ -262,7 +262,7 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 - **Milestone goals** show a progress ring, a weight-proportional composition bar (one segment per
   checkpoint, sized by its weight, filled when reached), and the checkpoints themselves as chips on
   desktop or a checklist on mobile - each toggling reached in place.
-- **Ongoing goals** show a heatmap: one square per day for the last 182 days, across every activity
+- **Ongoing goals** show a heatmap: one square per day for the last 280 days, across every activity
   linked to the goal, shaded by how many occurrences were completed that day, with a faint red for a
   day that only holds skips. Days are bucketed server-side in the user's timezone and day boundary,
   so the client never decides which day something belongs to. Pending occurrences are not on the

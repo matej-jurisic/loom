@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, X, Pencil, Trash2, Clock, CalendarPlus, Copy, MoreHorizontal, Pin, PinOff, Layers } from 'lucide-react'
+import { Check, X, Pencil, Trash2, Clock, CalendarPlus, Copy, History, MoreHorizontal, Pin, PinOff, Layers } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
 import { SkipRescheduleModal } from '@/components/events/SkipRescheduleModal'
+import { ActivityHistoryModal } from '@/components/activities/ActivityHistoryModal'
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Activity, Occurrence, OccurrenceSubtask, EventStatus } from '@/lib/types'
@@ -91,6 +92,7 @@ export function EventDetailModal({ open, onClose, event: occurrence, onEdit, onS
   const qc = useQueryClient()
   const [moreOpen, setMoreOpen] = useState(false)
   const [skipOpen, setSkipOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [menuPos, setMenuPos] = useState<{ bottom: number; right: number }>({ bottom: 0, right: 0 })
   const moreButtonRef = useRef<HTMLButtonElement>(null)
@@ -193,6 +195,14 @@ const statusMutation = useMutation({
       onDone={() => { setSkipOpen(false); onClose() }}
     />
   )
+  // Same swap, but history is read-only, so closing it drops back to the detail panel it was opened from.
+  if (historyOpen) return (
+    <ActivityHistoryModal
+      open={historyOpen}
+      activity={occurrence.activity}
+      onClose={() => setHistoryOpen(false)}
+    />
+  )
   const busy = statusMutation.isPending || deleteMutation.isPending || planMutation.isPending || floatMutation.isPending
   const timeLabel = formatOccurrenceTime(occurrence)
   const category = occurrence.activity.category
@@ -255,6 +265,13 @@ const statusMutation = useMutation({
                   Edit activity
                 </button>
               )}
+              <button
+                onClick={() => { setMoreOpen(false); setHistoryOpen(true) }}
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+              >
+                <History className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2} />
+                History
+              </button>
               {onDuplicate && (
                 <button
                   onClick={() => { setMoreOpen(false); onDuplicate(occurrence) }}

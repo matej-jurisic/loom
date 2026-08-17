@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/layout/PageHeader'
 import { goalsApi, checkpointsApi, ApiError } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Goal, GoalStatus, Checkpoint, CheckpointSize } from '@/lib/types'
-import { OccurrenceHeatmap } from '@/components/goals/OccurrenceHeatmap'
+import { OccurrenceHeatmap } from '@/components/events/OccurrenceHeatmap'
 import { GoalModal } from '@/components/goals/GoalModal'
 import { CheckpointModal } from '@/components/goals/CheckpointModal'
 import { ActionMenu, type ActionMenuEntry } from '@/components/ui/ActionMenu'
@@ -325,12 +325,14 @@ function GoalCard({ goal, onView, onEdit, onAddCheckpoint, onEditCheckpoint }: G
             <CheckpointBreakdown goal={goal} tierColor={tierColor} onEditCheckpoint={(cp) => onEditCheckpoint(goal.id, cp)} />
           ) : (
             <>
-              {/* Same window either way; the narrow layout just draws the recent end of it. */}
+              {/* Same window either way; the narrow layout just draws the recent end of it. Both
+                  counts are chosen so the grid fills the card at a ~14px square - each is two columns
+                  short of what it would be without the weekday labels, which cost ~28px of width. */}
               <div className="sm:hidden">
-                <OccurrenceHeatmap heatmap={goal.heatmap!} color={tierColor} weeks={13} />
+                <OccurrenceHeatmap heatmap={goal.heatmap!} color={tierColor} weeks={15} showWeekdays />
               </div>
               <div className="hidden sm:block">
-                <OccurrenceHeatmap heatmap={goal.heatmap!} color={tierColor} weeks={26} />
+                <OccurrenceHeatmap heatmap={goal.heatmap!} color={tierColor} weeks={37} showWeekdays />
               </div>
             </>
           )}
