@@ -78,6 +78,10 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   filled only by `ActivityService.ListAsync`, which orders the new-occurrence modal's picker), `OccurrenceDto` (has
   `EffectiveTitle = title ?? activity.title`, `IsPlanned`, `DurationMinutes`),
   `CategoryDto`/`CategorySummaryDto`, `CheckpointDto` (has `Size` enum — not numeric progress).
+  `GoalHeatmap`/`GoalHeatmapDay` are shared by a single goal's `GoalDto.Heatmap` (ongoing goals only,
+  built by `GoalService.GetOngoingProgressAsync`) and `GoalService.GetAggregateHeatmapAsync` (every
+  goal-linked activity summed together, any kind or status, behind `GET /api/goals/heatmap` — the
+  Daily Plan's "Goal activity" strip).
 - `Services/*Service.cs` — ctor-inject `LoomDbContext`; return `Result`/`Result<T>`. Registered in `AddLoomCore`.
 - `Services/InsightsService.cs` — totals over completed occurrences only. **Never add a stat whose
   denominator is the length of a day**; see the boundary above.
@@ -135,13 +139,18 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   skip-and-create path. Nothing is written until the user picks, so a cancelled drop just snaps back.
 - `components/goals/OccurrenceBar.tsx` — done/skipped/pending counts bar for ongoing goals; data from
   `GoalDto.OccurrenceStats`. Used by the Plan page's goal chip; the Goals page uses the heatmap instead.
-- `components/goals/OccurrenceHeatmap.tsx` — GitHub-style day grid for ongoing goals on the Goals page,
-  from `GoalDto.Heatmap` (a 280-day window of per-day done/skipped counts, days with nothing omitted).
-  The server sends `start`/`end` as day-boundary days, so the client never decides what "today" is; it
-  only lays out Monday-first columns and picks the fill. The grid has no max width: cell size falls out
-  of `weeks`, so the page renders it twice (17 on mobile, 39 from `sm:`) with counts picked to fill the
-  card at a ~14px square. Both draw a suffix of the same payload, and `HeatmapDays` must stay ≥ the
-  widest column count plus its part-week.
+- `components/events/OccurrenceHeatmap.tsx` — GitHub-style day grid, generic over any `HeatmapWindow`
+  (a 280-day window of per-day done/skipped counts, days with nothing omitted; `GoalHeatmap` is
+  assignable to it, and the activity history modal builds the same shape client-side with a `pending`
+  field goals don't use). The server sends `start`/`end` as day-boundary days, so the client never
+  decides what "today" is; it only lays out Monday-first columns and picks the fill. The grid has no
+  max width: cell size falls out of `weeks`, so each caller renders it twice (15 weeks on mobile, 37
+  from `sm:`, except the narrower activity history modal) with counts picked to fill its container at
+  a ~14px square. Both draw a suffix of the same payload, and the payload's day count must stay ≥ the
+  widest column count plus its part-week. Consumers: `GoalsPreviewPage` (one grid per ongoing goal,
+  tier-coloured), `PlanPreviewPage`'s "Goal activity" section (`goalsApi.heatmap()`, one grid summed
+  across every goal-linked activity, `--color-primary`), `ActivityHistoryModal` (per-activity, category-
+  coloured, adds `pending`).
 - `components/layout/useUncategorizedCount.ts` — nav badge hook (shares `['events', 'all']` cache with CategoriesPage;
   predicate in `lib/categories.ts`). Currently unreferenced: neither nav renders a badge.
 - `components/layout/Sidebar.tsx` — desktop nav: five page items, then the category list (`Active` =

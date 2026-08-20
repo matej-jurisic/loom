@@ -140,4 +140,72 @@ public class GoalServiceTests : IDisposable
         Assert.Null(goals[0].Heatmap);
         Assert.Null(goals[0].OccurrenceStats);
     }
+
+    // ── GetAggregateHeatmapAsync ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetAggregateHeatmapAsync_combines_occurrences_across_every_goal()
+    {
+        var (userId, _, activity) = await SetupOngoingGoalAsync();
+        var milestoneGoal = new Goal { UserId = userId, Title = "Ship it", Kind = GoalKind.milestone };
+        var milestoneActivity = new Activity { UserId = userId, Title = "Draft", GoalId = milestoneGoal.Id };
+        _ctx.Db.Goals.Add(milestoneGoal);
+        _ctx.Db.Activities.Add(milestoneActivity);
+        await _ctx.Db.SaveChangesAsync();
+
+        await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.done);
+        await AddOccurrenceAsync(userId, milestoneActivity, At(7, 6, 18), EventStatus.done);
+        await AddOccurrenceAsync(userId, milestoneActivity, At(7, 5, 9), EventStatus.skipped);
+
+        var heatmap = await _ctx.GoalService.GetAggregateHeatmapAsync(userId, Now);
+
+        Assert.Equal(2, heatmap.Days.Count);
+        Assert.Equal(new DateOnly(2026, 7, 5), heatmap.Days[0].Date);
+        Assert.Equal((0, 1), (heatmap.Days[0].Done, heatmap.Days[0].Skipped));
+        Assert.Equal(new DateOnly(2026, 7, 6), heatmap.Days[1].Date);
+        // A milestone goal's session counts too - the aggregate reads "toward any goal", not "ongoing only".
+        Assert.Equal((2, 0), (heatmap.Days[1].Done, heatmap.Days[1].Skipped));
+    }
+
+    [Fact]
+    public async Task GetAggregateHeatmapAsync_excludes_pending_and_floating_occurrences()
+    {
+        var (userId, _, activity) = await SetupOngoingGoalAsync();
+        await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.pending);
+        await AddOccurrenceAsync(userId, activity, startAt: null, status: EventStatus.done);
+
+        var heatmap = await _ctx.GoalService.GetAggregateHeatmapAsync(userId, Now);
+
+        Assert.Empty(heatmap.Days);
+    }
+
+    [Fact]
+    public async Task GetAggregateHeatmapAsync_ignores_occurrences_on_activities_with_no_goal()
+    {
+        var user = new User { Username = "u" + Guid.NewGuid().ToString("N")[..8], PasswordHash = "x", Timezone = "UTC" };
+        var activity = new Activity { UserId = user.Id, Title = "Chores" }; // no GoalId
+        _ctx.Db.Users.Add(user);
+        _ctx.Db.Activities.Add(activity);
+        await _ctx.Db.SaveChangesAsync();
+        await AddOccurrenceAsync(user.Id, activity, At(7, 6, 9), EventStatus.done);
+
+        var heatmap = await _ctx.GoalService.GetAggregateHeatmapAsync(user.Id, Now);
+
+        Assert.Empty(heatmap.Days);
+        Assert.Equal(new DateOnly(2026, 7, 7), heatmap.End);
+    }
+
+    [Fact]
+    public async Task GetAggregateHeatmapAsync_returns_empty_window_when_no_goal_linked_activities()
+    {
+        var user = new User { Username = "u" + Guid.NewGuid().ToString("N")[..8], PasswordHash = "x", Timezone = "UTC" };
+        _ctx.Db.Users.Add(user);
+        await _ctx.Db.SaveChangesAsync();
+
+        var heatmap = await _ctx.GoalService.GetAggregateHeatmapAsync(user.Id, Now);
+
+        Assert.Empty(heatmap.Days);
+        Assert.Equal(new DateOnly(2026, 7, 7), heatmap.End);
+        Assert.Equal(new DateOnly(2026, 7, 7).AddDays(-279), heatmap.Start);
+    }
 }

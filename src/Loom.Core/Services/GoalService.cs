@@ -180,6 +180,48 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
                        : [])));
     }
 
+    /// <summary>
+    /// One combined heatmap across every activity linked to any goal, regardless of the goal's kind
+    /// or status - "did I do something toward a goal today", not "did I do something toward this
+    /// goal". Same 280-day window and day-bucketing as <see cref="GetOngoingProgressAsync"/>, just not
+    /// split per goal. Used by the Daily Plan page rather than the goal cards.
+    /// </summary>
+    public async Task<GoalHeatmap> GetAggregateHeatmapAsync(Guid userId, DateTimeOffset nowUtc)
+    {
+        var ctx = await settingsService.GetDayContextAsync(userId);
+        var today = DayMath.Today(ctx, nowUtc);
+        var windowStart = today.AddDays(-(HeatmapDays - 1));
+
+        var activityIds = await db.Activities
+            .Where(a => a.UserId == userId && a.GoalId != null)
+            .Select(a => a.Id)
+            .ToListAsync();
+        if (activityIds.Count == 0) return new GoalHeatmap(windowStart, today, []);
+
+        // Pending occurrences never land on the grid, so filtering them out here (rather than after
+        // the fetch, like GetOngoingProgressAsync does) keeps the row set down to what's settled.
+        var rows = await db.Occurrences
+            .AsNoTracking()
+            .Where(o => activityIds.Contains(o.ActivityId) && o.Status != EventStatus.pending)
+            .Select(o => new { o.Status, o.StartAt })
+            .ToListAsync();
+
+        var byDay = new Dictionary<DateOnly, (int Done, int Skipped)>();
+        foreach (var row in rows)
+        {
+            if (row.StartAt is null) continue;
+            var day = DayMath.DayOf(row.StartAt.Value, ctx);
+            if (day < windowStart || day > today) continue;
+
+            byDay.TryAdd(day, (0, 0));
+            var d = byDay[day];
+            byDay[day] = row.Status == EventStatus.done ? d with { Done = d.Done + 1 } : d with { Skipped = d.Skipped + 1 };
+        }
+
+        return new GoalHeatmap(windowStart, today,
+            byDay.OrderBy(d => d.Key).Select(d => new GoalHeatmapDay(d.Key, d.Value.Done, d.Value.Skipped)).ToList());
+    }
+
     public async Task<Result<GoalDto>> UpdateAsync(Guid id, Guid userId, UpdateGoalRequest req)
     {
         var err = Validators.ValidateTitle(req.Title, "Title");

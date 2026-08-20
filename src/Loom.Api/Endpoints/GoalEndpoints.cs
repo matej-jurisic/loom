@@ -32,6 +32,15 @@ public static class GoalEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToProblem();
         });
 
+        // Combined across every goal - the Daily Plan's "goal work" heatmap, not one goal card's.
+        group.MapGet("/heatmap", async (ClaimsPrincipal principal, GoalService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var heatmap = await svc.GetAggregateHeatmapAsync(userId.Value, DateTimeOffset.UtcNow);
+            return Results.Ok(heatmap);
+        });
+
         group.MapPost("/", async (CreateGoalRequest req, ClaimsPrincipal principal, GoalService svc) =>
         {
             var userId = principal.GetUserId();

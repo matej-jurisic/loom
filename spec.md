@@ -311,6 +311,10 @@ because those rate how much of a day was executed, which is the planner reading 
 
 - **Focus goals** — one chip per focus goal at the top of the page: title, last-session recency, and
   either its milestone percentage or its ongoing occurrence bar. Goals lead the day, not metrics.
+- **Goal activity** — a heatmap below the focus chips, same shape and shading as an ongoing goal's
+  own grid, but summed across every occurrence on an activity linked to *any* goal, regardless of
+  that goal's kind or status: "did I work toward something today", not one goal's own record. Hidden
+  when nothing has ever been logged toward a goal.
 - **Unfinished** — on today's view only, every pending occurrence whose date has passed, regardless
   of the day it was scheduled for, with its date, above the agenda and not in it. Wider than the
   overdue rule: planned occurrences are never *overdue*, but a planned one whose date is behind you

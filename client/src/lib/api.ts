@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/store/auth'
 import { getServerUrl, isNative, getNativeRefreshToken, setNativeRefreshToken } from './server-config'
-import type { AuthResponse, User, Goal, GoalStatus, GoalKind, Checkpoint, CheckpointStatus, UserSettings, Category, Activity, ActivitySubtask, Occurrence, Insights } from './types'
+import type { AuthResponse, User, Goal, GoalStatus, GoalKind, GoalHeatmap, Checkpoint, CheckpointStatus, UserSettings, Category, Activity, ActivitySubtask, Occurrence, Insights } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -170,6 +170,9 @@ export const goalsApi = {
 
   setStatus: (id: string, status: GoalStatus) =>
     request<Goal>(`/api/goals/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+
+  // Combined heatmap across every goal-linked activity, regardless of goal kind or status.
+  heatmap: () => request<GoalHeatmap>('/api/goals/heatmap'),
 }
 
 export const checkpointsApi = {

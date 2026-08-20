@@ -5,6 +5,7 @@ import { occurrencesApi, goalsApi, settingsApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Checkpoint, CheckpointSize, Occurrence, Goal } from '@/lib/types'
 import { OccurrenceBar } from '@/components/goals/OccurrenceBar'
+import { OccurrenceHeatmap } from '@/components/events/OccurrenceHeatmap'
 import { EventModal } from '@/components/events/EventModal'
 import { OccurrenceListRow } from '@/components/events/OccurrenceListRow'
 
@@ -272,6 +273,10 @@ export function PlanPreviewPage() {
 
   const { data: focusGoals = [] } = useQuery({ queryKey: ['goals', { status: 'focus' }], queryFn: () => goalsApi.list({ status: 'focus' }) })
 
+  // Combined across every goal-linked activity, regardless of goal kind or status - "did I do
+  // something toward a goal today", not any one goal's own card.
+  const { data: goalHeatmap } = useQuery({ queryKey: ['goals', 'heatmap'], queryFn: goalsApi.heatmap })
+
   // Anything pending that is already behind you. Wider than isOverdue on purpose: a
   // planned occurrence is never overdue by design (DayMath.IsOverdue returns early on
   // IsPlanned), but one whose date has passed still has to be seen, or it is only ever
@@ -430,6 +435,21 @@ export function PlanPreviewPage() {
                 {focusGoals.length > 0 && (
                   <section className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-2">
                     {focusGoals.map((g) => <GoalHealthChip key={g.id} goal={g} />)}
+                  </section>
+                )}
+
+                {/* Same shape as a goal card's heatmap, but summed across every goal-linked activity -
+                    a habit strip for "worked toward something", not any one goal's own progress. Goals
+                    with no linked occurrence anywhere show no grid rather than an empty one. */}
+                {goalHeatmap && goalHeatmap.days.length > 0 && (
+                  <section className="mb-6 rounded-lg border border-border p-4">
+                    <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Goal activity</h2>
+                    <div className="sm:hidden">
+                      <OccurrenceHeatmap heatmap={goalHeatmap} color="var(--color-primary)" weeks={15} showWeekdays />
+                    </div>
+                    <div className="hidden sm:block">
+                      <OccurrenceHeatmap heatmap={goalHeatmap} color="var(--color-primary)" weeks={37} showWeekdays />
+                    </div>
                   </section>
                 )}
 
