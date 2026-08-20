@@ -153,8 +153,10 @@ drawn as a solid calendar block.
 
 **Planned** — `IsPlanned = true`. `StartAt`/`EndAt` act as window bounds when both are present;
 `EndAt` alone is a soft due date; `IsAllDay` marks a flexible all-day task. Drawn as a dashed,
-diagonally striped block spanning the window, grouped under "Planned" in list views, and never
-overdue - the flag says the time is flexible, not that a commitment is missing.
+diagonally striped block spanning the window and never overdue - the flag says the time is flexible,
+not that a commitment is missing. List views group it under "Planned", except the Daily Plan's
+agenda, which keeps a planned occurrence with a start time on the day's timeline where its hour puts
+it and reserves its Planned section for the ones with no hour at all.
 
 **Floating** — no start, no end, not all-day. This is the "keep it somewhere" state, and the reason
 the app can hold an intention without turning it into an appointment. `IsPlanned` splits where it
@@ -309,24 +311,32 @@ lit.
 One day, read as a list. There is no score for the day: no completion ring and no done/left counts,
 because those rate how much of a day was executed, which is the planner reading this app is not for.
 
-- **Focus goals** — one chip per focus goal at the top of the page: title, last-session recency, and
-  either its milestone percentage or its ongoing occurrence bar. Goals lead the day, not metrics.
-- **Goal activity** — a heatmap below the focus chips, same shape and shading as an ongoing goal's
-  own grid, but summed across every occurrence on an activity linked to *any* goal, regardless of
-  that goal's kind or status: "did I work toward something today", not one goal's own record. Only
-  completed occurrences count here - a skipped one isn't progress, so it puts no day on this grid
-  even though it would on a single goal's own heatmap. Hidden when nothing has ever been logged
-  toward a goal.
+The page opens on the day's own lists - Unfinished, the agenda, Planned, Floating - and closes with
+the goal sections, which are standing context rather than something to clear before starting.
+
 - **Unfinished** — on today's view only, every pending occurrence whose date has passed, regardless
   of the day it was scheduled for, with its date, above the agenda and not in it. Wider than the
   overdue rule: planned occurrences are never *overdue*, but a planned one whose date is behind you
   is listed here too, since not being late is no reason to disappear. Undated (floating) occurrences
   are not included - they have no date to be behind. One button moves the whole set to tomorrow,
   preserving each clock time and each occurrence's planned / all-day flags.
-- **Timeline agenda** — the day's timed occurrences as a spine with a time gutter, split by a live
-  **now** marker into past and upcoming, with relative labels ("now", "in 40m") on today. Rows carry
-  a one-tap done checkbox, a skip action, and an action menu.
-- **Planned** and **Floating** sections below the agenda.
+- **Timeline agenda** — every dated occurrence on the day as a spine with a time gutter, split by a
+  live **now** marker into past and upcoming, with relative labels ("now", "in 40m") on today. Rows
+  carry a one-tap done checkbox, a skip action, and an action menu. A planned occurrence with a start
+  time belongs here too, not in the Planned section: it is a commitment on this day like any other,
+  and the row says which it is with a `~` on the gutter time and a hollow spine dot - the list-view
+  echo of the calendar's dashed block.
+- **Planned** — the planned occurrences with no hour to place them at: all-day ones, and windows
+  whose start was never set. Below the agenda.
+- **Floating** — unplanned occurrences with no date at all, on every day. Below Planned.
+- **Focus goals** — one chip per focus goal: title, last-session recency, and either its milestone
+  percentage or its ongoing occurrence bar.
+- **Goal activity** — a heatmap below the focus chips, same shape and shading as an ongoing goal's
+  own grid, but summed across every occurrence on an activity linked to *any* goal, regardless of
+  that goal's kind or status: "did I work toward something today", not one goal's own record. Only
+  completed occurrences count here - a skipped one isn't progress, so it puts no day on this grid
+  even though it would on a single goal's own heatmap. Hidden when nothing has ever been logged
+  toward a goal.
 - Day navigation (prev / next / today / date picker) using the same boundary semantics as the
   calendar.
 

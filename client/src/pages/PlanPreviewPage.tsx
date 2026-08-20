@@ -176,7 +176,11 @@ function TimelineRow({
   showDate?: boolean
 }) {
   const rel = isToday ? relativeLabel(event, now) : { text: '', tone: 'none' as const }
-  const gutter = event.startAt && !event.isAllDay ? formatTime(event.startAt) : event.isAllDay ? 'All day' : '—'
+  const clock = event.startAt && !event.isAllDay ? formatTime(event.startAt) : event.isAllDay ? 'All day' : '—'
+  // Planned occurrences share the timeline with scheduled ones now, so the row itself has to
+  // say which it is: "~" on the time and a hollow spine dot, the list-view echo of the
+  // calendar's dashed block. Its time is a window it sits inside, not an appointment.
+  const gutter = event.isPlanned && event.startAt ? `~${clock}` : clock
   // `contents` so these three divs become cells of the parent timeline grid,
   // sharing one content-sized time column across every row.
   return (
@@ -199,7 +203,13 @@ function TimelineRow({
         <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border" />
         <span
           className={`relative mt-4 h-2 w-2 rounded-full ring-4 ring-background ${
-            rel.tone === 'now' ? 'bg-primary' : event.status === 'done' ? 'bg-primary/40' : 'bg-border'
+            event.isPlanned && event.status === 'pending'
+              ? 'border-2 bg-background'
+              : rel.tone === 'now'
+                ? 'bg-primary'
+                : event.status === 'done'
+                  ? 'bg-primary/40'
+                  : 'bg-border'
           }`}
         />
       </div>
@@ -297,15 +307,21 @@ export function PlanPreviewPage() {
     [allOccurrences, isToday, isBehind],
   )
 
+  // A planned occurrence that already has a time is a commitment on this day like any other, so
+  // it belongs on the timeline - its dashed row styling is what says the time is a window. The
+  // Planned section holds only the ones with no hour to place them at: planned all-day, or a
+  // planned window whose start was never set.
+  const isPlannedHold = useCallback((o: Occurrence) => o.isPlanned && (o.isAllDay || o.startAt === null), [])
+
   const timedEvents = useMemo(
     () =>
       occurrences
-        .filter((o) => o.startAt !== null && !o.isPlanned && !(isToday && isBehind(o)))
+        .filter((o) => o.startAt !== null && !isPlannedHold(o) && !(isToday && isBehind(o)))
         .sort((a, b) => refTime(a) - refTime(b)),
-    [occurrences, isToday, isBehind],
+    [occurrences, isToday, isBehind, isPlannedHold],
   )
 
-  const plannedEvents = useMemo(() => occurrences.filter((o) => o.isPlanned), [occurrences])
+  const plannedEvents = useMemo(() => occurrences.filter(isPlannedHold), [occurrences, isPlannedHold])
 
   const { data: allFloating = [] } = useQuery({
     queryKey: ['events', 'floating'],
@@ -428,32 +444,7 @@ export function PlanPreviewPage() {
                 <span className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
               </div>
             ) : (
-              <>
-                {/* Focus goals lead the day. The completion ring and done/left counts that used to
-                    sit above them scored the day rather than the goals, which is the planner reading
-                    this app is no longer for. */}
-                {focusGoals.length > 0 && (
-                  <section className="mb-6 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {focusGoals.map((g) => <GoalHealthChip key={g.id} goal={g} />)}
-                  </section>
-                )}
-
-                {/* Same shape as a goal card's heatmap, but summed across every goal-linked activity -
-                    a habit strip for "worked toward something", not any one goal's own progress. Goals
-                    with no linked occurrence anywhere show no grid rather than an empty one. */}
-                {goalHeatmap && goalHeatmap.days.length > 0 && (
-                  <section className="mb-6 rounded-lg border border-border p-4">
-                    <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Goal activity</h2>
-                    <div className="sm:hidden">
-                      <OccurrenceHeatmap heatmap={goalHeatmap} color="var(--color-primary)" weeks={15} showWeekdays />
-                    </div>
-                    <div className="hidden sm:block">
-                      <OccurrenceHeatmap heatmap={goalHeatmap} color="var(--color-primary)" weeks={37} showWeekdays />
-                    </div>
-                  </section>
-                )}
-
-                <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-6">
                 {/* Wrap-up / sweep */}
                 {overdueEvents.length > 0 && (
                   <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-4">
@@ -546,8 +537,35 @@ export function PlanPreviewPage() {
                     </div>
                   </section>
                 )}
+
+                {/* Goals close the page rather than open it: the day's own lists are what you came
+                    for, and these two read as standing context you scroll down to, not a score to
+                    clear before getting to work. */}
+                {(focusGoals.length > 0 || (goalHeatmap && goalHeatmap.days.length > 0)) && (
+                  <div className="mt-2 flex flex-col gap-6 border-t border-border pt-6">
+                    {focusGoals.length > 0 && (
+                      <section className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {focusGoals.map((g) => <GoalHealthChip key={g.id} goal={g} />)}
+                      </section>
+                    )}
+
+                    {/* Same shape as a goal card's heatmap, but summed across every goal-linked activity -
+                        a habit strip for "worked toward something", not any one goal's own progress. Goals
+                        with no linked occurrence anywhere show no grid rather than an empty one. */}
+                    {goalHeatmap && goalHeatmap.days.length > 0 && (
+                      <section className="rounded-lg border border-border p-4">
+                        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Goal activity</h2>
+                        <div className="sm:hidden">
+                          <OccurrenceHeatmap heatmap={goalHeatmap} color="var(--color-primary)" weeks={15} showWeekdays />
+                        </div>
+                        <div className="hidden sm:block">
+                          <OccurrenceHeatmap heatmap={goalHeatmap} color="var(--color-primary)" weeks={37} showWeekdays />
+                        </div>
+                      </section>
+                    )}
+                  </div>
+                )}
               </div>
-              </>
             )}
           </div>
         </div>
