@@ -183,8 +183,10 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
     /// <summary>
     /// One combined heatmap across every activity linked to any goal, regardless of the goal's kind
     /// or status - "did I do something toward a goal today", not "did I do something toward this
-    /// goal". Same 280-day window and day-bucketing as <see cref="GetOngoingProgressAsync"/>, just not
-    /// split per goal. Used by the Daily Plan page rather than the goal cards.
+    /// goal". Only <c>done</c> occurrences count: a skipped one isn't progress toward a goal, so unlike
+    /// <see cref="GetOngoingProgressAsync"/>'s per-goal grid it never puts a day on this one. Same
+    /// 280-day window and day-bucketing otherwise, just not split per goal. Used by the Daily Plan page
+    /// rather than the goal cards.
     /// </summary>
     public async Task<GoalHeatmap> GetAggregateHeatmapAsync(Guid userId, DateTimeOffset nowUtc)
     {
@@ -198,24 +200,24 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
             .ToListAsync();
         if (activityIds.Count == 0) return new GoalHeatmap(windowStart, today, []);
 
-        // Pending occurrences never land on the grid, so filtering them out here (rather than after
-        // the fetch, like GetOngoingProgressAsync does) keeps the row set down to what's settled.
+        // Only done occurrences land on the grid - skipped ones aren't progress toward a goal, and
+        // pending ones aren't settled yet.
         var rows = await db.Occurrences
             .AsNoTracking()
-            .Where(o => activityIds.Contains(o.ActivityId) && o.Status != EventStatus.pending)
-            .Select(o => new { o.Status, o.StartAt })
+            .Where(o => activityIds.Contains(o.ActivityId) && o.Status == EventStatus.done)
+            .Select(o => o.StartAt)
             .ToListAsync();
 
         var byDay = new Dictionary<DateOnly, (int Done, int Skipped)>();
-        foreach (var row in rows)
+        foreach (var startAt in rows)
         {
-            if (row.StartAt is null) continue;
-            var day = DayMath.DayOf(row.StartAt.Value, ctx);
+            if (startAt is null) continue;
+            var day = DayMath.DayOf(startAt.Value, ctx);
             if (day < windowStart || day > today) continue;
 
             byDay.TryAdd(day, (0, 0));
             var d = byDay[day];
-            byDay[day] = row.Status == EventStatus.done ? d with { Done = d.Done + 1 } : d with { Skipped = d.Skipped + 1 };
+            byDay[day] = d with { Done = d.Done + 1 };
         }
 
         return new GoalHeatmap(windowStart, today,

@@ -159,19 +159,19 @@ public class GoalServiceTests : IDisposable
 
         var heatmap = await _ctx.GoalService.GetAggregateHeatmapAsync(userId, Now);
 
-        Assert.Equal(2, heatmap.Days.Count);
-        Assert.Equal(new DateOnly(2026, 7, 5), heatmap.Days[0].Date);
-        Assert.Equal((0, 1), (heatmap.Days[0].Done, heatmap.Days[0].Skipped));
-        Assert.Equal(new DateOnly(2026, 7, 6), heatmap.Days[1].Date);
+        // Skipped occurrences aren't progress toward a goal, so they don't put a day on the grid at all.
+        Assert.Single(heatmap.Days);
+        Assert.Equal(new DateOnly(2026, 7, 6), heatmap.Days[0].Date);
         // A milestone goal's session counts too - the aggregate reads "toward any goal", not "ongoing only".
-        Assert.Equal((2, 0), (heatmap.Days[1].Done, heatmap.Days[1].Skipped));
+        Assert.Equal((2, 0), (heatmap.Days[0].Done, heatmap.Days[0].Skipped));
     }
 
     [Fact]
-    public async Task GetAggregateHeatmapAsync_excludes_pending_and_floating_occurrences()
+    public async Task GetAggregateHeatmapAsync_excludes_pending_skipped_and_floating_occurrences()
     {
         var (userId, _, activity) = await SetupOngoingGoalAsync();
         await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.pending);
+        await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.skipped);
         await AddOccurrenceAsync(userId, activity, startAt: null, status: EventStatus.done);
 
         var heatmap = await _ctx.GoalService.GetAggregateHeatmapAsync(userId, Now);

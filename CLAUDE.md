@@ -79,9 +79,10 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   `EffectiveTitle = title ?? activity.title`, `IsPlanned`, `DurationMinutes`),
   `CategoryDto`/`CategorySummaryDto`, `CheckpointDto` (has `Size` enum — not numeric progress).
   `GoalHeatmap`/`GoalHeatmapDay` are shared by a single goal's `GoalDto.Heatmap` (ongoing goals only,
-  built by `GoalService.GetOngoingProgressAsync`) and `GoalService.GetAggregateHeatmapAsync` (every
-  goal-linked activity summed together, any kind or status, behind `GET /api/goals/heatmap` — the
-  Daily Plan's "Goal activity" strip).
+  built by `GoalService.GetOngoingProgressAsync`, includes skipped days) and
+  `GoalService.GetAggregateHeatmapAsync` (every goal-linked activity summed together, any kind or
+  status, `done` occurrences only — skipped ones aren't progress and put no day on the grid — behind
+  `GET /api/goals/heatmap`, the Daily Plan's "Goal activity" strip).
 - `Services/*Service.cs` — ctor-inject `LoomDbContext`; return `Result`/`Result<T>`. Registered in `AddLoomCore`.
 - `Services/InsightsService.cs` — totals over completed occurrences only. **Never add a stat whose
   denominator is the length of a day**; see the boundary above.
