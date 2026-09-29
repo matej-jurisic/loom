@@ -55,10 +55,21 @@ password of at least 8.
   at its replacement). Native clients receive the raw token in the body and send it back in an
   `X-Refresh-Token` header, since a WebView origin cannot hold the cookie.
 - The client makes one silent refresh attempt on a 401 and retries the request once.
-- On mount the app calls `/api/auth/refresh` to restore a session; failure routes to `/login`.
+- On mount the app calls `/api/auth/refresh` to restore a session; a denied refresh routes to `/login`.
 - Every route except `/api/auth/*` requires a valid access token. The user id is read from the `sub`
   claim.
 - Registration captures the browser's timezone.
+- **Attempt limit:** login and register share a per-client-IP fixed window (10 attempts per 60 seconds
+  by default, `RateLimit:Auth:*`); beyond it the API answers `429` with `Retry-After`. Refresh is not
+  limited, since every page load calls it.
+- **Startup check:** the API refuses to start unless `Jwt:Secret` is at least 32 bytes, and says so.
+- **Response headers:** every response carries `nosniff`, `X-Frame-Options: DENY`,
+  `Referrer-Policy: no-referrer` and a `Permissions-Policy`; outside Development also a same-origin
+  `Content-Security-Policy`, plus HSTS on HTTPS requests.
+- **Session survives an unreachable server.** At startup the client distinguishes a refresh the server
+  *denied* (go to `/login`) from one that got no answer or a 5xx (stay signed in, show a "Cannot reach the
+  server" screen with retry). A request that finds the server unreachable fails with a readable message and
+  does not clear the session.
 
 ---
 
@@ -75,6 +86,10 @@ the configurable day boundary (`UserSettings.DayBoundaryTime`).
 - **Overdue** is computed server-side and shipped as `isOverdue` on the occurrence DTO. The client
   never recomputes it. Purely presentational date formatting stays client-side.
 - An unknown timezone id resolves to UTC rather than throwing.
+- **Daylight saving:** a day is 23 or 25 hours long on a transition day, and consecutive days always tile
+  time with no gap or overlap. A boundary that a spring-forward transition skips (02:30 on the night the
+  clocks jump 02:00 to 03:00) falls at the first instant that exists, the end of the gap. One that a
+  fall-back repeats falls at its second occurrence.
 
 The implementation is `Loom.Core/Common/DayMath.cs`; every feature that reasons about days goes
 through it, via a `DayContext` from `UserSettingsService.GetDayContextAsync`.

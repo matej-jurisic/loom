@@ -4,8 +4,10 @@ services:
     ports:
       - "8080:8080"
     environment:
-      JWT_SECRET: ${JWT_SECRET}
-      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      Jwt__Secret: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      Auth__RefreshCookie__Secure: ${COOKIE_SECURE:-true}
+      # Set to true only when a reverse proxy in front of the app sets X-Forwarded-For/-Proto.
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: ${BEHIND_PROXY:-false}
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__Default: "Data Source=/data/loom.db"
       Database__MigrateOnStartup: "true"

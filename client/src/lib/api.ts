@@ -11,26 +11,33 @@ export class ApiError extends Error {
   }
 }
 
-let refreshPromise: Promise<boolean> | null = null
+// ok: signed in again. denied: the server rejected the session, so the user must log in.
+// unreachable: no answer (offline, server down, proxy error), so the session may still be good.
+export type RefreshOutcome = 'ok' | 'denied' | 'unreachable'
 
-export async function tryRefresh(): Promise<boolean> {
+const UNREACHABLE_MESSAGE = 'Cannot reach the server. Check your connection.'
+
+let refreshPromise: Promise<RefreshOutcome> | null = null
+
+export async function tryRefresh(): Promise<RefreshOutcome> {
   if (refreshPromise) return refreshPromise
-  refreshPromise = (async () => {
+  refreshPromise = (async (): Promise<RefreshOutcome> => {
     try {
       const headers: Record<string, string> = {}
       if (isNative()) {
         const stored = getNativeRefreshToken()
-        if (!stored) return false
+        if (!stored) return 'denied'
         headers['X-Refresh-Token'] = stored
       }
       const res = await fetch(getServerUrl() + '/api/auth/refresh', { method: 'POST', credentials: 'include', headers })
-      if (!res.ok) return false
+      if (res.status >= 500) return 'unreachable'
+      if (!res.ok) return 'denied'
       const data = (await res.json()) as AuthResponse
       useAuthStore.getState().setAuth(data.accessToken, data.user)
       if (isNative() && data.refreshToken) setNativeRefreshToken(data.refreshToken)
-      return true
+      return 'ok'
     } catch {
-      return false
+      return 'unreachable'
     } finally {
       refreshPromise = null
     }
@@ -44,11 +51,19 @@ export async function request<T>(path: string, init: RequestInit = {}, retry = t
   if (token) headers.set('Authorization', `Bearer ${token}`)
   if (!headers.has('Content-Type') && init.body) headers.set('Content-Type', 'application/json')
 
-  const res = await fetch(getServerUrl() + path, { ...init, headers, credentials: 'include' })
+  let res: Response
+  try {
+    res = await fetch(getServerUrl() + path, { ...init, headers, credentials: 'include' })
+  } catch {
+    // fetch only rejects when no response arrived at all.
+    throw new ApiError(0, UNREACHABLE_MESSAGE)
+  }
 
   if (res.status === 401 && retry) {
-    const ok = await tryRefresh()
-    if (ok) return request<T>(path, init, false)
+    const outcome = await tryRefresh()
+    if (outcome === 'ok') return request<T>(path, init, false)
+    // An unreachable server says nothing about the session, so keep it rather than logging out.
+    if (outcome === 'unreachable') throw new ApiError(0, UNREACHABLE_MESSAGE)
     if (isNative()) setNativeRefreshToken(null)
     useAuthStore.getState().clear()
     throw new ApiError(401, 'Session expired')

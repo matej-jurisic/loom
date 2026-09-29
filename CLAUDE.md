@@ -1,6 +1,7 @@
 # CLAUDE.md
 
 Working guide for the Loom repository.
+- **`README.md`** — setup, Docker deployment, env vars, config keys. Update it when a config key or deploy step changes.
 - **`spec.md`** — product spec: what the app does, domain rules, data model fields.
 - **`design.md`** — visual/UX spec.
 
@@ -96,8 +97,11 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   those queries are limited to null checks (e.g. excluding fully-floating rows).
 
 **Backend (`Loom.Api`)**
-- `Program.cs` — registers core services, JWT + auth policy, SPA fallback. JWT config is read
-  **eagerly** from `builder.Configuration`: `var jwt = builder.Configuration.GetSection(...).Get<JwtOptions>()`.
+- `Program.cs` — registers core services, JWT + auth policy, rate limiter, security-header middleware, SPA
+  fallback. JWT config is read **eagerly** from `builder.Configuration`:
+  `var jwt = builder.Configuration.GetSection(...).Get<JwtOptions>()`, then `jwt.Validate()` throws at
+  startup for a missing or short secret. Login/register carry `.RequireRateLimiting(AuthEndpoints.RateLimitPolicy)`;
+  tests set `RateLimit:Auth:PermitLimit` high in `LoomApiFactory` (override `AuthPermitLimit` to test the limit).
   Both `JwtSecurityTokenHandler.DefaultMapInboundClaims = false` and `options.MapInboundClaims = false`
   must be set — the static property alone is not enough.
 - `Endpoints/*Endpoints.cs` — thin: parse → service → `result.ToProblem()`. Auth required on all routes except `/api/auth/*`.
@@ -152,8 +156,13 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   tier-coloured), `PlanPreviewPage`'s "Goal activity" section (`goalsApi.heatmap()`, one grid summed
   across every goal-linked activity, `--color-primary`), `ActivityHistoryModal` (per-activity, category-
   coloured, adds `pending`).
-- `components/layout/useUncategorizedCount.ts` — nav badge hook (shares `['events', 'all']` cache with CategoriesPage;
-  predicate in `lib/categories.ts`). Currently unreferenced: neither nav renders a badge.
+- `components/ErrorBoundary.tsx` — class boundary with `resetKey` (cleared on navigation) and a
+  `fullScreen` mode. One wraps the routes inside `AppShell` (nav stays usable), one wraps the app in `main.tsx`.
+- `components/layout/OfflineBanner.tsx` + `lib/useOnline.ts` — banner driven by `navigator.onLine`.
+  `components/ConnectionLost.tsx` — the startup screen for an unreachable server.
+- `lib/api.ts` — ⚠️ `tryRefresh()` returns `'ok' | 'denied' | 'unreachable'`, **not a boolean**. Only `denied`
+  may sign the user out; `unreachable` (no response, or 5xx) must keep the session. `request` turns a
+  network failure into `ApiError(0, ...)`.
 - `components/layout/Sidebar.tsx` — desktop nav: five page items, then the category list (`Active` =
   `/categories?all=true`, `No category`, one per category with inline add/edit/delete), Settings pinned at the bottom.
 - `components/layout/BottomNav.tsx` — mobile nav: 4 tabs (Plan, Activities, Calendar, Goals) + "More"
@@ -283,9 +292,17 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - **`dotnet ef database update` does not touch the app's database.** `LoomDbContextFactory` points
   design-time tooling at `loom-design.db`; `src/Loom.Api/loom.db` is migrated by the API on
   startup (`Database:MigrateOnStartup`), so restart the API to apply a new migration to dev data.
-- **`Jwt:Secret` ≥32 bytes** (`JWT_SECRET` in `.env`); empty in `appsettings.json` by design.
+- **`Jwt:Secret` ≥32 bytes** (`JWT_SECRET` in `.env`); empty in `appsettings.json` by design, and the API
+  refuses to start without it. `docker-compose.yml` maps `JWT_SECRET`/`COOKIE_SECURE` onto the real config keys
+  `Jwt__Secret` / `Auth__RefreshCookie__Secure` - a bare `JWT_SECRET` env var is never read by the app.
 - **`COOKIE_SECURE`** must be `false` for plain-HTTP local dev; `true` in production.
+- **Behind a reverse proxy set `BEHIND_PROXY=true`** (`ASPNETCORE_FORWARDEDHEADERS_ENABLED`), otherwise the
+  auth rate limit sees every client as the proxy's IP. Leave it off when the port is exposed directly:
+  forwarded headers are then client-controlled and would let anyone dodge the limit.
 - **Dev port:** `dotnet run` uses `launchSettings.json` (port 5200). Published DLL: set `ASPNETCORE_URLS`.
+- **`DayMath` is DST-tested** (`Unit/DayMathTests.cs` sweeps Zagreb and New York across every 2026 transition,
+  including a boundary inside the gap). Keep `StartOfDay`/`EndOfDay` going through `LocalToInstant`; using
+  `GetUtcOffset` directly on a skipped wall-clock time puts the boundary late and `DayOf` then disagrees.
 - **Tests:** in-memory SQLite, kept-open connection, `EnsureCreated()` (not Migrate) in factory. Isolated DB per integration test class.
 
 ## Git

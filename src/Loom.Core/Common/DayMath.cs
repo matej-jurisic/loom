@@ -41,17 +41,23 @@ public static class DayMath
     public static DateOnly Today(DayContext ctx, DateTimeOffset nowUtc) => DayOf(nowUtc, ctx);
 
     /// <summary>The instant at which the given day starts: the boundary time on that date.</summary>
-    public static DateTimeOffset StartOfDay(DateOnly day, DayContext ctx)
-    {
-        var local = day.ToDateTime(ctx.DayBoundary);
-        return new DateTimeOffset(local, ctx.TimeZone.GetUtcOffset(local));
-    }
+    public static DateTimeOffset StartOfDay(DateOnly day, DayContext ctx) =>
+        LocalToInstant(day.ToDateTime(ctx.DayBoundary), ctx.TimeZone);
 
     /// <summary>The instant at which the given day ends: the boundary time on the following date.</summary>
-    public static DateTimeOffset EndOfDay(DateOnly day, DayContext ctx)
+    public static DateTimeOffset EndOfDay(DateOnly day, DayContext ctx) =>
+        LocalToInstant(day.AddDays(1).ToDateTime(ctx.DayBoundary), ctx.TimeZone);
+
+    /// <summary>
+    /// A wall-clock time that a spring-forward transition skips never happens, so the boundary is the
+    /// first instant that does: the end of the gap. (Using the pre-gap offset instead would land the
+    /// boundary after the gap ends, and DayOf would disagree with it for the instants in between.)
+    /// An ambiguous fall-back time resolves to its second occurrence, the standard offset.
+    /// </summary>
+    private static DateTimeOffset LocalToInstant(DateTime local, TimeZoneInfo tz)
     {
-        var nextLocal = day.AddDays(1).ToDateTime(ctx.DayBoundary);
-        return new DateTimeOffset(nextLocal, ctx.TimeZone.GetUtcOffset(nextLocal));
+        while (tz.IsInvalidTime(local)) local = local.AddMinutes(1);
+        return new DateTimeOffset(local, tz.GetUtcOffset(local));
     }
 
     /// <summary>An occurrence's day is the day it starts on. Floating occurrences have no day.</summary>

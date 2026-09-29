@@ -19,9 +19,13 @@ public class LoomApiFactory : WebApplicationFactory<Program>, IDisposable
         _connection.Open();
     }
 
+    /// <summary>Attempts per window on login/register. High so ordinary tests never trip it.</summary>
+    protected virtual int AuthPermitLimit => 1000;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseSetting("Jwt:Secret", TestJwtSecret);
+        builder.UseSetting("RateLimit:Auth:PermitLimit", AuthPermitLimit.ToString());
         builder.UseSetting("Auth:RefreshCookie:Secure", "false");
         builder.UseSetting("Database:MigrateOnStartup", "false");
 

@@ -156,6 +156,13 @@ The panes are separated by a 1px `border-[var(--border)]` vertical divider. No g
 - Card-style pill: `border border-border bg-card shadow-pop`, tone icon (destructive alert / primary check), auto-dismiss after 5s, manual dismiss X.
 - Used for mutation failures that have no inline error display (status toggles, deletes, calendar drag reschedules).
 
+### Failure states
+
+- **Render error:** `ErrorBoundary` shows a centred "Something went wrong" with Try again (outline) and Reload (primary). One wraps the routes inside `AppShell`, so the sidebar and bottom nav stay usable and navigating clears it; a full-screen one wraps the whole app in `main.tsx`.
+- **Offline:** `OfflineBanner` is a slim `bg-muted` strip above the page content while `navigator.onLine` is false. Muted, not destructive: being offline is a state, not a mistake.
+- **Server unreachable at startup:** `ConnectionLost` is a full-screen centred message with a Try again button, shown instead of the login page.
+- Copy follows the app rule: no em dashes, plain sentences, no blame.
+
 ### Dropdown menus
 
 - Row action menus use `ActionMenu`: `MoreHorizontal` trigger, menu rendered in a portal with fixed positioning so it is never clipped by overflow containers; flips above the trigger when there is no room below. Closes on outside press and Escape.

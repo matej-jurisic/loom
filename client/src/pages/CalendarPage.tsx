@@ -1291,6 +1291,9 @@ export function CalendarPage() {
         startFrom: rangeStart.toISOString(),
         endBefore: rangeEnd.toISOString(),
       }),
+    // Keep the previous range on screen while the next one loads, so paging
+    // days/weeks never blanks the grid behind the full-page spinner.
+    placeholderData: keepPreviousData,
   })
 
   const { data: rawFloatingTasks = [] } = useQuery({
