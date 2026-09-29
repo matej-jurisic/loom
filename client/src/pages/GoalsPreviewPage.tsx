@@ -46,7 +46,7 @@ function shortDate(ms: number): string {
 }
 
 function lastDoneLabel(lastAt: string | null): string {
-  if (!lastAt) return 'no sessions yet'
+  if (!lastAt) return 'no activity yet'
   const days = Math.floor((Date.now() - new Date(lastAt).getTime()) / 86400000)
   if (days === 0) return 'active today'
   if (days === 1) return 'active yesterday'

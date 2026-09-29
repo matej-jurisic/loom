@@ -6,7 +6,7 @@ interface OccurrenceBarProps {
   labelClassName?: string
 }
 
-export function OccurrenceBar({ stats, barClassName = 'flex-1', labelClassName = 'w-7' }: OccurrenceBarProps) {
+export function OccurrenceBar({ stats, barClassName = 'flex-1', labelClassName = 'min-w-7' }: OccurrenceBarProps) {
   const attempted = stats.done + stats.skipped
   if (attempted === 0 && stats.pending === 0) return null
   const donePct = attempted > 0 ? (stats.done / attempted) * 100 : 0
@@ -17,8 +17,11 @@ export function OccurrenceBar({ stats, barClassName = 'flex-1', labelClassName =
         <div className="h-full bg-primary transition-all" style={{ width: `${donePct}%` }} />
         <div className="h-full bg-destructive/50 transition-all" style={{ width: `${skippedPct}%` }} />
       </div>
-      <span className={`shrink-0 text-right font-mono text-[11px] text-muted-foreground ${labelClassName}`}>
-        {attempted > 0 ? `${stats.done}/${attempted}` : `${stats.pending}p`}
+      <span
+        className={`shrink-0 text-right font-mono text-[11px] text-muted-foreground ${labelClassName}`}
+        title={`${stats.done} done, ${stats.skipped} skipped, ${stats.pending} pending`}
+      >
+        {attempted > 0 ? `${stats.done}/${attempted}` : `${stats.pending} left`}
       </span>
     </>
   )

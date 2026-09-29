@@ -109,13 +109,13 @@ function believedProgress(checkpoints: Checkpoint[]): number {
 }
 
 function formatLastOccurrence(lastAt: string | null): string {
-  if (!lastAt) return 'no sessions yet'
+  if (!lastAt) return 'no activity yet'
   const days = Math.floor((Date.now() - new Date(lastAt).getTime()) / (1000 * 60 * 60 * 24))
-  if (days === 0) return 'today'
-  if (days === 1) return 'yesterday'
-  if (days < 7) return `${days}d ago`
-  if (days < 30) return `${Math.floor(days / 7)}w ago`
-  return `${Math.floor(days / 30)}mo ago`
+  if (days === 0) return 'last today'
+  if (days === 1) return 'last yesterday'
+  if (days < 7) return `last ${days}d ago`
+  if (days < 30) return `last ${Math.floor(days / 7)}w ago`
+  return `last ${Math.floor(days / 30)}mo ago`
 }
 
 function GoalHealthChip({ goal }: { goal: Goal }) {
@@ -126,7 +126,7 @@ function GoalHealthChip({ goal }: { goal: Goal }) {
       <span className="h-2 w-2 shrink-0 rounded-full bg-goal-focus" />
       <div className="min-w-0">
         <p className="truncate text-xs font-medium text-foreground">{goal.title}</p>
-        <p className="text-[10px] text-muted-foreground/70">last {formatLastOccurrence(goal.lastOccurrenceAt)}</p>
+        <p className="text-[10px] text-muted-foreground/70">{formatLastOccurrence(goal.lastOccurrenceAt)}</p>
       </div>
       <div className="ml-auto shrink-0">
         {isMilestone ? (
@@ -480,7 +480,7 @@ export function PlanPreviewPage() {
                   </h2>
                   {timedEvents.length === 0 ? (
                     <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-10 text-center">
-                      <p className="text-sm text-muted-foreground">No timed events for this day.</p>
+                      <p className="text-sm text-muted-foreground">No events for this day.</p>
                       <button onClick={openCreate} className="text-sm text-primary hover:underline">Add an event</button>
                     </div>
                   ) : (
