@@ -153,6 +153,10 @@ export const occurrencesApi = {
 
   delete: (id: string) => request<void>(`/api/occurrences/${id}`, { method: 'DELETE' }),
 
+  // Wipes occurrences (and events); activities, categories and goals stay. pastOnly keeps today onward.
+  clearAll: (pastOnly = false) =>
+    request<void>(`/api/occurrences${pastOnly ? '?pastOnly=true' : ''}`, { method: 'DELETE' }),
+
   setStatus: (id: string, status: import('./types').EventStatus) =>
     request<Occurrence>(`/api/occurrences/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
 

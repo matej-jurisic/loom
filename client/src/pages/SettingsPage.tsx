@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Download, LogOut, Monitor, Moon, Sun } from 'lucide-react'
+import { Download, LogOut, Monitor, Moon, Sun, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { SettingSection, SettingRow, SectionFooter, inputCls } from '@/components/settings/SettingSection'
-import { settingsApi, authApi, exportApi, ApiError } from '@/lib/api'
+import { settingsApi, authApi, exportApi, occurrencesApi, ApiError } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import { useAuthStore } from '@/store/auth'
 import { getThemePref, setThemePref, type ThemePref } from '@/lib/theme'
@@ -22,6 +23,11 @@ const THEME_OPTIONS: { value: ThemePref; label: string; Icon: typeof Sun }[] = [
   { value: 'light',  label: 'Light',  Icon: Sun },
   { value: 'dark',   label: 'Dark',   Icon: Moon },
   { value: 'system', label: 'System', Icon: Monitor },
+]
+
+const CLEAR_SCOPES = [
+  { value: true,  label: 'Only the past',  hint: 'Before today' },
+  { value: false, label: 'Everything',     hint: 'Including upcoming' },
 ]
 
 // ── page ───────────────────────────────────────────────────────────────────
@@ -66,6 +72,21 @@ export function SettingsPage() {
   }
 
   const [exporting, setExporting] = useState(false)
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clearPastOnly, setClearPastOnly] = useState(true)
+
+  const clearMutation = useMutation({
+    mutationFn: () => occurrencesApi.clearAll(clearPastOnly),
+    onSuccess: () => {
+      setConfirmClear(false)
+      // Goal progress, heatmaps and activity counts are all derived from occurrences.
+      qc.invalidateQueries({ queryKey: ['events'] })
+      qc.invalidateQueries({ queryKey: ['activities'] })
+      qc.invalidateQueries({ queryKey: ['goals'] })
+      qc.invalidateQueries({ queryKey: ['insights'] })
+    },
+    onError: (err) => toastError(err),
+  })
 
   async function handleExport() {
     setExporting(true)
@@ -200,6 +221,12 @@ export function SettingsPage() {
                     Export
                   </Button>
                 </SettingRow>
+                <SettingRow label="Delete history" hint="Clear occurrences and start fresh. Activities and goals stay.">
+                  <Button variant="outline" size="sm" onClick={() => setConfirmClear(true)}>
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" strokeWidth={2} />
+                    Delete
+                  </Button>
+                </SettingRow>
               </SettingSection>
 
               <SettingSection label="Account">
@@ -215,6 +242,43 @@ export function SettingsPage() {
           )}
         </div>
       </div>
+
+      <Modal
+        open={confirmClear}
+        onClose={() => setConfirmClear(false)}
+        title="Delete history?"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmClear(false)} disabled={clearMutation.isPending}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={() => clearMutation.mutate()} loading={clearMutation.isPending}>
+              Delete history
+            </Button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
+            This cannot be undone.
+          </p>
+          {CLEAR_SCOPES.map(({ value, label, hint }) => (
+            <label key={String(value)} className="flex cursor-pointer items-start gap-2.5 text-sm">
+              <input
+                type="radio"
+                name="clear-scope"
+                checked={clearPastOnly === value}
+                onChange={() => setClearPastOnly(value)}
+                className="mt-1"
+              />
+              <span>
+                <span className="font-medium text-foreground">{label}</span>
+                <span className="block text-xs text-muted-foreground">{hint}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+      </Modal>
     </div>
   )
 }

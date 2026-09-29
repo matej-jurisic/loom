@@ -174,6 +174,42 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         return Result<OccurrenceDto>.Success(await ToDtoAsync(o, userId));
     }
 
+    /// <summary>
+    /// Wipes the user's history: every occurrence, and every event (an event's activity is a
+    /// backing row owned by its single occurrence, so it goes with it). Real activities, categories,
+    /// goals and checkpoints stay. With <paramref name="pastOnly"/>, only occurrences dated before
+    /// today are removed; today, upcoming and undated (floating) ones are kept. Returns the number
+    /// of occurrences removed.
+    /// </summary>
+    public async Task<int> ClearAllAsync(Guid userId, bool pastOnly = false)
+    {
+        var rows = await db.Occurrences
+            .Where(o => o.UserId == userId)
+            .Select(o => new { o.Id, o.ActivityId, o.StartAt, o.EndAt, IsEvent = o.Activity.Kind == ActivityKind.@event })
+            .ToListAsync();
+
+        if (pastOnly)
+        {
+            // Date filtering has to run in memory (SQLite can't compare DateTimeOffset).
+            var ctx = await settings.GetDayContextAsync(userId);
+            var today = DayMath.Today(ctx, DateTimeOffset.UtcNow);
+            // Same reference as the calendar's DUE row: a deadline-only occurrence counts by its end.
+            rows = rows.Where(o => (o.StartAt ?? o.EndAt) is { } at && DayMath.DayOf(at, ctx) < today).ToList();
+        }
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        // Deleting an event's activity cascades to its occurrence (and subtasks).
+        foreach (var chunk in rows.Where(o => o.IsEvent).Select(o => o.ActivityId).Distinct().Chunk(500))
+            await db.Activities.Where(a => chunk.Contains(a.Id)).ExecuteDeleteAsync();
+        foreach (var chunk in rows.Select(o => o.Id).Chunk(500))
+        {
+            await db.OccurrenceSubtasks.Where(s => chunk.Contains(s.OccurrenceId)).ExecuteDeleteAsync();
+            await db.Occurrences.Where(o => chunk.Contains(o.Id)).ExecuteDeleteAsync();
+        }
+        await tx.CommitAsync();
+        return rows.Count;
+    }
+
     public async Task<Result> DeleteAsync(Guid id, Guid userId)
     {
         var o = await db.Occurrences

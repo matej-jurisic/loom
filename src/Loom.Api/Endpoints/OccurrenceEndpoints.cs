@@ -25,6 +25,14 @@ public static class OccurrenceEndpoints
             return Results.Ok(await svc.ListAsync(userId.Value, filter, startFrom, endBefore, floating, goalId, activityId));
         });
 
+        group.MapDelete("/", async (ClaimsPrincipal principal, OccurrenceService svc, bool pastOnly = false) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            await svc.ClearAllAsync(userId.Value, pastOnly);
+            return Results.NoContent();
+        });
+
         group.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal principal, OccurrenceService svc) =>
         {
             var userId = principal.GetUserId();

@@ -464,6 +464,7 @@ averaged over days.
 | Theme | Light / dark / system. Client-side preference in `localStorage`, defaults to system. |
 | Server URL | Native shells only: where the app points its API calls. |
 | Export data | Downloads `loom-export-<date>.json`. |
+| Delete history | Confirmed, permanent; the user picks "only the past" (dated before today, by `DayMath`; today, upcoming and undated stay) or "everything" (`DELETE /api/occurrences[?pastOnly=true]`). Deletes occurrences and events; activities, categories, goals and checkpoints are kept, for a fresh start after a break. |
 | Account | Username and sign out. |
 
 Settings holds preferences only.
