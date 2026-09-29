@@ -108,6 +108,7 @@ time. Activities are managed at `/activities`.
 | Category | Optional |
 | Kind | `activity` or `event`. Internal, never shown. |
 | Subtasks | Ordered checklist template, copied onto every new occurrence. |
+| Repeat | Optional rule, `activity` kind only. See *Repeats*. |
 
 Deleting an activity cascades to its occurrences. Deleting a goal or category set-nulls the link and
 leaves the activity alive.
@@ -140,6 +141,59 @@ Two levels, deliberately separate:
 
 ---
 
+### Repeats
+
+An activity can repeat. The **rule** is stored on the activity; the occurrences it implies are not
+stored at all. They are *projected* when a range is read, and only become real rows when the user acts
+on one. A day nobody touched leaves nothing behind.
+
+| Rule field | Notes |
+|---|---|
+| Frequency, interval | Every N days, weeks or months. Interval 1-99. |
+| Weekdays | Weekly only, ISO 1 (Mon) - 7 (Sun). None selected means the start date's weekday. |
+| Start date | The first possible day, in the user's timezone. Anchors the interval (weeks run Monday-first) and the day of month. |
+| End date | Optional, inclusive. |
+| Time of day | `HH:mm`, or absent for all-day instances. |
+| Duration minutes | Optional. With a time it makes each instance a block (`EndAt = start + duration`, real elapsed time); without one the instance is a due pin. On all-day instances it is the effort estimate. |
+
+A monthly rule on the 29th-31st lands on the last day of shorter months rather than skipping them. An
+instance is placed by local wall-clock time through `DayMath`, so a time that a spring-forward skips
+lands at the end of the gap, like the day boundary does.
+
+**Projection.** A list request that is a closed range (`startFrom` *and* `endBefore`), has no
+`status` or `status=pending`, and is not `floating` also returns the instances the rules imply inside
+it. They carry `isProjected: true`, `seriesDate` (the rule's calendar date), and an id derived from
+`(activity, seriesDate)`. Open-ended and unranged lists never project - they are about what happened -
+so the calendar's Upcoming row, the Categories list, history and goal views show real rows only. Two
+more limits: nothing before today is projected, and one expansion covers at most 62 days.
+
+Because nothing before today is projected, a repeat from a past day that you never touched is simply
+absent: it is not carried forward and there is nothing to catch up on. Today's repeats, projected or
+materialized, follow the same overdue rules as any other occurrence.
+
+**Materialize.** `POST /api/occurrences/materialize` with `{ activityId, seriesDate }` creates the real
+row under the same id, with the activity's subtasks copied under ids derived the same way, so the
+client keeps holding the ids it had. It is idempotent, and answers 409 if the rule no longer lands on
+that date. Completing, skipping, editing, moving, deleting or ticking a subtask of a projected
+occurrence all need a real row, so the client materializes first; acting on a projected id directly is
+a 404. The row keeps `seriesDate` however it is moved, so moving it never reopens its original slot.
+
+**Deleting** a repeat deletes it, and nothing else. When its day is today or later the day is also
+recorded as an exclusion so the rule does not project it again, and it cannot be materialized again;
+exclusions go with the activity.
+
+**Editing the rule** changes every instance that has not been materialized; rows that have keep what
+the user did to them. Removing the rule stops projection and leaves the rows as plain occurrences.
+Deleting the activity removes the rule with it. Re-pointing a repeat's occurrence at another activity
+clears its `seriesDate`.
+
+Insights, goal stats and heatmaps only read real rows, so a projection never counts as progress. The
+rule is set with `PUT /api/activities/{id}/recurrence` and removed with `DELETE`; it is deliberately
+not part of the activity `PUT`, which is a full replace that callers such as bulk assign resend
+without knowing about repeats.
+
+---
+
 ## Occurrences
 
 | Field | Notes |
@@ -153,6 +207,7 @@ Two levels, deliberately separate:
 | Duration minutes | Effort estimate, valid on any occurrence type. On a planned occurrence with both window bounds it may not exceed the window length. |
 | Status | `pending`, `done`, `skipped`. Marking done clears `IsPlanned`. |
 | Subtasks | Per-occurrence checklist with `IsDone`, seeded from the activity's template. |
+| Series date | The day of the activity's repeat rule this row stands in for; absent for anything not from a rule. Unique per activity. |
 
 `effectiveTitle` on the DTO is `title ?? activity.title`. The DTO also carries the full activity
 (with its category and goal), which is why occurrence lists are invalidated after an activity write. Legacy `windowStart`/`windowEnd`/`windowDurationMinutes` columns remain on the row
@@ -489,7 +544,9 @@ Unauthorized→401, Forbidden→403.
 | `/api/activities` | `GET` (`goalId`), `POST` |
 | `/api/activities/{id}` | `GET`, `PUT`, `DELETE` |
 | `/api/activities/{id}/subtasks[/{subtaskId}]` | `POST`, `PUT`, `DELETE` |
+| `/api/activities/{id}/recurrence` | `PUT`, `DELETE` |
 | `/api/occurrences` | `GET` (`status`, `startFrom`, `endBefore`, `floating`, `goalId`, `activityId`), `POST` |
+| `/api/occurrences/materialize` | `POST` |
 | `/api/occurrences/{id}` | `GET`, `PUT`, `DELETE` |
 | `/api/occurrences/{id}/status` | `POST` |
 | `/api/occurrences/{id}/subtasks[/{subtaskId}[/toggle]]` | `POST`, `PUT`, `DELETE` |

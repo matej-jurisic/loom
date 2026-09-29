@@ -2,9 +2,11 @@ import { useState, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { activitiesApi, activitySubtasksApi } from '@/lib/api'
+import { fromDraft, toDraft } from '@/lib/recurrence'
 import type { Activity, Goal, Category } from '@/lib/types'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { RecurrenceFields } from './RecurrenceFields'
 
 interface ActivityModalProps {
   open: boolean
@@ -24,15 +26,26 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
   const [subtasks, setSubtasks] = useState(activity?.subtasks ?? [])
   const [newSubtask, setNewSubtask] = useState('')
   const newSubtaskRef = useRef<HTMLInputElement>(null)
+  const [repeat, setRepeat] = useState(() => toDraft(activity?.recurrence))
+  const [repeatError, setRepeatError] = useState('')
+  const savedId = useRef(activity?.id)
 
   const mutation = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const body = {
         title: title.trim(),
         goalId: goalId || null,
         categoryId: categoryId || null,
       }
-      return isEdit ? activitiesApi.update(activity!.id, body) : activitiesApi.create(body)
+      const saved = savedId.current
+        ? await activitiesApi.update(savedId.current, body)
+        : await activitiesApi.create(body)
+      savedId.current = saved.id
+
+      const { rule } = fromDraft(repeat)
+      if (rule) await activitiesApi.setRecurrence(saved.id, rule)
+      else if (activity?.recurrence) await activitiesApi.removeRecurrence(saved.id)
+      return saved
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['activities'] })
@@ -57,6 +70,9 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
     if (!title.trim()) { setTitleError('Title is required.'); return }
     if (title.length > 255) { setTitleError('Title cannot exceed 255 characters.'); return }
     setTitleError('')
+    const { error } = fromDraft(repeat)
+    if (error) { setRepeatError(error); return }
+    setRepeatError('')
     mutation.mutate()
   }
 
@@ -127,6 +143,11 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
           </select>
         </div>
       )}
+
+      <div className="flex flex-col gap-1.5">
+        <RecurrenceFields value={repeat} onChange={setRepeat} />
+        {repeatError && <p className="text-xs text-destructive">{repeatError}</p>}
+      </div>
 
       {isEdit && (
         <div className="flex flex-col gap-2">

@@ -95,36 +95,160 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
 
         IEnumerable<Occurrence> occurrences = all;
         if (startFrom.HasValue || endBefore.HasValue)
-        {
-            occurrences = occurrences.Where(o =>
-            {
-                if (o.WindowStart is not null)
-                {
-                    var wStart = o.WindowStart.Value;
-                    var wEnd = o.WindowEnd ?? o.WindowStart.Value;
-                    return (!endBefore.HasValue || wStart < endBefore.Value)
-                        && (!startFrom.HasValue || wEnd > startFrom.Value);
-                }
-                if (o.StartAt is not null && o.EndAt is not null)
-                    return (!endBefore.HasValue || o.StartAt < endBefore.Value)
-                        && (!startFrom.HasValue || o.EndAt > startFrom.Value);
-                if (o.StartAt is not null)
-                    return (!startFrom.HasValue || o.StartAt >= startFrom.Value)
-                        && (!endBefore.HasValue || o.StartAt < endBefore.Value);
-                if (o.EndAt is not null)
-                    return (!startFrom.HasValue || o.EndAt >= startFrom.Value)
-                        && (!endBefore.HasValue || o.EndAt < endBefore.Value);
-                return false;
-            });
-        }
+            occurrences = occurrences.Where(o => InRange(o, startFrom, endBefore));
 
         var ctx = await settings.GetDayContextAsync(userId);
         var now = DateTimeOffset.UtcNow;
-        return occurrences
+        var result = occurrences.Select(o => OccurrenceDto.FromEntity(o, ctx, now)).ToList();
+
+        if (!floatingOnly && startFrom.HasValue && endBefore.HasValue && (status is null || status == EventStatus.pending))
+            result.AddRange(await ProjectAsync(userId, startFrom.Value, endBefore.Value, goalId, activityId, ctx, now));
+
+        return result
             .OrderBy(o => o.StartAt ?? o.EndAt ?? DateTimeOffset.MaxValue)
             .ThenBy(o => o.CreatedAt)
-            .Select(o => OccurrenceDto.FromEntity(o, ctx, now))
             .ToList();
+    }
+
+    private static bool InRange(Occurrence o, DateTimeOffset? startFrom, DateTimeOffset? endBefore)
+    {
+        if (o.WindowStart is not null)
+        {
+            var wStart = o.WindowStart.Value;
+            var wEnd = o.WindowEnd ?? o.WindowStart.Value;
+            return (!endBefore.HasValue || wStart < endBefore.Value)
+                && (!startFrom.HasValue || wEnd > startFrom.Value);
+        }
+        if (o.StartAt is not null && o.EndAt is not null)
+            return (!endBefore.HasValue || o.StartAt < endBefore.Value)
+                && (!startFrom.HasValue || o.EndAt > startFrom.Value);
+        if (o.StartAt is not null)
+            return (!startFrom.HasValue || o.StartAt >= startFrom.Value)
+                && (!endBefore.HasValue || o.StartAt < endBefore.Value);
+        if (o.EndAt is not null)
+            return (!startFrom.HasValue || o.EndAt >= startFrom.Value)
+                && (!endBefore.HasValue || o.EndAt < endBefore.Value);
+        return false;
+    }
+
+    private async Task<List<OccurrenceDto>> ProjectAsync(
+        Guid userId, DateTimeOffset from, DateTimeOffset to, Guid? goalId, Guid? activityId,
+        DayContext ctx, DateTimeOffset now)
+    {
+        var query = db.Activities
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(a => a.Category)
+            .Include(a => a.Goal)
+            .Include(a => a.Subtasks)
+            .Include(a => a.Recurrence)
+            .Where(a => a.UserId == userId && a.Kind == ActivityKind.activity && a.Recurrence != null);
+        if (goalId.HasValue) query = query.Where(a => a.GoalId == goalId.Value);
+        if (activityId.HasValue) query = query.Where(a => a.Id == activityId.Value);
+
+        var activities = await query.ToListAsync();
+        if (activities.Count == 0) return [];
+
+        var fromDay = DayMath.LocalDate(from, ctx.TimeZone).AddDays(-1);
+        var toDay = DayMath.LocalDate(to, ctx.TimeZone).AddDays(1);
+        var today = DayMath.Today(ctx, now);
+        if (fromDay < today) fromDay = today;
+        if (toDay < fromDay) return [];
+
+        var activityIds = activities.Select(a => a.Id).ToList();
+        var taken = (await db.Occurrences
+                .Where(o => o.SeriesDate != null && o.SeriesDate >= fromDay && o.SeriesDate <= toDay
+                    && activityIds.Contains(o.ActivityId))
+                .Select(o => new { o.ActivityId, o.SeriesDate })
+                .ToListAsync())
+            .Select(o => (o.ActivityId, o.SeriesDate!.Value))
+            .ToHashSet();
+
+        var excluded = await db.RecurrenceExclusions
+            .Where(e => e.SeriesDate >= fromDay && e.SeriesDate <= toDay && activityIds.Contains(e.ActivityId))
+            .Select(e => new { e.ActivityId, e.SeriesDate })
+            .ToListAsync();
+        foreach (var e in excluded) taken.Add((e.ActivityId, e.SeriesDate));
+
+        var projected = new List<OccurrenceDto>();
+        foreach (var a in activities)
+        {
+            foreach (var date in RecurrenceMath.DatesBetween(a.Recurrence!, fromDay, toDay))
+            {
+                if (taken.Contains((a.Id, date))) continue;
+                var o = BuildInstance(a, a.Recurrence!, date, ctx.TimeZone, userId);
+                if (!InRange(o, from, to)) continue;
+                projected.Add(OccurrenceDto.FromEntity(o, ctx, now) with { IsProjected = true });
+            }
+        }
+        return projected;
+    }
+
+    private static Occurrence BuildInstance(Activity a, ActivityRecurrence r, DateOnly date, TimeZoneInfo tz, Guid userId)
+    {
+        var at = RecurrenceMath.InstanceOn(r, date, tz);
+        var id = RecurrenceMath.OccurrenceId(a.Id, date);
+        return new Occurrence
+        {
+            Id = id,
+            UserId = userId,
+            ActivityId = a.Id,
+            Activity = a,
+            StartAt = at.StartAt,
+            EndAt = at.EndAt,
+            IsAllDay = at.IsAllDay,
+            DurationMinutes = at.DurationMinutes,
+            SeriesDate = date,
+            CreatedAt = a.CreatedAt,
+            Subtasks = a.Subtasks
+                .OrderBy(s => s.CreatedAt)
+                .Select(s => new OccurrenceSubtask
+                {
+                    Id = RecurrenceMath.SubtaskId(s.Id, date),
+                    OccurrenceId = id,
+                    Title = s.Title,
+                    CreatedAt = s.CreatedAt,
+                })
+                .ToList(),
+        };
+    }
+
+    public async Task<Result<OccurrenceDto>> MaterializeAsync(Guid userId, MaterializeOccurrenceRequest req)
+    {
+        var id = RecurrenceMath.OccurrenceId(req.ActivityId, req.SeriesDate);
+        var existing = await WithFullIncludes().AsNoTracking().FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId);
+        if (existing is not null) return Result<OccurrenceDto>.Success(await ToDtoAsync(existing, userId));
+
+        var activity = await FindActivityAsync(req.ActivityId, userId);
+        if (activity is null) return Result<OccurrenceDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."));
+        if (activity.Kind != ActivityKind.activity || activity.Recurrence is null
+            || !RecurrenceMath.Occurs(activity.Recurrence, req.SeriesDate))
+            return Result<OccurrenceDto>.Fail(new Error(ErrorType.Conflict, "This repeat no longer exists."));
+        if (await db.RecurrenceExclusions.AnyAsync(e => e.ActivityId == activity.Id && e.SeriesDate == req.SeriesDate))
+            return Result<OccurrenceDto>.Fail(new Error(ErrorType.Conflict, "This repeat no longer exists."));
+
+        var ctx = await settings.GetDayContextAsync(userId);
+        var o = BuildInstance(activity, activity.Recurrence, req.SeriesDate, ctx.TimeZone, userId);
+        o.CreatedAt = DateTimeOffset.UtcNow;
+        var subtasks = o.Subtasks;
+
+        o.Subtasks = [];
+        db.Occurrences.Add(o);
+        db.OccurrenceSubtasks.AddRange(subtasks);
+        o.Subtasks = subtasks;
+
+        try
+        {
+            await db.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            db.ChangeTracker.Clear();
+            var winner = await WithFullIncludes().AsNoTracking().FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
+            if (winner is null) throw;
+            return Result<OccurrenceDto>.Success(await ToDtoAsync(winner, userId));
+        }
+        return Result<OccurrenceDto>.Success(await ToDtoAsync(o, userId));
     }
 
     public async Task<Result<OccurrenceDto>> UpdateAsync(Guid id, Guid userId, UpdateOccurrenceRequest req)
@@ -158,6 +282,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
 
             o.ActivityId = target.Id;
             o.Activity = target;
+            o.SeriesDate = null;
         }
 
         o.Title = string.IsNullOrWhiteSpace(req.Title) ? null : req.Title.Trim();
@@ -213,9 +338,19 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     public async Task<Result> DeleteAsync(Guid id, Guid userId)
     {
         var o = await db.Occurrences
-            .Include(o => o.Activity)
+            .Include(o => o.Activity).ThenInclude(a => a.Recurrence)
             .FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId);
         if (o is null) return Result.Fail(new Error(ErrorType.NotFound, "Occurrence not found."));
+
+        if (o.SeriesDate is { } seriesDate && o.Activity.Recurrence is { } rule
+            && RecurrenceMath.Occurs(rule, seriesDate)
+            && seriesDate >= DayMath.Today(await settings.GetDayContextAsync(userId), DateTimeOffset.UtcNow))
+        {
+            var alreadyExcluded = await db.RecurrenceExclusions
+                .AnyAsync(e => e.ActivityId == o.ActivityId && e.SeriesDate == seriesDate);
+            if (!alreadyExcluded)
+                db.RecurrenceExclusions.Add(new RecurrenceExclusion { ActivityId = o.ActivityId, SeriesDate = seriesDate });
+        }
 
         // For event-kind, delete the backing activity (cascade removes the occurrence).
         if (o.Activity.Kind == ActivityKind.@event)
@@ -419,6 +554,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             .Include(a => a.Category)
             .Include(a => a.Goal)
             .Include(a => a.Subtasks)
+            .Include(a => a.Recurrence)
             .FirstOrDefaultAsync(a => a.Id == activityId && a.UserId == userId);
 
     private IQueryable<Occurrence> WithFullIncludes() =>
@@ -426,6 +562,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             .Include(o => o.Activity).ThenInclude(a => a.Category)
             .Include(o => o.Activity).ThenInclude(a => a.Goal)
             .Include(o => o.Activity).ThenInclude(a => a.Subtasks)
+            .Include(o => o.Activity).ThenInclude(a => a.Recurrence)
             .Include(o => o.Subtasks);
 
     private static Error? ValidateSubtaskInputs(List<OccurrenceSubtaskInput>? inputs)

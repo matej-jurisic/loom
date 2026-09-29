@@ -65,7 +65,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 **Backend (`Loom.Core`)**
 - `Entities/` — POCOs; `Guid Id = Guid.NewGuid()` + `DateTimeOffset CreatedAt`, no base class.
   Entities: `User, Activity, Occurrence, Goal, Checkpoint, Category, UserSettings, ActivitySubtask,
-  OccurrenceSubtask` (subtasks are two levels: `ActivitySubtask` is the title-only template, copied
+  OccurrenceSubtask, ActivityRecurrence, RecurrenceExclusion` (subtasks are two levels: `ActivitySubtask` is the title-only template, copied
   into `OccurrenceSubtask` rows — which carry `IsDone` — when an occurrence is created).
 - `Enums/` — stored as strings (`HasConversion<string>`).
 - `Data/LoomDbContext.cs` — DbSets + `OnModelCreating`. `Occurrence → Activity` cascade delete; `Activity → Category/Goal` set-null.
@@ -74,6 +74,10 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `Common/DayMath.cs` — all "which day / is this overdue?" logic goes through here, in the user's IANA
   timezone offset by `DayBoundaryTime`. Get a `DayContext` via `UserSettingsService.GetDayContextAsync`.
   Key methods: `OccurrenceDay(Occurrence, DayContext)`, `IsOverdue(Occurrence, DayContext, DateTimeOffset)`.
+- `Common/RecurrenceMath.cs` — pure expansion of an `ActivityRecurrence`: `Occurs`, `DatesBetween` (capped at
+  `MaxProjectionDays`), `InstanceOn` (through `DayMath.AtLocal`, so DST behaves like the day boundary), and the
+  derived ids (`OccurrenceId`/`SubtaskId`, hashed from activity + date). Rule days are calendar dates, not
+  boundary-shifted days.
 - `Dtos/Dtos.cs` — request/response records with `FromEntity` static factory. Never leak entities.
   Key DTOs: `ActivityDto` (has `Kind` — internal activity/event split — and `RecentOccurrenceCount`,
   filled only by `ActivityService.ListAsync`, which orders the new-occurrence modal's picker), `OccurrenceDto` (has
@@ -85,6 +89,15 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   status, `done` occurrences only — skipped ones aren't progress and put no day on the grid — behind
   `GET /api/goals/heatmap`, the Daily Plan's "Goal activity" strip).
 - `Services/*Service.cs` — ctor-inject `LoomDbContext`; return `Result`/`Result<T>`. Registered in `AddLoomCore`.
+- ⚠️ **Repeats are projected, not stored.** `OccurrenceService.ListAsync` appends `IsProjected` occurrences for
+  a *closed* range (`ProjectAsync`); nothing before today, nothing for open-ended or unranged lists.
+  A projection has no row: it is acted on by `MaterializeAsync`, which creates the row under the **same derived
+  id** (subtasks too), so the client's ids survive. `Occurrence.SeriesDate` (unique per activity) marks the rule
+  day a row stands in for and suppresses re-projection, wherever the row is moved. `DeleteAsync` on a
+  repeat dated today or later also records a `RecurrenceExclusion` (else the rule would project the day again). Any new query that should show repeats
+  must go through `ListAsync`; any new one that shouldn't (stats, heatmaps, history) just reads rows.
+  The rule is set through `ActivityService.SetRecurrenceAsync` and its own endpoints, **not** the activity PUT
+  (a full replace that bulk assign resends blindly).
 - `Services/InsightsService.cs` — totals over completed occurrences only. **Never add a stat whose
   denominator is the length of a day**; see the boundary above.
 - ⚠️ **A child with a pre-set `Guid Id` added to a *tracked* parent's nav collection is treated as an
@@ -122,6 +135,13 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   to the same occurrence-list view desktop uses, now with a back chevron in place of the `+`'s
   sibling. `?category=none` exists only for this mobile round-trip; bare `/categories` already means
   "no category" on desktop since the sidebar is always visible there.
+- `lib/api.ts` — ⚠️ `occurrencesApi.list` remembers every `isProjected` id, and every write on an occurrence
+  (`update`, `delete`, `setStatus`, `toggleSubtask`, the subtask CRUD) calls `real(id)` first, which materializes it.
+  Call sites never need to know a row was projected; a **new** write helper must go through `real()` too.
+- `lib/recurrence.ts` + `components/activities/RecurrenceFields.tsx` — the rule's draft/validation, its
+  one-line description, and the "Repeats" section of `ActivityModal` (rule saved by a second call, so a retry
+  after a failed rule save updates the activity instead of creating another). `deletePrompt` picks the
+  skip-vs-delete wording; the server decides which happens.
 - `lib/api.ts` — `request<T>` (bearer + one-shot 401 refresh). Key namespaces: `activitiesApi`, `occurrencesApi`, `categoriesApi`, `goalsApi`, `checkpointsApi`, `insightsApi`.
 - `lib/types.ts` — mirrors backend DTOs. Key types: `Activity`, `Occurrence` (has `effectiveTitle`), `Goal`, `Category`, `Insights`.
 - `lib/theme.ts` — light/dark/system preference (localStorage `loom-theme`).

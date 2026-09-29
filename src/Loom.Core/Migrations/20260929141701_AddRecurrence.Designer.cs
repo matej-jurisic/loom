@@ -3,6 +3,7 @@ using System;
 using Loom.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Loom.Core.Migrations
 {
     [DbContext(typeof(LoomDbContext))]
-    partial class LoomDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260929141701_AddRecurrence")]
+    partial class AddRecurrence
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.9");
@@ -305,29 +308,6 @@ namespace Loom.Core.Migrations
                     b.ToTable("OccurrenceSubtasks");
                 });
 
-            modelBuilder.Entity("Loom.Core.Entities.RecurrenceExclusion", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid>("ActivityId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateOnly>("SeriesDate")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ActivityId", "SeriesDate")
-                        .IsUnique();
-
-                    b.ToTable("RecurrenceExclusions");
-                });
-
             modelBuilder.Entity("Loom.Core.Entities.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -492,17 +472,6 @@ namespace Loom.Core.Migrations
                         .IsRequired();
 
                     b.Navigation("Occurrence");
-                });
-
-            modelBuilder.Entity("Loom.Core.Entities.RecurrenceExclusion", b =>
-                {
-                    b.HasOne("Loom.Core.Entities.Activity", "Activity")
-                        .WithMany()
-                        .HasForeignKey("ActivityId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Activity");
                 });
 
             modelBuilder.Entity("Loom.Core.Entities.RefreshToken", b =>

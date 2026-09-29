@@ -99,6 +99,18 @@ export interface OccurrenceSubtask {
   createdAt: string
 }
 
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly'
+
+export interface Recurrence {
+  frequency: RecurrenceFrequency
+  interval: number
+  weekdays: number[]
+  startDate: string
+  endDate: string | null
+  timeOfDay: string | null
+  durationMinutes: number | null
+}
+
 export interface Activity {
   id: string
   userId: string
@@ -112,6 +124,7 @@ export interface Activity {
   subtasks: ActivitySubtask[]
   /** Occurrences in the last year. Only the list endpoint fills it; single-activity responses send 0. */
   recentOccurrenceCount: number
+  recurrence: Recurrence | null
 }
 
 export interface Occurrence {
@@ -130,6 +143,8 @@ export interface Occurrence {
   isOverdue: boolean
   subtasks: OccurrenceSubtask[]
   activity: Activity
+  seriesDate: string | null
+  isProjected: boolean
 }
 
 export interface InsightsActivity {

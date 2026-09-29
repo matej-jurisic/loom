@@ -122,6 +122,11 @@ The panes are separated by a 1px `border-[var(--border)]` vertical divider. No g
 - **While loading**, the whole shell renders at its final height: tiles with a pulsing bar where the value goes, the strip empty (its size does not depend on the data), and five placeholder rows filling the recent box. The panel is animating in as the request lands, so it must already be its final height - a shell that grows into the answer reads as a stutter, and the first open is exactly when it happens.
 - **Read-only**: the two footer buttons are `Close` and an outlined `Open activity` that leads to the detail page for anything this dialog deliberately leaves out.
 
+### Repeats
+
+- **Form:** a "Repeats" checkbox at the bottom of the activity modal, above Subtasks. Ticked, it opens a `rounded-lg border border-border p-3` panel: an `Every [n] [day|week|month]` row of `inputCls` controls, seven `h-8 w-8` round weekday toggles when weekly (selected = solid `bg-primary`, unselected = outlined `bg-background`; letters, with the full name in `title`/`aria-label`), Starts / Ends date fields, an `All day` checkbox that swaps in a `lang="en-GB"` time input, and an optional `Lasts [n] min`. A single muted `text-xs` line under the panel spells the rule out in words (`Every 2 weeks on Mon, Thu at 09:00`).
+- **Marker:** a `Repeat` icon (`h-3 w-3`, `text-muted-foreground`) in an occurrence row's meta line when it comes from a rule, its rule as the `title`. On the activities list the rule's sentence sits in the meta line beside the icon. A projected occurrence is drawn exactly like a real one: it becomes real the moment it is touched, so it has no separate "ghost" look to explain.
+
 ### Checkboxes (events)
 
 - Square, `rounded-[4px]`. Unchecked: `border border-border bg-transparent`.

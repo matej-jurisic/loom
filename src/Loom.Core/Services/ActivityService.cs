@@ -18,6 +18,7 @@ public class ActivityService(LoomDbContext db)
             .Include(a => a.Category)
             .Include(a => a.Goal)
             .Include(a => a.Subtasks)
+            .Include(a => a.Recurrence)
             .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
         return a is null
             ? Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."))
@@ -30,6 +31,7 @@ public class ActivityService(LoomDbContext db)
             .Include(a => a.Category)
             .Include(a => a.Goal)
             .Include(a => a.Subtasks)
+            .Include(a => a.Recurrence)
             .Where(a => a.UserId == userId && a.Kind == ActivityKind.activity);
 
         if (goalId.HasValue)
@@ -98,6 +100,7 @@ public class ActivityService(LoomDbContext db)
             .Include(a => a.Category)
             .Include(a => a.Goal)
             .Include(a => a.Subtasks)
+            .Include(a => a.Recurrence)
             .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
         if (a is null) return Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."));
 
@@ -131,6 +134,85 @@ public class ActivityService(LoomDbContext db)
 
         await db.SaveChangesAsync();
         return Result<ActivityDto>.Success(ActivityDto.FromEntity(a));
+    }
+
+    public async Task<Result<ActivityDto>> SetRecurrenceAsync(Guid id, Guid userId, SetRecurrenceRequest req)
+    {
+        var a = await db.Activities
+            .Include(a => a.Category)
+            .Include(a => a.Goal)
+            .Include(a => a.Subtasks)
+            .Include(a => a.Recurrence)
+            .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
+        if (a is null) return Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."));
+        if (a.Kind != ActivityKind.activity)
+            return Result<ActivityDto>.Fail(new Error(ErrorType.Validation, "An event cannot repeat."));
+
+        var err = ValidateRecurrence(req, out var timeOfDay);
+        if (err is not null) return Result<ActivityDto>.Fail(err);
+
+        var isNew = a.Recurrence is null;
+        var r = a.Recurrence ??= new ActivityRecurrence { ActivityId = a.Id };
+        r.Frequency = req.Frequency;
+        r.Interval = req.Interval;
+        r.WeekdayMask = req.Frequency == RecurrenceFrequency.weekly && req.Weekdays is { Count: > 0 }
+            ? RecurrenceMath.MaskOf(req.Weekdays)
+            : 0;
+        r.StartDate = req.StartDate;
+        r.EndDate = req.EndDate;
+        r.TimeOfDay = timeOfDay;
+        r.DurationMinutes = req.DurationMinutes;
+
+        if (isNew) db.ActivityRecurrences.Add(r);
+        await db.SaveChangesAsync();
+        return Result<ActivityDto>.Success(ActivityDto.FromEntity(a));
+    }
+
+    public async Task<Result<ActivityDto>> RemoveRecurrenceAsync(Guid id, Guid userId)
+    {
+        var a = await db.Activities
+            .Include(a => a.Category)
+            .Include(a => a.Goal)
+            .Include(a => a.Subtasks)
+            .Include(a => a.Recurrence)
+            .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
+        if (a is null) return Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."));
+
+        if (a.Recurrence is not null)
+        {
+            db.ActivityRecurrences.Remove(a.Recurrence);
+            a.Recurrence = null;
+            await db.SaveChangesAsync();
+        }
+        return Result<ActivityDto>.Success(ActivityDto.FromEntity(a));
+    }
+
+    private static Error? ValidateRecurrence(SetRecurrenceRequest req, out TimeOnly? timeOfDay)
+    {
+        timeOfDay = null;
+        if (!Enum.IsDefined(req.Frequency))
+            return new Error(ErrorType.Validation, "Unknown repeat frequency.");
+        if (req.Interval is < 1 or > 99)
+            return new Error(ErrorType.Validation, "Repeat interval must be between 1 and 99.");
+        if (req.Weekdays is { Count: > 0 })
+        {
+            if (req.Frequency != RecurrenceFrequency.weekly)
+                return new Error(ErrorType.Validation, "Weekdays only apply to a weekly repeat.");
+            if (req.Weekdays.Any(d => d is < 1 or > 7))
+                return new Error(ErrorType.Validation, "Weekdays must be between 1 (Monday) and 7 (Sunday).");
+        }
+        if (req.EndDate is { } end && end < req.StartDate)
+            return new Error(ErrorType.Validation, "The repeat cannot end before it starts.");
+        if (req.DurationMinutes is < 1 or > 24 * 60)
+            return new Error(ErrorType.Validation, "Duration must be between 1 minute and 24 hours.");
+
+        if (req.TimeOfDay is not null)
+        {
+            if (!TimeOnly.TryParseExact(req.TimeOfDay, ["HH:mm", "H:mm"], out var t))
+                return new Error(ErrorType.Validation, "Time of day must be in HH:mm format.");
+            timeOfDay = t;
+        }
+        return null;
     }
 
     public async Task<Result> DeleteAsync(Guid id, Guid userId)

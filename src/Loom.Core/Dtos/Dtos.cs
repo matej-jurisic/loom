@@ -26,6 +26,31 @@ public sealed record GoalSummaryDto(Guid Id, string Title, string Status, string
     public static GoalSummaryDto FromEntity(Goal g) => new(g.Id, g.Title, g.Status.ToString(), g.Kind.ToString());
 }
 
+public sealed record RecurrenceDto(
+    string Frequency,
+    int Interval,
+    List<int> Weekdays,
+    DateOnly StartDate,
+    DateOnly? EndDate,
+    string? TimeOfDay,
+    int? DurationMinutes)
+{
+    public static RecurrenceDto FromEntity(ActivityRecurrence r) => new(
+        r.Frequency.ToString(), r.Interval, RecurrenceMath.DaysOf(r.WeekdayMask),
+        r.StartDate, r.EndDate, r.TimeOfDay?.ToString("HH:mm"), r.DurationMinutes);
+}
+
+public sealed record SetRecurrenceRequest(
+    RecurrenceFrequency Frequency,
+    int Interval,
+    List<int>? Weekdays,
+    DateOnly StartDate,
+    DateOnly? EndDate,
+    string? TimeOfDay,
+    int? DurationMinutes);
+
+public sealed record MaterializeOccurrenceRequest(Guid ActivityId, DateOnly SeriesDate);
+
 // Activities
 public sealed record ActivityDto(
     Guid Id,
@@ -40,14 +65,16 @@ public sealed record ActivityDto(
     List<ActivitySubtaskDto> Subtasks,
     // How many occurrences this activity has in the recent window (see ActivityService.RecentWindowDays).
     // Only the list endpoint fills it; single-activity responses leave it at 0.
-    int RecentOccurrenceCount = 0)
+    int RecentOccurrenceCount = 0,
+    RecurrenceDto? Recurrence = null)
 {
     public static ActivityDto FromEntity(Activity a, int recentOccurrenceCount = 0) => new(
         a.Id, a.UserId, a.Title, a.CategoryId, a.GoalId, a.Kind.ToString(), a.CreatedAt,
         a.Category is not null ? CategorySummaryDto.FromEntity(a.Category) : null,
         a.Goal is not null ? GoalSummaryDto.FromEntity(a.Goal) : null,
         a.Subtasks.OrderBy(s => s.CreatedAt).Select(ActivitySubtaskDto.FromEntity).ToList(),
-        recentOccurrenceCount);
+        recentOccurrenceCount,
+        a.Recurrence is not null ? RecurrenceDto.FromEntity(a.Recurrence) : null);
 }
 
 public sealed record CreateActivityRequest(string Title, Guid? CategoryId, Guid? GoalId);
@@ -115,7 +142,9 @@ public sealed record OccurrenceDto(
     DateTimeOffset? WindowEnd,
     int? WindowDurationMinutes,
     List<OccurrenceSubtaskDto> Subtasks,
-    ActivityDto Activity)
+    ActivityDto Activity,
+    DateOnly? SeriesDate = null,
+    bool IsProjected = false)
 {
     public static OccurrenceDto FromEntity(Occurrence o, DayContext ctx, DateTimeOffset nowUtc) => new(
         o.Id, o.UserId, o.ActivityId, o.Title,
@@ -127,7 +156,8 @@ public sealed record OccurrenceDto(
         o.IsPlanned, o.DurationMinutes,
         o.WindowStart, o.WindowEnd, o.WindowDurationMinutes,
         o.Subtasks.OrderBy(s => s.CreatedAt).Select(OccurrenceSubtaskDto.FromEntity).ToList(),
-        ActivityDto.FromEntity(o.Activity));
+        ActivityDto.FromEntity(o.Activity),
+        o.SeriesDate);
 }
 
 public sealed record CreateOccurrenceRequest(

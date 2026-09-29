@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, X, Pencil, Trash2, CalendarPlus, Clock, History, ListChecks } from 'lucide-react'
+import { Check, X, Pencil, Trash2, CalendarPlus, Clock, History, ListChecks, Repeat } from 'lucide-react'
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
+import { describeRecurrence } from '@/lib/recurrence'
 import type { Occurrence, EventStatus } from '@/lib/types'
 import { Badge } from '@/components/ui/Badge'
 import { ActionMenu, type ActionMenuEntry } from '@/components/ui/ActionMenu'
@@ -41,6 +42,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
   const completedCount = occurrence.subtasks.filter((s) => s.isDone).length
   const cat = occurrence.activity.category
   const goal = occurrence.activity.goal
+  const repeatRule = occurrence.seriesDate !== null ? occurrence.activity.recurrence : null
 
   const statusMutation = useMutation({
     mutationFn: (status: EventStatus) => occurrencesApi.setStatus(occurrence.id, status),
@@ -119,7 +121,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
           </span>
           {goal && <Badge tone={GOAL_TONE[goal.status] ?? 'neutral'}>{goal.title}</Badge>}
         </div>
-        {(timeText || cat || hasSubtasks) && (
+        {(timeText || cat || hasSubtasks || repeatRule) && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             {timeText && (
               <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
@@ -131,6 +133,15 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 <CategoryIcon icon={cat.icon} color={cat.color} size={11} strokeWidth={2} />
                 {cat.name}
+              </span>
+            )}
+            {repeatRule && (
+              <span
+                title={describeRecurrence(repeatRule)}
+                aria-label={describeRecurrence(repeatRule)}
+                className="flex items-center text-muted-foreground"
+              >
+                <Repeat className="h-3 w-3 shrink-0" strokeWidth={2} />
               </span>
             )}
             {hasSubtasks && (

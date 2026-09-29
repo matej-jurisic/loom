@@ -8,7 +8,7 @@ public sealed record DayContext(TimeZoneInfo TimeZone, TimeOnly DayBoundary);
 
 /// <summary>
 /// Pure day-bucketing rules. All "which day is this?" and overdue decisions go through here
-/// so the recommendation engine, DTO mapping, and (later) recurrence agree on what "today" means.
+/// so DTO mapping and recurrence agree on what "today" means.
 /// A day runs from the day boundary to the next day's boundary in the user's timezone.
 /// </summary>
 public static class DayMath
@@ -47,6 +47,12 @@ public static class DayMath
     /// <summary>The instant at which the given day ends: the boundary time on the following date.</summary>
     public static DateTimeOffset EndOfDay(DateOnly day, DayContext ctx) =>
         LocalToInstant(day.AddDays(1).ToDateTime(ctx.DayBoundary), ctx.TimeZone);
+
+    public static DateTimeOffset AtLocal(DateOnly date, TimeOnly time, TimeZoneInfo tz) =>
+        LocalToInstant(date.ToDateTime(time), tz);
+
+    public static DateOnly LocalDate(DateTimeOffset instant, TimeZoneInfo tz) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, tz).DateTime);
 
     /// <summary>
     /// A wall-clock time that a spring-forward transition skips never happens, so the boundary is the

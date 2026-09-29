@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/store/auth'
 import { getServerUrl, isNative, getNativeRefreshToken, setNativeRefreshToken } from './server-config'
-import type { AuthResponse, User, Goal, GoalStatus, GoalKind, GoalHeatmap, Checkpoint, CheckpointStatus, UserSettings, Category, Activity, ActivitySubtask, Occurrence, Insights } from './types'
+import type { AuthResponse, User, Goal, GoalStatus, GoalKind, GoalHeatmap, Checkpoint, CheckpointStatus, UserSettings, Category, Activity, ActivitySubtask, Occurrence, Insights, Recurrence } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -99,6 +99,11 @@ export const activitiesApi = {
     request<Activity>(`/api/activities/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 
   delete: (id: string) => request<void>(`/api/activities/${id}`, { method: 'DELETE' }),
+
+  setRecurrence: (id: string, rule: Recurrence) =>
+    request<Activity>(`/api/activities/${id}/recurrence`, { method: 'PUT', body: JSON.stringify(rule) }),
+
+  removeRecurrence: (id: string) => request<Activity>(`/api/activities/${id}/recurrence`, { method: 'DELETE' }),
 }
 
 export const activitySubtasksApi = {
@@ -112,15 +117,40 @@ export const activitySubtasksApi = {
     request<void>(`/api/activities/${activityId}/subtasks/${id}`, { method: 'DELETE' }),
 }
 
+const projected = new Map<string, { activityId: string; seriesDate: string }>()
+const materializing = new Map<string, Promise<void>>()
+
+function noteProjected(list: Occurrence[]): Occurrence[] {
+  for (const o of list) {
+    if (o.isProjected && o.seriesDate) projected.set(o.id, { activityId: o.activityId, seriesDate: o.seriesDate })
+    else projected.delete(o.id)
+  }
+  return list
+}
+
+async function real(id: string): Promise<string> {
+  const target = projected.get(id)
+  if (!target) return id
+  let pending = materializing.get(id)
+  if (!pending) {
+    pending = request<Occurrence>('/api/occurrences/materialize', { method: 'POST', body: JSON.stringify(target) })
+      .then(() => { projected.delete(id) })
+      .finally(() => { materializing.delete(id) })
+    materializing.set(id, pending)
+  }
+  await pending
+  return id
+}
+
 export const occurrenceSubtasksApi = {
-  create: (occurrenceId: string, body: { title: string }) =>
-    request<Occurrence>(`/api/occurrences/${occurrenceId}/subtasks`, { method: 'POST', body: JSON.stringify(body) }),
+  create: async (occurrenceId: string, body: { title: string }) =>
+    request<Occurrence>(`/api/occurrences/${await real(occurrenceId)}/subtasks`, { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (occurrenceId: string, id: string, body: { title: string }) =>
-    request<Occurrence>(`/api/occurrences/${occurrenceId}/subtasks/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  update: async (occurrenceId: string, id: string, body: { title: string }) =>
+    request<Occurrence>(`/api/occurrences/${await real(occurrenceId)}/subtasks/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 
-  delete: (occurrenceId: string, id: string) =>
-    request<Occurrence>(`/api/occurrences/${occurrenceId}/subtasks/${id}`, { method: 'DELETE' }),
+  delete: async (occurrenceId: string, id: string) =>
+    request<Occurrence>(`/api/occurrences/${await real(occurrenceId)}/subtasks/${id}`, { method: 'DELETE' }),
 }
 
 // Full subtask set for occurrence updates: id set = keep existing, id null = create new.
@@ -139,7 +169,7 @@ export const occurrencesApi = {
     if (params?.floating) q.set('floating', 'true')
     if (params?.goalId) q.set('goalId', params.goalId)
     if (params?.activityId) q.set('activityId', params.activityId)
-    return request<Occurrence[]>(`/api/occurrences${q.size ? `?${q}` : ''}`)
+    return request<Occurrence[]>(`/api/occurrences${q.size ? `?${q}` : ''}`).then(noteProjected)
   },
 
   get: (id: string) => request<Occurrence>(`/api/occurrences/${id}`),
@@ -148,20 +178,20 @@ export const occurrencesApi = {
     request<Occurrence>('/api/occurrences', { method: 'POST', body: JSON.stringify(body) }),
 
   // activityId re-points the occurrence at another activity; omit it to leave the link alone.
-  update: (id: string, body: { activityId?: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; durationMinutes?: number | null; subtasks?: SubtaskInput[] }) =>
-    request<Occurrence>(`/api/occurrences/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  update: async (id: string, body: { activityId?: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; durationMinutes?: number | null; subtasks?: SubtaskInput[] }) =>
+    request<Occurrence>(`/api/occurrences/${await real(id)}`, { method: 'PUT', body: JSON.stringify(body) }),
 
-  delete: (id: string) => request<void>(`/api/occurrences/${id}`, { method: 'DELETE' }),
+  delete: async (id: string) => request<void>(`/api/occurrences/${await real(id)}`, { method: 'DELETE' }),
 
   // Wipes occurrences (and events); activities, categories and goals stay. pastOnly keeps today onward.
   clearAll: (pastOnly = false) =>
     request<void>(`/api/occurrences${pastOnly ? '?pastOnly=true' : ''}`, { method: 'DELETE' }),
 
-  setStatus: (id: string, status: import('./types').EventStatus) =>
-    request<Occurrence>(`/api/occurrences/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+  setStatus: async (id: string, status: import('./types').EventStatus) =>
+    request<Occurrence>(`/api/occurrences/${await real(id)}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
 
-  toggleSubtask: (id: string, subtaskId: string) =>
-    request<Occurrence>(`/api/occurrences/${id}/subtasks/${subtaskId}/toggle`, { method: 'POST' }),
+  toggleSubtask: async (id: string, subtaskId: string) =>
+    request<Occurrence>(`/api/occurrences/${await real(id)}/subtasks/${subtaskId}/toggle`, { method: 'POST' }),
 
   createEvent: (body: { title: string; categoryId?: string | null; goalId?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; durationMinutes?: number | null }) =>
     request<Occurrence>('/api/occurrences/event', { method: 'POST', body: JSON.stringify(body) }),

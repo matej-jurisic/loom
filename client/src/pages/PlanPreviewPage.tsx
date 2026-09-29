@@ -302,10 +302,12 @@ export function PlanPreviewPage() {
     [effectiveToday.getTime()],
   )
 
-  const overdueEvents = useMemo(
-    () => (isToday ? allOccurrences.filter(isBehind).sort((a, b) => refTime(a) - refTime(b)) : []),
-    [allOccurrences, isToday, isBehind],
-  )
+  const overdueEvents = useMemo(() => {
+    if (!isToday) return []
+    const behind = new Map<string, Occurrence>()
+    for (const o of [...allOccurrences, ...occurrences]) if (isBehind(o)) behind.set(o.id, o)
+    return [...behind.values()].sort((a, b) => refTime(a) - refTime(b))
+  }, [allOccurrences, occurrences, isToday, isBehind])
 
   // A planned occurrence that already has a time is a commitment on this day like any other, so
   // it belongs on the timeline - its dashed row styling is what says the time is a window. The

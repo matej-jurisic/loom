@@ -7,3 +7,4 @@ public enum CheckpointSize { tiny, small, normal, big, huge }
 public enum ActivityKind { activity, @event }
 
 public enum GoalKind { milestone, ongoing }
+public enum RecurrenceFrequency { daily, weekly, monthly }

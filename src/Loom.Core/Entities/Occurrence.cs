@@ -17,6 +17,7 @@ public class Occurrence
     public DateTimeOffset? WindowStart { get; set; }
     public DateTimeOffset? WindowEnd { get; set; }
     public int? WindowDurationMinutes { get; set; }
+    public DateOnly? SeriesDate { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public Activity Activity { get; set; } = null!;

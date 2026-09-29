@@ -52,6 +52,22 @@ public static class ActivityEndpoints
             return result.IsSuccess ? Results.NoContent() : result.Error!.ToProblem();
         });
 
+        group.MapPut("/{id:guid}/recurrence", async (Guid id, SetRecurrenceRequest req, ClaimsPrincipal principal, ActivityService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.SetRecurrenceAsync(id, userId.Value, req);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToProblem();
+        });
+
+        group.MapDelete("/{id:guid}/recurrence", async (Guid id, ClaimsPrincipal principal, ActivityService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.RemoveRecurrenceAsync(id, userId.Value);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToProblem();
+        });
+
         subtasks.MapPost("/", async (Guid activityId, CreateActivitySubtaskRequest req, ClaimsPrincipal principal, ActivitySubtaskService svc) =>
         {
             var userId = principal.GetUserId();

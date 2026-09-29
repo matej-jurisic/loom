@@ -51,6 +51,14 @@ public static class OccurrenceEndpoints
                 : result.Error!.ToProblem();
         });
 
+        group.MapPost("/materialize", async (MaterializeOccurrenceRequest req, ClaimsPrincipal principal, OccurrenceService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.MaterializeAsync(userId.Value, req);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToProblem();
+        });
+
         group.MapPut("/{id:guid}", async (Guid id, UpdateOccurrenceRequest req, ClaimsPrincipal principal, OccurrenceService svc) =>
         {
             var userId = principal.GetUserId();

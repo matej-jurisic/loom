@@ -17,6 +17,8 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<ActivitySubtask> ActivitySubtasks => Set<ActivitySubtask>();
     public DbSet<OccurrenceSubtask> OccurrenceSubtasks => Set<OccurrenceSubtask>();
+    public DbSet<ActivityRecurrence> ActivityRecurrences => Set<ActivityRecurrence>();
+    public DbSet<RecurrenceExclusion> RecurrenceExclusions => Set<RecurrenceExclusion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -41,9 +43,37 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
         modelBuilder.Entity<Occurrence>()
             .HasIndex(o => new { o.UserId, o.Status });
 
+        modelBuilder.Entity<Occurrence>()
+            .HasIndex(o => new { o.ActivityId, o.SeriesDate })
+            .IsUnique();
+
         modelBuilder.Entity<Activity>()
             .Property(a => a.Kind)
             .HasConversion<string>();
+
+        modelBuilder.Entity<ActivityRecurrence>()
+            .Property(r => r.Frequency)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<ActivityRecurrence>()
+            .HasOne(r => r.Activity)
+            .WithOne(a => a.Recurrence)
+            .HasForeignKey<ActivityRecurrence>(r => r.ActivityId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ActivityRecurrence>()
+            .HasIndex(r => r.ActivityId)
+            .IsUnique();
+
+        modelBuilder.Entity<RecurrenceExclusion>()
+            .HasOne(e => e.Activity)
+            .WithMany()
+            .HasForeignKey(e => e.ActivityId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<RecurrenceExclusion>()
+            .HasIndex(e => new { e.ActivityId, e.SeriesDate })
+            .IsUnique();
 
         modelBuilder.Entity<Activity>()
             .HasOne(a => a.Category)

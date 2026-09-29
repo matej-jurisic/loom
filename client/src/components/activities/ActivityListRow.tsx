@@ -1,4 +1,5 @@
-import { Check, History, Pencil, Trash2 } from 'lucide-react'
+import { Check, History, Pencil, Repeat, Trash2 } from 'lucide-react'
+import { describeRecurrence } from '@/lib/recurrence'
 import type { Activity } from '@/lib/types'
 import { Badge } from '@/components/ui/Badge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
@@ -43,7 +44,7 @@ export function ActivityListRow({
 
   const showCategory = !hideCategory && category
   const showGoal = !hideGoal && activity.goal
-  const hasMeta = showCategory || showGoal || activity.subtasks.length > 0
+  const hasMeta = showCategory || showGoal || activity.subtasks.length > 0 || activity.recurrence !== null
 
   return (
     <li
@@ -101,6 +102,12 @@ export function ActivityListRow({
                   strokeWidth={2}
                 />
                 {category!.name}
+              </span>
+            )}
+            {activity.recurrence && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Repeat className="h-3 w-3 shrink-0" strokeWidth={2} />
+                {describeRecurrence(activity.recurrence)}
               </span>
             )}
             {activity.subtasks.length > 0 && (
