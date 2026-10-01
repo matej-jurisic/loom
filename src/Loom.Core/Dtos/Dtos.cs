@@ -21,9 +21,9 @@ public sealed record CategorySummaryDto(Guid Id, string Name, string Color, stri
     public static CategorySummaryDto FromEntity(Entities.Category c) => new(c.Id, c.Name, c.Color, c.Icon);
 }
 
-public sealed record GoalSummaryDto(Guid Id, string Title, string Status, string Kind)
+public sealed record GoalSummaryDto(Guid Id, string Title, string Status)
 {
-    public static GoalSummaryDto FromEntity(Goal g) => new(g.Id, g.Title, g.Status.ToString(), g.Kind.ToString());
+    public static GoalSummaryDto FromEntity(Goal g) => new(g.Id, g.Title, g.Status.ToString());
 }
 
 // Activities
@@ -38,6 +38,7 @@ public sealed record ActivityDto(
     CategorySummaryDto? Category,
     GoalSummaryDto? Goal,
     List<ActivitySubtaskDto> Subtasks,
+    List<ActivityWorkTypeDto> WorkTypes,
     // How many occurrences this activity has in the recent window (see ActivityService.RecentWindowDays).
     // Only the list endpoint fills it; single-activity responses leave it at 0.
     int RecentOccurrenceCount = 0)
@@ -47,6 +48,7 @@ public sealed record ActivityDto(
         a.Category is not null ? CategorySummaryDto.FromEntity(a.Category) : null,
         a.Goal is not null ? GoalSummaryDto.FromEntity(a.Goal) : null,
         a.Subtasks.OrderBy(s => s.CreatedAt).Select(ActivitySubtaskDto.FromEntity).ToList(),
+        a.WorkTypes.Where(w => !w.IsArchived).OrderBy(w => w.CreatedAt).Select(ActivityWorkTypeDto.FromEntity).ToList(),
         recentOccurrenceCount);
 }
 
@@ -61,6 +63,31 @@ public sealed record ActivitySubtaskDto(Guid Id, Guid ActivityId, string Title, 
 
 public sealed record CreateActivitySubtaskRequest(string Title);
 public sealed record UpdateActivitySubtaskRequest(string Title);
+
+public sealed record ActivityWorkTypeDto(Guid Id, Guid ActivityId, string Title, DateTimeOffset CreatedAt)
+{
+    public static ActivityWorkTypeDto FromEntity(ActivityWorkType w) => new(w.Id, w.ActivityId, w.Title, w.CreatedAt);
+}
+
+public sealed record CreateActivityWorkTypeRequest(string Title);
+public sealed record UpdateActivityWorkTypeRequest(string Title);
+
+public sealed record TimeSplitDto(Guid Id, Guid WorkTypeId, string Title, int Minutes, bool IsPinned)
+{
+    public static List<TimeSplitDto> FromOccurrence(Occurrence o)
+    {
+        var rows = o.TimeSplits.OrderBy(t => t.Position).ThenBy(t => t.CreatedAt).ToList();
+        var resolved = TimeSplitMath.Resolve(
+            TimeSplitMath.DurationMinutes(o.StartAt, o.EndAt),
+            rows.Select(t => t.Minutes).ToList());
+        return rows
+            .Select((t, i) => new TimeSplitDto(t.Id, t.WorkTypeId, t.WorkType.Title, resolved[i], t.Minutes.HasValue))
+            .ToList();
+    }
+}
+
+public sealed record TimeSplitInput(Guid WorkTypeId, int? Minutes);
+public sealed record SetTimeSplitRequest(List<TimeSplitInput> Rows);
 
 // Occurrence subtasks (per-occurrence copy)
 public sealed record OccurrenceSubtaskDto(Guid Id, Guid OccurrenceId, string Title, bool IsDone, DateTimeOffset CreatedAt)
@@ -115,6 +142,7 @@ public sealed record OccurrenceDto(
     DateTimeOffset? WindowEnd,
     int? WindowDurationMinutes,
     List<OccurrenceSubtaskDto> Subtasks,
+    List<TimeSplitDto> TimeSplit,
     ActivityDto Activity,
     Guid? DeadlineOccurrenceId = null,
     DeadlineRefDto? Deadline = null,
@@ -131,6 +159,7 @@ public sealed record OccurrenceDto(
         o.IsPlanned,
         o.WindowStart, o.WindowEnd, o.WindowDurationMinutes,
         o.Subtasks.OrderBy(s => s.CreatedAt).Select(OccurrenceSubtaskDto.FromEntity).ToList(),
+        TimeSplitDto.FromOccurrence(o),
         ActivityDto.FromEntity(o.Activity),
         o.DeadlineOccurrenceId);
 }
@@ -180,11 +209,11 @@ public sealed record SetOccurrenceStatusRequest(EventStatus Status);
 // Goals
 public sealed record GoalOccurrenceStats(int Done, int Skipped, int Pending);
 
-/// <summary>One day of an ongoing goal's history. Days with nothing on them are not sent.</summary>
+/// <summary>One day of a goal's history. Days with nothing on them are not sent.</summary>
 public sealed record GoalHeatmapDay(DateOnly Date, int Done, int Skipped);
 
 /// <summary>
-/// Trailing window of per-day done/skipped counts for an ongoing goal. <c>Start</c> and <c>End</c>
+/// Trailing window of per-day done/skipped counts for a goal. <c>Start</c> and <c>End</c>
 /// are days in the user's timezone offset by the day boundary, so the client lays the grid out from
 /// them rather than recomputing "today" locally.
 /// </summary>
@@ -197,7 +226,6 @@ public sealed record GoalDto(
     string? Description,
     string? Notes,
     string Status,
-    string Kind,
     DateTimeOffset CreatedAt,
     List<CheckpointDto> Checkpoints,
     GoalOccurrenceStats? OccurrenceStats = null,
@@ -210,13 +238,13 @@ public sealed record GoalDto(
         DateTimeOffset? lastOccurrenceAt = null,
         GoalHeatmap? heatmap = null) => new(
         g.Id, g.UserId, g.Title, g.Description, g.Notes,
-        g.Status.ToString(), g.Kind.ToString(), g.CreatedAt,
+        g.Status.ToString(), g.CreatedAt,
         g.Checkpoints.Select(CheckpointDto.FromEntity).ToList(),
         stats, lastOccurrenceAt, heatmap);
 }
 
-public sealed record CreateGoalRequest(string Title, string? Description, GoalKind Kind = GoalKind.milestone, string? Notes = null);
-public sealed record UpdateGoalRequest(string Title, string? Description, GoalKind Kind = GoalKind.milestone, string? Notes = null);
+public sealed record CreateGoalRequest(string Title, string? Description, string? Notes = null);
+public sealed record UpdateGoalRequest(string Title, string? Description, string? Notes = null);
 public sealed record SetGoalStatusRequest(GoalStatus Status);
 
 // Checkpoints
@@ -253,7 +281,9 @@ public sealed record UpdateCategoryRequest(string Name, string Color, string? Ic
 // Every stat here sums only what the user chose to log. Nothing divides by the length of a day or
 // reads meaning into unlogged time: the app does not assume the calendar is complete, so a stat that
 // needed it to be would simply be wrong.
-public sealed record InsightsActivityDto(Guid ActivityId, string Title, string? CategoryColor, int TimeMinutes, int Count);
+public sealed record InsightsWorkTypeDto(Guid WorkTypeId, string Title, int TimeMinutes);
+
+public sealed record InsightsActivityDto(Guid ActivityId, string Title, string? CategoryColor, int TimeMinutes, int Count, List<InsightsWorkTypeDto> WorkTypes);
 
 public sealed record InsightsCategoryDto(Guid? CategoryId, string? Name, string? Color, string? Icon, int Done, int TimeMinutes);
 
@@ -277,6 +307,7 @@ public sealed record ExportOccurrenceDto(
     int? WindowDurationMinutes,
     DateTimeOffset CreatedAt,
     List<OccurrenceSubtaskDto> Subtasks,
+    List<TimeSplitDto> TimeSplit,
     Guid? DeadlineOccurrenceId)
 {
     public static ExportOccurrenceDto FromEntity(Occurrence o) => new(
@@ -284,6 +315,7 @@ public sealed record ExportOccurrenceDto(
         o.StartAt, o.EndAt, o.IsAllDay, o.IsPlanned,
         o.WindowStart, o.WindowEnd, o.WindowDurationMinutes, o.CreatedAt,
         o.Subtasks.OrderBy(s => s.CreatedAt).Select(OccurrenceSubtaskDto.FromEntity).ToList(),
+        TimeSplitDto.FromOccurrence(o),
         o.DeadlineOccurrenceId);
 }
 

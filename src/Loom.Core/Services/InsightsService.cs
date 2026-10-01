@@ -26,6 +26,8 @@ public class InsightsService(LoomDbContext db, UserSettingsService settings)
         var completed = await db.Occurrences
             .AsNoTracking()
             .Include(o => o.Activity).ThenInclude(a => a.Category)
+            .Include(o => o.TimeSplits).ThenInclude(t => t.WorkType)
+            .AsSplitQuery()
             .Where(o => o.UserId == userId && o.Status == EventStatus.done && o.StartAt != null)
             .ToListAsync();
 
@@ -51,7 +53,8 @@ public class InsightsService(LoomDbContext db, UserSettingsService settings)
                     first.Activity.Title,
                     first.Activity.Category?.Color,
                     g.Sum(x => x.Minutes),
-                    g.Count());
+                    g.Count(),
+                    WorkTypeTotals(g.Select(x => x.Occurrence)));
             })
             .OrderByDescending(a => a.TimeMinutes)
             .ThenByDescending(a => a.Count)
@@ -73,4 +76,14 @@ public class InsightsService(LoomDbContext db, UserSettingsService settings)
 
         return new InsightsDto(activities, categories);
     }
+
+    private static List<InsightsWorkTypeDto> WorkTypeTotals(IEnumerable<Entities.Occurrence> occurrences) =>
+        occurrences
+            .SelectMany(TimeSplitDto.FromOccurrence)
+            .Where(t => t.Minutes > 0)
+            .GroupBy(t => t.WorkTypeId)
+            .Select(g => new InsightsWorkTypeDto(g.Key, g.First().Title, g.Sum(t => t.Minutes)))
+            .OrderByDescending(w => w.TimeMinutes)
+            .ThenBy(w => w.Title)
+            .ToList();
 }

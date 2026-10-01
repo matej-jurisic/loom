@@ -113,14 +113,14 @@ The panes are separated by a 1px `border-[var(--border)]` vertical divider. No g
 - **Delete is an icon-only square button**, never a labelled one: `Trash2` in `text-destructive` on a transparent ground, hover `bg-destructive/10`, sized to the row it sits in (`h-9 w-9` beside md buttons, `h-8 w-8` beside sm). It carries the name in `aria-label`, swaps the icon for an inline spinner while the delete is in flight, and always opens a `ConfirmDialog` rather than acting. Where the same footer holds Cancel and Save it gets `mr-auto`, so the full width separates it from the button the user actually meant to press. Used by `EventDetailModal`.
 - The `Button` component sets no gap between its children, so **never give a `Button` an icon and a label together** - they render flush and read as one glyph. Icon plus label is a hand-rolled `flex ... gap-1.5` button (see the empty-state "New Activity" button).
 
-### Activity history dialog
+### History dialog
 
-- Titled `<activity> - history`, opened from an activity row's action menu. Meta line first (category, goal badge), then four stat tiles, then the day strip, then the recent list. Widest-to-narrowest: the tiles answer the question in one glance, the strip shows the shape, the list is the detail you only sometimes want.
+- Shared by activities and goals (`OccurrenceHistoryModal`). Titled `<name> - history`, opened from a row's or goal card's action menu. Activities get a meta line first (category, goal badge); goals have none, then four stat tiles, then the day strip, then the recent list. Widest-to-narrowest: the tiles answer the question in one glance, the strip shows the shape, the list is the detail you only sometimes want.
 - **Stat tiles:** `grid-cols-2 sm:grid-cols-4`, each `rounded-lg border border-border bg-muted/40 px-2.5 py-2` with a `text-[10px] uppercase tracking-wide` label over a `text-sm` value. A tile with nothing to show reads `Unknown` in muted text rather than vanishing: a missing figure is itself an answer, and four tiles that come and go make the dialog resize between activities.
 - **Day strip:** centered, laid out the way a calendar is - seven weekday columns under their `Mon`-`Sun` names, eight week rows, current week last. Eight is two months: enough to read a rhythm, not so much that the grid outweighs the tiles above it. Cells are `h-7 w-7 rounded-[4px]` with `gap-1`, sized so a three-letter weekday fits above the column rather than being abbreviated to an initial. Done is solid `bg-primary`, skipped `bg-muted-foreground/60`, pending an outlined `border-primary/50 bg-primary/10`, an empty day flat `bg-muted`, and a day that has not happened yet nothing at all. Each cell carries its date as a `title`; the legend, also centered, spells out the three fills and the window.
-- **Recent list:** the activity detail page's occurrence row, at ten rows: status dot, date with `HH:mm` in mono when the occurrence has a time, status word on the right. The box is a **fixed `h-[11.5rem]`** that scrolls - the row count is the one thing here that varies with the data, so it is the one thing not allowed to set the dialog's height.
-- **While loading**, the whole shell renders at its final height: tiles with a pulsing bar where the value goes, the strip empty (its size does not depend on the data), and five placeholder rows filling the recent box. The panel is animating in as the request lands, so it must already be its final height - a shell that grows into the answer reads as a stutter, and the first open is exactly when it happens.
-- **Read-only**: the two footer buttons are `Close` and an outlined `Open activity` that leads to the detail page for anything this dialog deliberately leaves out.
+- **Recent list:** an occurrence row at ten rows: status dot, date with `HH:mm` in mono when the occurrence has a time, status word on the right. The list is styled like the Edit Activity subtask list (bordered `divide-y` `ul`, so the last row closes cleanly) with a `max-h-60` that scrolls; each row shows the occurrence title over its date.
+- **While loading**, the whole shell renders at its final height: tiles with a pulsing bar where the value goes, the strip empty (its size does not depend on the data), and five placeholder rows in the same bordered shape. The panel is animating in as the request lands, so it must already be its final height - a shell that grows into the answer reads as a stutter, and the first open is exactly when it happens.
+- **Read-only**: the footer holds a single `Close` button.
 
 ### Checkboxes (events)
 
@@ -134,6 +134,32 @@ Quiet metadata, never a badge or progress bar. On a list row's meta line a linke
 `Flag` icon and the deadline's title in `text-muted-foreground`, truncated; the deadline itself shows
 "3 sessions, 4h 30m" in the same tone. The detail modal repeats both as icon + text lines. The edit
 modal's "Deadline (optional)" select sits first in "More options", for both kinds.
+
+### Time split
+
+A section at the bottom of the occurrence detail modal, for activity-kind occurrences that have a
+start and an end. It says where the block's time went without adding blocks to the calendar.
+
+- **Chips** list the activity's work types: selected `bg-primary text-primary-foreground`, unselected
+  `bg-muted text-muted-foreground`, all `rounded-full px-2.5 py-1 text-xs`. Tapping toggles the type
+  into the split. A dashed `+ Work type` chip turns into an inline input that creates a type on Enter.
+- **Bar:** one `h-3 rounded-full` track on `bg-muted`, a segment per row sized by its share of the
+  block. Segments are shades of one colour - the category's, else `--primary` - mixed toward
+  `--background` in a fixed sequence, so the bar reads as one occurrence divided, not as several
+  things. Unallocated time is the bare track. From `sm:` each segment edge carries a thin
+  `bg-foreground/50` handle; dragging it moves time between the two neighbours in 15-minute steps
+  (5 for a block under an hour) and pins both. The trailing edge has a handle only when no row is
+  auto, since that is the only case where there is unallocated time for it to trade with.
+- **Rows:** shade dot, title, a right-aligned `tabular-nums` time field, and a trailing slot. The
+  field reads `1h 30m` and accepts `90`, `1h 30m`, `1:30` or `1.5h`; committing a value pins the row.
+  An auto row shows its share in `text-muted-foreground` with a small `AUTO` label in the slot; a
+  pinned row shows `text-foreground` and a `RotateCcw` button there that hands it back to auto.
+  Below `sm` the field is flanked by -15 / +15 steppers, because the bar's handles are hidden there.
+- The heading's right side reads `45m not split` when pinned rows leave a remainder, and nothing
+  otherwise. No percentages anywhere.
+- Every change saves immediately; a failed save restores the last saved rows and raises a toast.
+
+The same list is editable in the Edit Activity dialog (below Subtasks, existing activities only) as a bordered `divide-y` list: click a title to rename it in place, `X` to remove.
 
 ### Cards
 
@@ -206,7 +232,7 @@ The `/plan` view is a single canvas holding (top to bottom):
 2. **Overdue** — `border-destructive/30 bg-destructive/5` card: the count, a "Move to tomorrow" button (`bg-foreground text-background`), then the rows in a plain card list.
 3. **Timeline agenda** — a three-column grid (content-sized time gutter, 0.75rem spine, fluid rows) so every row shares one time column. The spine is a 1px `border` line with a 2px dot per row, ringed in `background`; the current time is a primary label, dot, and hairline splitting past from upcoming. Relative labels ("now", "in 40m") sit under the gutter time. No hour grid: this is a checklist, not a scheduling surface. A pending **planned** row reads as soft rather than fixed: its gutter time carries a `~` and its spine dot is hollow (`border-2 bg-background`), the flat echo of the calendar's dashed block.
 4. **Planned** and **Floating** — uppercase section labels over bordered card lists. These are the holding places: something can live here indefinitely without a time, which is the point. Planned holds only what has no hour (all-day, or a window with no start) - anything with a start time is on the timeline above.
-5. **Focus goal chips** and **Goal activity** — closing the page under a `border-t` rule: one bordered chip per Focus goal in a 1-up / `sm:`2-up grid (status dot, title, last-session recency, and either the milestone percentage in mono or the ongoing occurrence bar), then the summed goal heatmap. **The day's own lists open the page; goals are the standing context under them, not a gate in front of them.** There is deliberately no completion ring and no done/left/planned stat row: those score how much of a day was executed, which turns the page into a report card for a schedule the app never asked you to keep.
+5. **Focus goal chips** and **Goal activity** — closing the page under a `border-t` rule: one bordered chip per Focus goal in a 1-up / `sm:`2-up grid (status dot, title, last-session recency, and the checkpoint percentage in mono when it has checkpoints, and the occurrence bar when it has linked occurrences), then the summed goal heatmap. **The day's own lists open the page; goals are the standing context under them, not a gate in front of them.** There is deliberately no completion ring and no done/left/planned stat row: those score how much of a day was executed, which turns the page into a report card for a schedule the app never asked you to keep.
 
 Mobile: single column.
 
@@ -260,8 +286,9 @@ One `max-w-2xl` column of sections, each an uppercase label over a bordered card
 
 Everything on this page is a **sum of what was logged**. Nothing is a percentage of a day and nothing counts what is missing, so the page stays honest however sparse the calendar is.
 
-- **Period toggle:** segmented control (7 days / 30 days) on a `bg-muted` track with a `p-0.5` inset; the active option is a raised `bg-card` chip. Sits above the first section, left-aligned.
+- **Period toggle:** segmented control (7 days / 30 days / 90 days / 1 year) on a `bg-muted` track with a `p-0.5` inset; the active option is a raised `bg-card` chip. Sits above the first section, left-aligned.
 - **Time by activity / by category:** rows with title (category rows lead with the category icon; never colored text), duration right-aligned (`tabular-nums`), and a 4px proportional bar underneath in the category's own color on a `bg-muted` track. Uncategorized uses `CircleDashed` + muted tones.
+- **Work type breakdown:** under an activity's bar, when it has split time: indented `text-xs text-muted-foreground` lines of type and duration, largest first, closing with an italic `Not split` line for the remainder. No bars of their own - they are a footnote to the activity's total, not competing rows.
 
 ---
 

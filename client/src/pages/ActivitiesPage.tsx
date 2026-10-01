@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
 import {
   Plus,
   Layers,
@@ -46,7 +45,6 @@ interface Section {
 
 export function ActivitiesPage() {
   const qc = useQueryClient();
-  const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Activity | undefined>();
   const [deleting, setDeleting] = useState<Activity | null>(null);
@@ -377,7 +375,6 @@ export function ActivitiesPage() {
                               selecting={selecting}
                               selected={selected.has(a.id)}
                               onToggleSelect={() => toggleSelected(a.id)}
-                              onOpen={() => navigate(`/activities/${a.id}`)}
                               onEdit={() => openEdit(a)}
                               onDelete={() => setDeleting(a)}
                               onHistory={() => setHistoryFor(a)}

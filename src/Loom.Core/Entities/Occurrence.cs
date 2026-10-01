@@ -22,4 +22,5 @@ public class Occurrence
     public Activity Activity { get; set; } = null!;
     public Occurrence? DeadlineOccurrence { get; set; }
     public List<OccurrenceSubtask> Subtasks { get; set; } = [];
+    public List<OccurrenceTimeSplit> TimeSplits { get; set; } = [];
 }

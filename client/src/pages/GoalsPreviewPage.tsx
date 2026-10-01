@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { Plus, Pencil, Trash2, Check } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, History } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { goalsApi, checkpointsApi, ApiError } from '@/lib/api'
 import { toastError } from '@/store/toasts'
@@ -9,6 +8,7 @@ import type { Goal, GoalStatus, Checkpoint, CheckpointSize } from '@/lib/types'
 import { OccurrenceHeatmap } from '@/components/events/OccurrenceHeatmap'
 import { GoalModal } from '@/components/goals/GoalModal'
 import { CheckpointModal } from '@/components/goals/CheckpointModal'
+import { GoalHistoryModal } from '@/components/goals/GoalHistoryModal'
 import { ActionMenu, type ActionMenuEntry } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 
@@ -238,19 +238,18 @@ function CheckpointBreakdown({ goal, tierColor, onEditCheckpoint }: { goal: Goal
 
 interface GoalCardProps {
   goal: Goal
-  onView: (g: Goal) => void
+  onHistory: (g: Goal) => void
   onEdit: (g: Goal) => void
   onAddCheckpoint: (goalId: string) => void
   onEditCheckpoint: (goalId: string, cp: Checkpoint) => void
 }
 
-function GoalCard({ goal, onView, onEdit, onAddCheckpoint, onEditCheckpoint }: GoalCardProps) {
+function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint }: GoalCardProps) {
   const qc = useQueryClient()
   const [statusError, setStatusError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const tier = (goal.status === 'closed' ? 'bench' : goal.status) as Tier
   const tierColor = TIER_META[tier].varName
-  const isMilestone = goal.kind === 'milestone'
   const believed = believedProgress(goal.checkpoints)
   const transitions = STATUS_TRANSITIONS[goal.status]
   const hasCheckpoints = goal.checkpoints.length > 0
@@ -280,7 +279,7 @@ function GoalCard({ goal, onView, onEdit, onAddCheckpoint, onEditCheckpoint }: G
     <div className={`rounded-xl border border-border p-4 transition-opacity ${isClosed ? 'opacity-60' : ''}`}>
       <div className="flex items-start gap-3">
         {/* Progress signal */}
-        {isMilestone ? (
+        {hasCheckpoints ? (
           <ProgressRing pct={believed} color={tierColor} />
         ) : (
           <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: tierColor }} />
@@ -288,17 +287,16 @@ function GoalCard({ goal, onView, onEdit, onAddCheckpoint, onEditCheckpoint }: G
 
         {/* Title block */}
         <div className="min-w-0 flex-1">
-          <button onClick={() => onView(goal)} className="block text-left">
+          <button onClick={() => onEdit(goal)} className="block text-left">
             <span className="text-sm font-semibold text-foreground hover:underline">{goal.title}</span>
           </button>
           {goal.description && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{goal.description}</p>}
-          {(isMilestone ? hasCheckpoints : goal.lastOccurrenceAt) && (
+          {(hasCheckpoints || goal.lastOccurrenceAt) && (
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-              {isMilestone ? (
+              {hasCheckpoints && (
                 <span>{goal.checkpoints.filter((c) => c.status === 'reached').length}/{goal.checkpoints.length} checkpoints</span>
-              ) : (
-                <span>{lastDoneLabel(goal.lastOccurrenceAt)}</span>
               )}
+              {goal.lastOccurrenceAt && <span>{lastDoneLabel(goal.lastOccurrenceAt)}</span>}
             </div>
           )}
         </div>
@@ -309,6 +307,7 @@ function GoalCard({ goal, onView, onEdit, onAddCheckpoint, onEditCheckpoint }: G
           iconClassName="h-3.5 w-3.5"
           items={[
             { icon: Pencil, label: 'Edit goal', onClick: () => onEdit(goal) },
+            { icon: History, label: 'History', onClick: () => onHistory(goal) },
             { icon: Plus, label: 'Add checkpoint', onClick: () => onAddCheckpoint(goal.id) },
             ...(transitions.length > 0 ? ['separator' as const] : []),
             ...transitions.map((t): ActionMenuEntry => ({ label: t.label, onClick: () => statusMutation.mutate(t.value) })),
@@ -319,23 +318,22 @@ function GoalCard({ goal, onView, onEdit, onAddCheckpoint, onEditCheckpoint }: G
       </div>
 
       {/* Body */}
-      {(isMilestone ? hasCheckpoints : !!goal.heatmap) && (
+      {hasCheckpoints && (
         <div className="mt-3">
-          {isMilestone ? (
-            <CheckpointBreakdown goal={goal} tierColor={tierColor} onEditCheckpoint={(cp) => onEditCheckpoint(goal.id, cp)} />
-          ) : (
-            <>
-              {/* Same window either way; the narrow layout just draws the recent end of it. Both
-                  counts are chosen so the grid fills the card at a ~14px square - each is two columns
-                  short of what it would be without the weekday labels, which cost ~28px of width. */}
-              <div className="sm:hidden">
-                <OccurrenceHeatmap heatmap={goal.heatmap!} color={tierColor} weeks={15} showWeekdays />
-              </div>
-              <div className="hidden sm:block">
-                <OccurrenceHeatmap heatmap={goal.heatmap!} color={tierColor} weeks={37} showWeekdays />
-              </div>
-            </>
-          )}
+          <CheckpointBreakdown goal={goal} tierColor={tierColor} onEditCheckpoint={(cp) => onEditCheckpoint(goal.id, cp)} />
+        </div>
+      )}
+      {goal.heatmap && (
+        <div className="mt-3">
+          {/* Same window either way; the narrow layout just draws the recent end of it. Both
+              counts are chosen so the grid fills the card at a ~14px square - each is two columns
+              short of what it would be without the weekday labels, which cost ~28px of width. */}
+          <div className="sm:hidden">
+            <OccurrenceHeatmap heatmap={goal.heatmap} color={tierColor} weeks={15} showWeekdays />
+          </div>
+          <div className="hidden sm:block">
+            <OccurrenceHeatmap heatmap={goal.heatmap} color={tierColor} weeks={37} showWeekdays />
+          </div>
         </div>
       )}
 
@@ -356,7 +354,7 @@ function GoalCard({ goal, onView, onEdit, onAddCheckpoint, onEditCheckpoint }: G
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export function GoalsPreviewPage() {
-  const navigate = useNavigate()
+  const [historyFor, setHistoryFor] = useState<Goal | null>(null)
   const [goalModal, setGoalModal] = useState<{ open: boolean; goal?: Goal }>({ open: false })
   const [cpModal, setCpModal] = useState<{ open: boolean; goalId: string; checkpoint?: Checkpoint }>({ open: false, goalId: '' })
 
@@ -420,7 +418,7 @@ export function GoalsPreviewPage() {
                         <GoalCard
                           key={g.id}
                           goal={g}
-                          onView={(g) => navigate(`/goals/${g.id}`)}
+                          onHistory={setHistoryFor}
                           onEdit={(g) => setGoalModal({ open: true, goal: g })}
                           onAddCheckpoint={(goalId) => setCpModal({ open: true, goalId })}
                           onEditCheckpoint={(goalId, cp) => setCpModal({ open: true, goalId, checkpoint: cp })}
@@ -436,6 +434,12 @@ export function GoalsPreviewPage() {
       </div>
 
       <GoalModal open={goalModal.open} onClose={() => setGoalModal({ open: false })} goal={goalModal.goal} />
+      <GoalHistoryModal
+        open={historyFor !== null}
+        goal={historyFor}
+        color={historyFor ? TIER_META[(historyFor.status === 'closed' ? 'bench' : historyFor.status) as Tier].varName : undefined}
+        onClose={() => setHistoryFor(null)}
+      />
       <CheckpointModal open={cpModal.open} onClose={() => setCpModal({ open: false, goalId: '' })} goalId={cpModal.goalId} checkpoint={cpModal.checkpoint} />
     </div>
   )

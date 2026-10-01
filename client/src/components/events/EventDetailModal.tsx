@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
 import { SkipRescheduleModal } from '@/components/events/SkipRescheduleModal'
+import { TimeSplitEditor } from '@/components/events/TimeSplitEditor'
 import { ActivityHistoryModal } from '@/components/activities/ActivityHistoryModal'
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
@@ -417,6 +418,10 @@ const statusMutation = useMutation({
               ))}
             </ul>
           </div>
+        )}
+
+        {occurrence.activity.kind === 'activity' && (
+          <TimeSplitEditor key={occurrence.id} occurrence={occurrence} />
         )}
       </div>
     </Modal>

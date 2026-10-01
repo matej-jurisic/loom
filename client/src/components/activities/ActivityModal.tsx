@@ -5,6 +5,7 @@ import { activitiesApi, activitySubtasksApi } from '@/lib/api'
 import type { Activity, Goal, Category } from '@/lib/types'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
+import { WorkTypesSection } from '@/components/activities/WorkTypesSection'
 
 interface ActivityModalProps {
   open: boolean
@@ -162,6 +163,8 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
           </div>
         </div>
       )}
+
+      {isEdit && <WorkTypesSection activity={activity!} inModal />}
 
       {mutation.error instanceof Error && (
         <p className="text-sm text-destructive">{mutation.error.message}</p>

@@ -17,6 +17,8 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<ActivitySubtask> ActivitySubtasks => Set<ActivitySubtask>();
     public DbSet<OccurrenceSubtask> OccurrenceSubtasks => Set<OccurrenceSubtask>();
+    public DbSet<ActivityWorkType> ActivityWorkTypes => Set<ActivityWorkType>();
+    public DbSet<OccurrenceTimeSplit> OccurrenceTimeSplits => Set<OccurrenceTimeSplit>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -70,10 +72,6 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
             .Property(g => g.Status)
             .HasConversion<string>();
 
-        modelBuilder.Entity<Goal>()
-            .Property(g => g.Kind)
-            .HasConversion<string>();
-
         modelBuilder.Entity<Checkpoint>()
             .Property(c => c.Status)
             .HasConversion<string>();
@@ -113,6 +111,28 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
             .WithMany(o => o.Subtasks)
             .HasForeignKey(s => s.OccurrenceId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ActivityWorkType>()
+            .HasOne(w => w.Activity)
+            .WithMany(a => a.WorkTypes)
+            .HasForeignKey(w => w.ActivityId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<OccurrenceTimeSplit>()
+            .HasOne(t => t.Occurrence)
+            .WithMany(o => o.TimeSplits)
+            .HasForeignKey(t => t.OccurrenceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<OccurrenceTimeSplit>()
+            .HasOne(t => t.WorkType)
+            .WithMany()
+            .HasForeignKey(t => t.WorkTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<OccurrenceTimeSplit>()
+            .HasIndex(t => new { t.OccurrenceId, t.WorkTypeId })
+            .IsUnique();
     }
 }
 

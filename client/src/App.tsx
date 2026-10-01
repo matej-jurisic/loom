@@ -13,8 +13,6 @@ import { CategoriesPage } from '@/pages/CategoriesPage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { ActivitiesPage } from '@/pages/ActivitiesPage'
-import { GoalDetailPage } from '@/pages/GoalDetailPage'
-import { ActivityDetailPage } from '@/pages/ActivityDetailPage'
 import { InsightsPage } from '@/pages/InsightsPage'
 
 function AppRoutes() {
@@ -63,9 +61,7 @@ function AppRoutes() {
           <Route path="/inbox"    element={<Navigate to="/categories" replace />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/goals"         element={<GoalsPreviewPage />} />
-          <Route path="/goals/:id"     element={<GoalDetailPage />} />
           <Route path="/activities"     element={<ActivitiesPage />} />
-          <Route path="/activities/:id" element={<ActivityDetailPage />} />
           <Route path="/insights"   element={<InsightsPage />} />
           <Route path="/settings"   element={<SettingsPage />} />
           <Route path="/"       element={<Navigate to="/plan" replace />} />

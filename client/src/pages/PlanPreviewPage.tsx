@@ -104,7 +104,7 @@ function formatLastOccurrence(lastAt: string | null): string {
 
 function GoalHealthChip({ goal }: { goal: Goal }) {
   const progress = believedProgress(goal.checkpoints)
-  const isMilestone = goal.kind === 'milestone'
+  const hasCheckpoints = goal.checkpoints.length > 0
   return (
     <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-border px-3 py-2">
       <span className="h-2 w-2 shrink-0 rounded-full bg-goal-focus" />
@@ -112,14 +112,15 @@ function GoalHealthChip({ goal }: { goal: Goal }) {
         <p className="truncate text-xs font-medium text-foreground">{goal.title}</p>
         <p className="text-[10px] text-muted-foreground/70">{formatLastOccurrence(goal.lastOccurrenceAt)}</p>
       </div>
-      <div className="ml-auto shrink-0">
-        {isMilestone ? (
+      <div className="ml-auto flex shrink-0 items-center gap-2.5">
+        {hasCheckpoints && (
           <span className="font-mono text-[11px] text-muted-foreground">{Math.round(progress)}%</span>
-        ) : goal.occurrenceStats ? (
+        )}
+        {goal.occurrenceStats && (
           <div className="flex w-20 items-center gap-1.5">
             <OccurrenceBar stats={goal.occurrenceStats} />
           </div>
-        ) : null}
+        )}
       </div>
     </div>
   )
@@ -160,7 +161,7 @@ function TimelineRow({
   showDate?: boolean
 }) {
   const rel = isToday ? relativeLabel(event, now) : { text: '', tone: 'none' as const }
-  const clock = event.startAt && !event.isAllDay ? formatTime(event.startAt) : event.isAllDay ? 'All day' : '—'
+  const clock = event.startAt && !event.isAllDay ? formatTime(event.startAt) : event.isAllDay ? 'All day' : '-'
   // Planned occurrences share the timeline with scheduled ones now, so the row itself has to
   // say which it is: "~" on the time and a hollow spine dot, the list-view echo of the
   // calendar's dashed block. Its time is a window it sits inside, not an appointment.
@@ -267,7 +268,7 @@ export function PlanPreviewPage() {
 
   const { data: focusGoals = [] } = useQuery({ queryKey: ['goals', { status: 'focus' }], queryFn: () => goalsApi.list({ status: 'focus' }) })
 
-  // Combined across every goal-linked activity, regardless of goal kind or status - "did I do
+  // Combined across every goal-linked activity, regardless of goal status - "did I do
   // something toward a goal today", not any one goal's own card.
   const { data: goalHeatmap } = useQuery({ queryKey: ['goals', 'heatmap'], queryFn: goalsApi.heatmap })
 

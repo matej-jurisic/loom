@@ -18,7 +18,6 @@ interface ActivityListRowProps {
   selecting: boolean
   selected: boolean
   onToggleSelect: () => void
-  onOpen: () => void
   onEdit: () => void
   onDelete: () => void
   onHistory: () => void
@@ -32,7 +31,6 @@ export function ActivityListRow({
   selecting,
   selected,
   onToggleSelect,
-  onOpen,
   onEdit,
   onDelete,
   onHistory,
@@ -86,7 +84,7 @@ export function ActivityListRow({
       )}
 
       <button
-        onClick={selecting ? onToggleSelect : onOpen}
+        onClick={selecting ? onToggleSelect : onEdit}
         className="min-w-0 flex-1 text-left"
       >
         <span className="block truncate text-sm text-foreground">{activity.title}</span>

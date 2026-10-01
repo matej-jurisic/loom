@@ -18,6 +18,7 @@ public class ActivityService(LoomDbContext db)
             .Include(a => a.Category)
             .Include(a => a.Goal)
             .Include(a => a.Subtasks)
+            .Include(a => a.WorkTypes)
             .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
         return a is null
             ? Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."))
@@ -30,6 +31,7 @@ public class ActivityService(LoomDbContext db)
             .Include(a => a.Category)
             .Include(a => a.Goal)
             .Include(a => a.Subtasks)
+            .Include(a => a.WorkTypes)
             .Where(a => a.UserId == userId && a.Kind == ActivityKind.activity);
 
         if (goalId.HasValue)
@@ -98,6 +100,7 @@ public class ActivityService(LoomDbContext db)
             .Include(a => a.Category)
             .Include(a => a.Goal)
             .Include(a => a.Subtasks)
+            .Include(a => a.WorkTypes)
             .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
         if (a is null) return Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."));
 

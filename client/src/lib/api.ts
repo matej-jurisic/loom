@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/store/auth'
 import { getServerUrl, isNative, getNativeRefreshToken, setNativeRefreshToken } from './server-config'
-import type { AuthResponse, User, Goal, GoalStatus, GoalKind, GoalHeatmap, Checkpoint, CheckpointStatus, UserSettings, Category, Activity, ActivitySubtask, Occurrence, Insights } from './types'
+import type { AuthResponse, User, Goal, GoalStatus, GoalHeatmap, Checkpoint, CheckpointStatus, UserSettings, Category, Activity, ActivitySubtask, ActivityWorkType, Occurrence, Insights } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -112,6 +112,22 @@ export const activitySubtasksApi = {
     request<void>(`/api/activities/${activityId}/subtasks/${id}`, { method: 'DELETE' }),
 }
 
+export const activityWorkTypesApi = {
+  create: (activityId: string, body: { title: string }) =>
+    request<ActivityWorkType>(`/api/activities/${activityId}/work-types`, { method: 'POST', body: JSON.stringify(body) }),
+
+  update: (activityId: string, id: string, body: { title: string }) =>
+    request<ActivityWorkType>(`/api/activities/${activityId}/work-types/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  delete: (activityId: string, id: string) =>
+    request<void>(`/api/activities/${activityId}/work-types/${id}`, { method: 'DELETE' }),
+}
+
+export interface TimeSplitInput {
+  workTypeId: string
+  minutes: number | null
+}
+
 export const occurrenceSubtasksApi = {
   create: (occurrenceId: string, body: { title: string }) =>
     request<Occurrence>(`/api/occurrences/${occurrenceId}/subtasks`, { method: 'POST', body: JSON.stringify(body) }),
@@ -163,6 +179,9 @@ export const occurrencesApi = {
   toggleSubtask: (id: string, subtaskId: string) =>
     request<Occurrence>(`/api/occurrences/${id}/subtasks/${subtaskId}/toggle`, { method: 'POST' }),
 
+  setTimeSplit: (id: string, rows: TimeSplitInput[]) =>
+    request<Occurrence>(`/api/occurrences/${id}/time-split`, { method: 'PUT', body: JSON.stringify({ rows }) }),
+
   createEvent: (body: { title: string; categoryId?: string | null; goalId?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; deadlineOccurrenceId?: string | null }) =>
     request<Occurrence>('/api/occurrences/event', { method: 'POST', body: JSON.stringify(body) }),
 
@@ -179,10 +198,10 @@ export const goalsApi = {
 
   get: (id: string) => request<Goal>(`/api/goals/${id}`),
 
-  create: (body: { title: string; description?: string | null; kind?: GoalKind; notes?: string | null }) =>
+  create: (body: { title: string; description?: string | null; notes?: string | null }) =>
     request<Goal>('/api/goals', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (id: string, body: { title: string; description?: string | null; kind?: GoalKind; notes?: string | null }) =>
+  update: (id: string, body: { title: string; description?: string | null; notes?: string | null }) =>
     request<Goal>(`/api/goals/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 
   delete: (id: string) => request<void>(`/api/goals/${id}`, { method: 'DELETE' }),
@@ -190,7 +209,7 @@ export const goalsApi = {
   setStatus: (id: string, status: GoalStatus) =>
     request<Goal>(`/api/goals/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
 
-  // Combined heatmap across every goal-linked activity, regardless of goal kind or status.
+  // Combined heatmap across every goal-linked activity, regardless of goal status.
   heatmap: () => request<GoalHeatmap>('/api/goals/heatmap'),
 }
 

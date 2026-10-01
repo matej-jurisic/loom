@@ -18,10 +18,20 @@ function formatTime(minutes: number): string {
 
 // ── sub-components ─────────────────────────────────────────────────────────
 
-function PeriodToggle({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+const PERIODS = [7, 30, 90, 365] as const
+type Period = (typeof PERIODS)[number]
+
+const PERIOD_LABEL: Record<Period, string> = {
+  7: '7 days',
+  30: '30 days',
+  90: '90 days',
+  365: '1 year',
+}
+
+function PeriodToggle({ value, onChange }: { value: Period; onChange: (v: Period) => void }) {
   return (
     <div className="flex w-fit rounded-lg border border-border bg-muted p-0.5">
-      {([7, 30] as const).map((p) => (
+      {PERIODS.map((p) => (
         <button
           key={p}
           onClick={() => onChange(p)}
@@ -31,7 +41,7 @@ function PeriodToggle({ value, onChange }: { value: number; onChange: (v: number
               : 'text-muted-foreground hover:text-foreground'
           }`}
         >
-          {p === 7 ? '7 days' : '30 days'}
+          {PERIOD_LABEL[p]}
         </button>
       ))}
     </div>
@@ -71,10 +81,35 @@ function ActivityList({ activities }: { activities: InsightsActivity[] }) {
                 }}
               />
             </div>
+            <WorkTypeBreakdown activity={a} />
           </li>
         ))}
       </ul>
     </div>
+  )
+}
+
+function WorkTypeBreakdown({ activity }: { activity: InsightsActivity }) {
+  if (activity.workTypes.length === 0) return null
+
+  const split = activity.workTypes.reduce((sum, w) => sum + w.timeMinutes, 0)
+  const rest = activity.timeMinutes - split
+
+  return (
+    <ul className="mt-1 flex flex-col gap-0.5 pl-3">
+      {activity.workTypes.map((w) => (
+        <li key={w.workTypeId} className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="truncate">{w.title}</span>
+          <span className="ml-auto shrink-0 tabular-nums">{formatTime(w.timeMinutes)}</span>
+        </li>
+      ))}
+      {rest > 0 && (
+        <li className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="truncate italic">Not split</span>
+          <span className="ml-auto shrink-0 tabular-nums">{formatTime(rest)}</span>
+        </li>
+      )}
+    </ul>
   )
 }
 
@@ -123,7 +158,7 @@ function CategoryList({ categories }: { categories: InsightsCategory[] }) {
 // ── page ───────────────────────────────────────────────────────────────────
 
 export function InsightsPage() {
-  const [period, setPeriod] = useState<7 | 30>(7)
+  const [period, setPeriod] = useState<Period>(7)
 
   const { data, isLoading } = useQuery({
     queryKey: ['insights', period],
@@ -142,7 +177,7 @@ export function InsightsPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-6">
-              <PeriodToggle value={period} onChange={(v) => setPeriod(v as 7 | 30)} />
+              <PeriodToggle value={period} onChange={setPeriod} />
 
               <section>
                 <p className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

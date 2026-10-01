@@ -108,6 +108,7 @@ time. Activities are managed at `/activities`.
 | Category | Optional |
 | Kind | `activity` or `event`. Internal, never shown. |
 | Subtasks | Ordered checklist template, copied onto every new occurrence. |
+| Work types | Labels for the kinds of work a session can be split into. Not copied anywhere. |
 
 Deleting an activity cascades to its occurrences. Deleting a goal or category set-nulls the link and
 leaves the activity alive.
@@ -132,11 +133,24 @@ responses leave it at 0. It exists to order the activity picker.
 Two levels, deliberately separate:
 
 - **Activity subtasks** are the template: title only, in creation order, CRUD at
-  `/api/activities/{id}/subtasks`. Edited inline on the activity detail page.
+  `/api/activities/{id}/subtasks`. Edited in the Edit Activity dialog.
 - **Occurrence subtasks** are the copy made when the occurrence is created, and carry `IsDone`. They
   can be toggled from the occurrence detail modal, edited individually, or replaced as a full set on
   an occurrence update (id present = keep and rename, id absent = create, missing = delete, whole
   field omitted = leave untouched).
+
+### Work types
+
+A short list of labels on the activity ("Coding", "Report writing", "Meeting" on "Project work"),
+CRUD at `/api/activities/{id}/work-types`, edited in the Edit Activity dialog, or created from
+an occurrence's time split. Unlike subtasks they are a vocabulary, not a template: nothing is copied
+onto an occurrence, and an occurrence only references the ones it actually used.
+
+- Titles are unique per activity, ignoring case; a duplicate is a 409.
+- Renaming keeps every logged row pointing at the same type, so history stays in one bucket.
+- Removing a type that has time logged against it archives it: it leaves the activity's list and the
+  picker, and the rows that used it keep their label and their time. An unused type is deleted
+  outright. Creating a type with an archived one's title restores that one.
 
 ---
 
@@ -152,6 +166,7 @@ Two levels, deliberately separate:
 | Is planned | Marks a flexible/windowed occurrence (dashed on the calendar, never overdue). May be set on a floating occurrence. |
 | Status | `pending`, `done`, `skipped`. Marking done clears `IsPlanned`. |
 | Subtasks | Per-occurrence checklist with `IsDone`, seeded from the activity's template. |
+| Time split | Optional rows of work type + time, saying where this occurrence's time went. |
 | Deadline | Optional link to a pending event-kind occurrence (`DeadlineOccurrenceId`). Any occurrence may point at one, including another event, so a draft can feed a final. |
 
 **Deadline link.** A "Lab work" session can point at the "Lab 3 report" event it is working toward.
@@ -169,6 +184,23 @@ behaves exactly as before and a partly linked history is still correct.
   contribute nothing. There is deliberately no progress percentage or "on track" signal.
 - Skip-and-reschedule, move-or-skip and calendar duplicate carry the link onto the new copy while the
   target is still pending.
+
+**Time split.** One block on the calendar can cover several kinds of work. Instead of one occurrence
+per kind, the occurrence carries optional rows, each naming one of its activity's work types
+(`PUT /api/occurrences/{id}/time-split`, the full ordered set; an empty list clears it).
+
+- A row is **pinned** (it stores minutes) or **auto** (it stores nothing). Auto rows share whatever
+  the pinned rows leave of the occurrence's length (end minus start) equally, leftover minutes going
+  to the earliest rows. So picking two types with no numbers is an even split, and typing one number
+  leaves the rest to the others. The DTO sends each row's resolved `minutes` and `isPinned`.
+- Pinned minutes may add up to less than the length. The remainder is simply the activity's own
+  time; an occurrence with no rows, or a partly split one, is still correct.
+- Pinned minutes may not add up to more than the length: setting such a split is rejected, and so is
+  an update that shortens the occurrence below its pinned total. Auto rows follow a resize. An
+  occurrence with no measurable length keeps its rows untouched and unchecked.
+- A work type appears at most once per occurrence and must belong to the occurrence's activity.
+  Re-pointing the occurrence at another activity drops its rows.
+- Copies (skip-and-reschedule, duplicate) start with no split: it records what happened, not a plan.
 
 `effectiveTitle` on the DTO is `title ?? activity.title`. The DTO also carries the full activity
 (with its category and goal), which is why occurrence lists are invalidated after an activity write. Legacy `windowStart`/`windowEnd`/`windowDurationMinutes` columns remain on the row
@@ -267,9 +299,8 @@ A sustained intention with measurable progress.
 |---|---|
 | Title | Required |
 | Description | Optional |
-| Notes | Optional markdown, rendered on the goal detail page |
+| Notes | Optional markdown; the goal dialog preserves it but has no field to edit it |
 | Status | `focus`, `active`, `bench`, `closed` |
-| Kind | `milestone` (checkpoint-driven) or `ongoing` (session-driven) |
 | Checkpoints | Unordered list of milestones |
 
 ### Status
@@ -299,16 +330,17 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 
 ### Progress signals
 
-- **Milestone goals** show a progress ring, a weight-proportional composition bar (one segment per
-  checkpoint, sized by its weight, filled when reached), and the checkpoints themselves as chips on
-  desktop or a checklist on mobile - each toggling reached in place.
-- **Ongoing goals** show a heatmap: one square per day for the last 280 days, across every activity
-  linked to the goal, shaded by how many occurrences were completed that day, with a faint red for a
+- **Checkpoints**: a goal with checkpoints shows a progress ring (a plain status dot otherwise), a
+  weight-proportional composition bar (one segment per checkpoint, sized by its weight, filled when
+  reached), and the checkpoints themselves as chips on desktop or a checklist on mobile - each
+  toggling reached in place. Goals without checkpoints show none of these.
+- **Occurrences**: a goal with linked occurrences shows a heatmap: one square per day for the last 280
+  days, across every activity linked to the goal, shaded by how many occurrences were completed that day, with a faint red for a
   day that only holds skips. Days are bucketed server-side in the user's timezone and day boundary,
   so the client never decides which day something belongs to. Pending occurrences are not on the
   grid (nothing has happened yet), and a floating occurrence lands on no day at all. Goals with no
   linked occurrence show no grid rather than an empty one.
-  They also carry `OccurrenceStats` (lifetime done / skipped / pending counts), rendered as a
+  Goals also carry `OccurrenceStats` (lifetime done / skipped / pending counts), rendered as a
   proportional bar on the Plan page's goal chip.
 - **Every goal** carries `lastOccurrenceAt`, the most recent completion across its activities,
   rendered as "active today" / "3d ago" / "2w since last".
@@ -324,12 +356,12 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 | `/plan` | Daily Plan: one day's agenda. Index route. |
 | `/calendar` | Day / 3-day / week grid. Visualization, and the fastest way to add something. |
 | `/categories` | Occurrence lists per category, plus "Active" and "No category". |
-| `/goals`, `/goals/:id` | Goal list with progress, and per-goal detail with notes and checkpoints. |
-| `/activities`, `/activities/:id` | Activity list and detail (subtasks, occurrence history). |
+| `/goals` | Goal list with progress and checkpoints; the row menu edits, adds a checkpoint, changes status, opens History or deletes. |
+| `/activities` | Activity list; clicking a title edits, the row menu opens History. |
 | `/insights` | Totals over what was logged. |
 | `/settings` | Preferences, data export, sign out. |
 
-`/inbox` redirects to `/categories`. `/activities`'s static segment outranks `/activities/:id`.
+`/inbox` redirects to `/categories`.
 
 Navigation: a 240px desktop sidebar (Daily Plan, Calendar, Goals, Activities, Insights, then the
 category list with inline add/edit/delete, and Settings pinned at the bottom); on mobile a 5-slot
@@ -360,11 +392,11 @@ the goal sections, which are standing context rather than something to clear bef
 - **Planned** — the planned occurrences with no hour to place them at: all-day ones, and windows
   whose start was never set. Below the agenda.
 - **Floating** — unplanned occurrences with no date at all, on every day. Below Planned.
-- **Focus goals** — one chip per focus goal: title, last-session recency, and either its milestone
-  percentage or its ongoing occurrence bar.
-- **Goal activity** — a heatmap below the focus chips, same shape and shading as an ongoing goal's
+- **Focus goals** — one chip per focus goal: title, last-session recency, its checkpoint
+  percentage when it has checkpoints, and its occurrence bar when it has linked occurrences.
+- **Goal activity** — a heatmap below the focus chips, same shape and shading as a goal's
   own grid, but summed across every occurrence on an activity linked to *any* goal, regardless of
-  that goal's kind or status: "did I work toward something today", not one goal's own record. Only
+  that goal's status: "did I work toward something today", not one goal's own record. Only
   completed occurrences count here - a skipped one isn't progress, so it puts no day on this grid
   even though it would on a single goal's own heatmap. Hidden when nothing has ever been logged
   toward a goal.
@@ -456,16 +488,17 @@ correct however little else is logged.
 
 ## Insights
 
-Read-only totals over **done occurrences**, computed server-side (`GET /api/insights?period=N`, 7 or
-30 days, the page defaults to 7) in the user's day context. Occurrences with no `StartAt` are
+Read-only totals over **done occurrences**, computed server-side (`GET /api/insights?period=N`; the
+page offers 7, 30, 90 and 365 days and defaults to 7) in the user's day context. Occurrences with no `StartAt` are
 excluded - they have no day to count on.
 
 | Stat | Rule |
 |---|---|
 | Time by activity | Per activity over the window: summed minutes and count, from occurrences with both timestamps and positive elapsed time. Sorted by time. Bars in the activity's category colour. |
+| Time by work type | Under each activity, its time split summed per work type (resolved minutes, archived types included), largest first, with whatever was not split shown as "Not split". Absent when the activity has no split time in the window. |
 | Time by category | Same set grouped by the activity's category; uncategorized completions form a "No category" bucket. |
 
-Both are sums over what the user chose to log. **There is deliberately no stat whose denominator is
+All are sums over what the user chose to log. **There is deliberately no stat whose denominator is
 the length of a day** - no unaccounted time, no gap analysis, no "usually free" profile. Those all
 answer "what is missing from the calendar", which is only a meaningful question if the calendar is
 supposed to be complete, and here it is not. Today counts like any other day, since nothing is
@@ -489,7 +522,7 @@ averaged over days.
 Settings holds preferences only.
 
 **Data export** (`GET /api/export`) is a single JSON document: user, settings, categories, goals with
-checkpoints, activities with subtasks, and flat occurrences (effective title, no nested activity). Good enough to hand to a person or an LLM for analysis; not a
+checkpoints, activities with subtasks and work types, and flat occurrences (effective title, time split, no nested activity). Good enough to hand to a person or an LLM for analysis; not a
 backup format, since there is no import path and the shape may change freely.
 
 ---
@@ -508,10 +541,12 @@ Unauthorized→401, Forbidden→403.
 | `/api/activities` | `GET` (`goalId`), `POST` |
 | `/api/activities/{id}` | `GET`, `PUT`, `DELETE` |
 | `/api/activities/{id}/subtasks[/{subtaskId}]` | `POST`, `PUT`, `DELETE` |
+| `/api/activities/{id}/work-types[/{workTypeId}]` | `POST`, `PUT`, `DELETE` |
 | `/api/occurrences` | `GET` (`status`, `startFrom`, `endBefore`, `floating`, `goalId`, `activityId`), `POST` |
 | `/api/occurrences/{id}` | `GET`, `PUT`, `DELETE` |
 | `/api/occurrences/{id}/status` | `POST` |
 | `/api/occurrences/{id}/subtasks[/{subtaskId}[/toggle]]` | `POST`, `PUT`, `DELETE` |
+| `/api/occurrences/{id}/time-split` | `PUT` |
 | `/api/occurrences/event`, `/api/occurrences/{id}/event` | `POST`, `PUT` |
 | `/api/goals` | `GET` (`status`), `POST` |
 | `/api/goals/{id}` | `GET`, `PUT`, `DELETE` |

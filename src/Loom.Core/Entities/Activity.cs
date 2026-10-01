@@ -16,4 +16,5 @@ public class Activity
     public Category? Category { get; set; }
     public Goal? Goal { get; set; }
     public List<ActivitySubtask> Subtasks { get; set; } = [];
+    public List<ActivityWorkType> WorkTypes { get; set; } = [];
 }

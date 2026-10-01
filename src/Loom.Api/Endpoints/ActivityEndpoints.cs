@@ -10,6 +10,7 @@ public static class ActivityEndpoints
     {
         var group = app.MapGroup("/api/activities").RequireAuthorization();
         var subtasks = app.MapGroup("/api/activities/{activityId:guid}/subtasks").RequireAuthorization();
+        var workTypes = app.MapGroup("/api/activities/{activityId:guid}/work-types").RequireAuthorization();
 
         group.MapGet("/", async (ClaimsPrincipal principal, ActivityService svc, Guid? goalId) =>
         {
@@ -78,5 +79,30 @@ public static class ActivityEndpoints
             return result.IsSuccess ? Results.NoContent() : result.Error!.ToProblem();
         });
 
+        workTypes.MapPost("/", async (Guid activityId, CreateActivityWorkTypeRequest req, ClaimsPrincipal principal, ActivityWorkTypeService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.CreateAsync(activityId, userId.Value, req);
+            return result.IsSuccess
+                ? Results.Created($"/api/activities/{activityId}/work-types/{result.Value!.Id}", result.Value)
+                : result.Error!.ToProblem();
+        });
+
+        workTypes.MapPut("/{id:guid}", async (Guid activityId, Guid id, UpdateActivityWorkTypeRequest req, ClaimsPrincipal principal, ActivityWorkTypeService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.UpdateAsync(id, activityId, userId.Value, req);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToProblem();
+        });
+
+        workTypes.MapDelete("/{id:guid}", async (Guid activityId, Guid id, ClaimsPrincipal principal, ActivityWorkTypeService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.DeleteAsync(id, activityId, userId.Value);
+            return result.IsSuccess ? Results.NoContent() : result.Error!.ToProblem();
+        });
     }
 }

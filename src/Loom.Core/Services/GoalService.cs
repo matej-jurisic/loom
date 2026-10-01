@@ -20,7 +20,6 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
             Title = req.Title.Trim(),
             Description = req.Description?.Trim(),
             Notes = req.Notes?.Trim(),
-            Kind = req.Kind,
         };
         db.Goals.Add(goal);
         await db.SaveChangesAsync();
@@ -34,9 +33,7 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
             .Include(g => g.Checkpoints)
             .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId);
         if (goal is null) return Result<GoalDto>.Fail(new Error(ErrorType.NotFound, "Goal not found."));
-        var progress = goal.Kind == GoalKind.ongoing
-            ? await GetOngoingProgressAsync([goal.Id], userId, nowUtc ?? DateTimeOffset.UtcNow)
-            : [];
+        var progress = await GetProgressAsync([goal.Id], userId, nowUtc ?? DateTimeOffset.UtcNow);
         var lastAt = await GetLastOccurrenceAtAsync([goal.Id], userId);
         var p = progress.GetValueOrDefault(goal.Id);
         return Result<GoalDto>.Success(GoalDto.FromEntity(
@@ -58,12 +55,10 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
 
         var goals = await query.ToListAsync();
 
-        var ongoingIds = goals.Where(g => g.Kind == GoalKind.ongoing).Select(g => g.Id).ToList();
-        var progress = ongoingIds.Count > 0
-            ? await GetOngoingProgressAsync(ongoingIds, userId, nowUtc ?? DateTimeOffset.UtcNow)
-            : [];
-
         var allGoalIds = goals.Select(g => g.Id).ToList();
+        var progress = allGoalIds.Count > 0
+            ? await GetProgressAsync(allGoalIds, userId, nowUtc ?? DateTimeOffset.UtcNow)
+            : [];
         var lastAt = allGoalIds.Count > 0 ? await GetLastOccurrenceAtAsync(allGoalIds, userId) : [];
 
         return goals
@@ -118,11 +113,11 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
     private const int HeatmapDays = 280;
 
     /// <summary>
-    /// Lifetime done/skipped/pending counts and the trailing per-day history for ongoing goals, from
+    /// Lifetime done/skipped/pending counts and the trailing per-day history for goals, from
     /// one pass over their occurrences. Goals with no linked occurrence at all are absent from the
     /// result, so the card renders no progress section rather than an empty one.
     /// </summary>
-    private async Task<Dictionary<Guid, (GoalOccurrenceStats? Stats, GoalHeatmap? Heatmap)>> GetOngoingProgressAsync(
+    private async Task<Dictionary<Guid, (GoalOccurrenceStats? Stats, GoalHeatmap? Heatmap)>> GetProgressAsync(
         List<Guid> goalIds, Guid userId, DateTimeOffset nowUtc)
     {
         var activityGoalMap = await db.Activities
@@ -181,10 +176,10 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
     }
 
     /// <summary>
-    /// One combined heatmap across every activity linked to any goal, regardless of the goal's kind
-    /// or status - "did I do something toward a goal today", not "did I do something toward this
+    /// One combined heatmap across every activity linked to any goal, regardless of the goal's
+    /// status - "did I do something toward a goal today", not "did I do something toward this
     /// goal". Only <c>done</c> occurrences count: a skipped one isn't progress toward a goal, so unlike
-    /// <see cref="GetOngoingProgressAsync"/>'s per-goal grid it never puts a day on this one. Same
+    /// <see cref="GetProgressAsync"/>'s per-goal grid it never puts a day on this one. Same
     /// 280-day window and day-bucketing otherwise, just not split per goal. Used by the Daily Plan page
     /// rather than the goal cards.
     /// </summary>
@@ -237,7 +232,6 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         goal.Title = req.Title.Trim();
         goal.Description = req.Description?.Trim();
         goal.Notes = req.Notes?.Trim();
-        goal.Kind = req.Kind;
         await db.SaveChangesAsync();
         return Result<GoalDto>.Success(GoalDto.FromEntity(goal));
     }

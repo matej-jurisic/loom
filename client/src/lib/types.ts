@@ -12,7 +12,6 @@ export interface AuthResponse {
 
 export type EventStatus = 'pending' | 'done' | 'skipped'
 export type GoalStatus = 'focus' | 'active' | 'bench' | 'closed'
-export type GoalKind = 'milestone' | 'ongoing'
 export type CheckpointStatus = 'pending' | 'reached'
 export type CheckpointSize = 'tiny' | 'small' | 'normal' | 'big' | 'huge'
 export type ActivityKind = 'activity' | 'event'
@@ -21,7 +20,6 @@ export interface GoalSummary {
   id: string
   title: string
   status: GoalStatus
-  kind: GoalKind
 }
 
 export interface Checkpoint {
@@ -60,7 +58,6 @@ export interface Goal {
   description: string | null
   notes: string | null
   status: GoalStatus
-  kind: GoalKind
   createdAt: string
   checkpoints: Checkpoint[]
   occurrenceStats: GoalOccurrenceStats | null
@@ -99,6 +96,21 @@ export interface OccurrenceSubtask {
   createdAt: string
 }
 
+export interface ActivityWorkType {
+  id: string
+  activityId: string
+  title: string
+  createdAt: string
+}
+
+export interface TimeSplitRow {
+  id: string
+  workTypeId: string
+  title: string
+  minutes: number
+  isPinned: boolean
+}
+
 export interface Activity {
   id: string
   userId: string
@@ -110,6 +122,7 @@ export interface Activity {
   category: CategorySummary | null
   goal: GoalSummary | null
   subtasks: ActivitySubtask[]
+  workTypes: ActivityWorkType[]
   /** Occurrences in the last year. Only the list endpoint fills it; single-activity responses send 0. */
   recentOccurrenceCount: number
 }
@@ -128,6 +141,7 @@ export interface Occurrence {
   createdAt: string
   isOverdue: boolean
   subtasks: OccurrenceSubtask[]
+  timeSplit: TimeSplitRow[]
   activity: Activity
   deadlineOccurrenceId: string | null
   deadline: DeadlineRef | null
@@ -144,12 +158,19 @@ export interface DeadlineRef {
   status: EventStatus
 }
 
+export interface InsightsWorkType {
+  workTypeId: string
+  title: string
+  timeMinutes: number
+}
+
 export interface InsightsActivity {
   activityId: string
   title: string
   categoryColor: string | null
   timeMinutes: number
   count: number
+  workTypes: InsightsWorkType[]
 }
 
 export interface InsightsCategory {

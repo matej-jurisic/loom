@@ -20,6 +20,7 @@ public class ExportService(LoomDbContext db)
         var goals = await db.Goals.Include(g => g.Checkpoints).Where(g => g.UserId == userId).ToListAsync();
         var activities = await db.Activities
             .Include(a => a.Subtasks)
+            .Include(a => a.WorkTypes)
             .Include(a => a.Category)
             .Include(a => a.Goal)
             .Where(a => a.UserId == userId)
@@ -27,6 +28,7 @@ public class ExportService(LoomDbContext db)
         var occurrences = await db.Occurrences
             .Include(o => o.Activity)
             .Include(o => o.Subtasks)
+            .Include(o => o.TimeSplits).ThenInclude(t => t.WorkType)
             .Where(o => o.UserId == userId)
             .ToListAsync();
 

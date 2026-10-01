@@ -65,8 +65,11 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 **Backend (`Loom.Core`)**
 - `Entities/` — POCOs; `Guid Id = Guid.NewGuid()` + `DateTimeOffset CreatedAt`, no base class.
   Entities: `User, Activity, Occurrence, Goal, Checkpoint, Category, UserSettings, ActivitySubtask,
-  OccurrenceSubtask` (subtasks are two levels: `ActivitySubtask` is the title-only template, copied
-  into `OccurrenceSubtask` rows — which carry `IsDone` — when an occurrence is created).
+  OccurrenceSubtask, ActivityWorkType, OccurrenceTimeSplit` (subtasks are two levels:
+  `ActivitySubtask` is the title-only template, copied into `OccurrenceSubtask` rows — which carry
+  `IsDone` — when an occurrence is created. Work types are **not** copied: `ActivityWorkType` is a
+  label list on the activity, and an `OccurrenceTimeSplit` row references one, with `Minutes` null
+  meaning "auto").
 - `Enums/` — stored as strings (`HasConversion<string>`).
 - `Data/LoomDbContext.cs` — DbSets + `OnModelCreating`. `Occurrence → Activity` cascade delete; `Activity → Category/Goal` set-null.
 - `Common/Result.cs` — `Result`/`Result<T>` + `Error(ErrorType, msg)`. **Expected failures = Results, not exceptions.**
@@ -74,14 +77,18 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `Common/DayMath.cs` — all "which day / is this overdue?" logic goes through here, in the user's IANA
   timezone offset by `DayBoundaryTime`. Get a `DayContext` via `UserSettingsService.GetDayContextAsync`.
   Key methods: `OccurrenceDay(Occurrence, DayContext)`, `IsOverdue(Occurrence, DayContext, DateTimeOffset)`.
+- `Common/TimeSplitMath.cs` — `Resolve(duration, minutes)`: auto rows share what pinned rows leave.
+  The only place resolved minutes are computed server-side (`TimeSplitDto.FromOccurrence`, which the
+  occurrence DTO, export and `InsightsService` all go through); `client/src/lib/timeSplit.ts` mirrors
+  it for live editing, so change both together.
 - `Dtos/Dtos.cs` — request/response records with `FromEntity` static factory. Never leak entities.
   Key DTOs: `ActivityDto` (has `Kind` — internal activity/event split — and `RecentOccurrenceCount`,
   filled only by `ActivityService.ListAsync`, which orders the new-occurrence modal's picker), `OccurrenceDto` (has
   `EffectiveTitle = title ?? activity.title`, `IsPlanned`),
   `CategoryDto`/`CategorySummaryDto`, `CheckpointDto` (has `Size` enum — not numeric progress).
-  `GoalHeatmap`/`GoalHeatmapDay` are shared by a single goal's `GoalDto.Heatmap` (ongoing goals only,
-  built by `GoalService.GetOngoingProgressAsync`, includes skipped days) and
-  `GoalService.GetAggregateHeatmapAsync` (every goal-linked activity summed together, any kind or
+  `GoalHeatmap`/`GoalHeatmapDay` are shared by a single goal's `GoalDto.Heatmap` (built for every goal with linked occurrences,
+  by `GoalService.GetProgressAsync`, includes skipped days) and
+  `GoalService.GetAggregateHeatmapAsync` (every goal-linked activity summed together, any
   status, `done` occurrences only — skipped ones aren't progress and put no day on the grid — behind
   `GET /api/goals/heatmap`, the Daily Plan's "Goal activity" strip).
 - `Services/*Service.cs` — ctor-inject `LoomDbContext`; return `Result`/`Result<T>`. Registered in `AddLoomCore`.
@@ -92,6 +99,10 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   unchanged, no self/loop); `WithLinksAsync` fills `OccurrenceDto.Deadline` and the target's
   `LinkedDoneCount`/`LinkedDoneMinutes` on every list and single read. On `PUT`, a null id means
   "unchanged" and `ClearDeadline` removes it, so the many full-replace callers need not resend it.
+- `OccurrenceService.SetTimeSplitAsync` — full-set replace of an occurrence's split, keyed by work
+  type. `ValidateTimeSplitFits` runs in both update paths so shortening an occurrence below its
+  pinned total is rejected; re-pointing to another activity drops the rows.
+  `ActivityWorkTypeService.DeleteAsync` archives a type that has rows instead of deleting it.
 - ⚠️ **A child with a pre-set `Guid Id` added to a *tracked* parent's nav collection is treated as an
   existing row** (change detection sees a non-default key) and issues an UPDATE matching nothing. Use
   `db.Set<T>().Add(...)` explicitly — see `OccurrenceService.ApplySubtasks`. Relationship fixup then also appends it to the parent collection,
@@ -117,9 +128,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 **Frontend (`client/src`)**
 - `App.tsx` — auth-gated routing; index → `/plan`.
 - `pages/` — `PlanPreviewPage` (**this is `/plan`**), `CalendarPage`, `CategoriesPage`,
-  `GoalsPreviewPage` (**this is `/goals`**), `GoalDetailPage`, `ActivitiesPage`, `ActivityDetailPage`,
+  `GoalsPreviewPage` (**this is `/goals`**), `ActivitiesPage`,
   `InsightsPage`, `SettingsPage`. The `*PreviewPage` names are historical — they are the live pages.
-  `/activities`'s static segment outranks `/activities/:id`.
 - `pages/CategoriesPage.tsx` — desktop always shows the filtered occurrence list (nav is the
   sidebar's category list). On mobile, bare `/categories` (no query params) renders a full-page
   category list instead — `isRoot` in the component — with the header's `+` creating a category;
@@ -141,13 +151,18 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   `hideCategory`/`hideGoal` drop whatever the current grouping already says in the section header.
 - `components/activities/BulkAssignModal.tsx` — sets goal / category on a multi-select. No bulk endpoint exists:
   it fans out over `PUT /api/activities/{id}`, resending unchanged fields from each activity (the PUT is a full replace).
+- `components/events/TimeSplitEditor.tsx` — the time split section of `EventDetailModal` (chips,
+  proportional bar with draggable edges, per-row time field). Keyed by occurrence id and owns its rows
+  after mount: every change saves through `occurrencesApi.setTimeSplit` and a failure restores the
+  last saved set. Renders nothing for all-day occurrences or ones without a start and end.
+  `components/activities/WorkTypesSection.tsx` is the editable list of the same types, used by `ActivityModal` (edit mode).
 - `components/events/SkipRescheduleModal.tsx` — opened after skipping; lets user pick a date and creates a new pending copy on that date.
 - `components/events/MoveOrSkipModal.tsx` — asks Move vs Skip & reschedule when a calendar
   drag lands a **pending** occurrence on another date. The page passes a `PendingMove` carrying the
   resolved target *and* a `commit` callback, so each drop kind (`rescheduleEvent`,
   `rescheduleFromAllDay`, `makeEventAllDay`) keeps its own optimistic update; the modal only owns the
   skip-and-create path. Nothing is written until the user picks, so a cancelled drop just snaps back.
-- `components/goals/OccurrenceBar.tsx` — done/skipped/pending counts bar for ongoing goals; data from
+- `components/goals/OccurrenceBar.tsx` — done/skipped/pending counts bar for goals with linked occurrences; data from
   `GoalDto.OccurrenceStats`. Used by the Plan page's goal chip; the Goals page uses the heatmap instead.
 - `components/events/OccurrenceHeatmap.tsx` — GitHub-style day grid, generic over any `HeatmapWindow`
   (a 280-day window of per-day done/skipped counts, days with nothing omitted; `GoalHeatmap` is
@@ -157,10 +172,10 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   max width: cell size falls out of `weeks`, so each caller renders it twice (15 weeks on mobile, 37
   from `sm:`, except the narrower activity history modal) with counts picked to fill its container at
   a ~14px square. Both draw a suffix of the same payload, and the payload's day count must stay ≥ the
-  widest column count plus its part-week. Consumers: `GoalsPreviewPage` (one grid per ongoing goal,
+  widest column count plus its part-week. Consumers: `GoalsPreviewPage` (one grid per goal with occurrences,
   tier-coloured), `PlanPreviewPage`'s "Goal activity" section (`goalsApi.heatmap()`, one grid summed
-  across every goal-linked activity, `--color-primary`), `ActivityHistoryModal` (per-activity, category-
-  coloured, adds `pending`).
+  across every goal-linked activity, `--color-primary`), `OccurrenceHistoryModal` (per-activity and per-goal,
+  adds `pending`).
 - `components/ErrorBoundary.tsx` — class boundary with `resetKey` (cleared on navigation) and a
   `fullScreen` mode. One wraps the routes inside `AppShell` (nav stays usable), one wraps the app in `main.tsx`.
 - `components/layout/OfflineBanner.tsx` + `lib/useOnline.ts` — banner driven by `navigator.onLine`.
@@ -175,12 +190,12 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `components/layout/LoomMark.tsx` — the brand mark (fill-based weave glyph, not a stroked lucide
   icon), used in `Sidebar.tsx` and both auth pages. Mirrored by hand in `public/favicon.svg` and the
   native icon/splash sources in `client/assets/*.svg` — edit all of them together if the mark changes.
-- `components/activities/ActivityHistoryModal.tsx` — read-only "have I been doing this", opened from an
-  activity row's action menu. Reads `['events', 'activity', id]`, the same key `ActivityDetailPage`
-  fills, so the two warm each other. **Every figure is derived in the component** from that activity's
-  own occurrences (`summarise`): last done, median gap between completion *days*, modal quarter-hour
-  start, median measured length. Nothing is passed in, so any caller can open it with just an activity,
-  and no figure needs a complete calendar to be right.
+- `components/events/OccurrenceHistoryModal.tsx` — read-only "have I been doing this", generic over a
+  query key + fetcher. `activities/ActivityHistoryModal.tsx` (activity row menu; `['events', 'activity', id]`)
+  and `goals/GoalHistoryModal.tsx` (goal card menu; `['events', 'goal', id]`) are thin wrappers. **Every
+  figure is derived in the component** from the occurrences it fetches (`summarise`): last done, median
+  gap between completion *days*, modal quarter-hour start, median measured length. No figure needs a
+  complete calendar to be right.
 - `pages/CalendarPage.tsx` — ⚠️ **plain click / tap on empty grid creates** (`openCreateAt`,
   `CLICK_CREATE_MINUTES`), reached from the mouse no-drag path and the touch tap in
   `handleGridPointerUp`. Drag still sets an exact span; long press does it on touch.
@@ -276,7 +291,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   server state; Zustand for auth (access token in memory).
 - **Query keys:** every occurrence list lives under `['events', ...]` (`['events', 'all']` for Categories page + nav
   badge, `['events', 'calendar', ...]` for calendar ranges, `['events', 'activity', id]` for one activity's history).
-  After any occurrence write invalidate `['events']`. After any activity write invalidate `['activities']`
+  After any occurrence write invalidate `['events']` (a time split write also `['insights']`). After any activity write invalidate `['activities']`
   **and `['events']`** (occurrences embed their activity: its title feeds `effectiveTitle` and its category
   feeds every row and calendar block's colour). After any goal write also invalidate `['goals']`.
 - **Design:** see `design.md`. Use semantic color tokens, not hardcoded values.

@@ -75,6 +75,14 @@ public static class OccurrenceEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToProblem();
         });
 
+        group.MapPut("/{id:guid}/time-split", async (Guid id, SetTimeSplitRequest req, ClaimsPrincipal principal, OccurrenceService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.SetTimeSplitAsync(id, userId.Value, req);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToProblem();
+        });
+
         group.MapPost("/{id:guid}/subtasks", async (Guid id, CreateOccurrenceSubtaskRequest req, ClaimsPrincipal principal, OccurrenceService svc) =>
         {
             var userId = principal.GetUserId();

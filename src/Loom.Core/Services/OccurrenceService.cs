@@ -162,6 +162,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
 
             o.ActivityId = target.Id;
             o.Activity = target;
+
+            db.OccurrenceTimeSplits.RemoveRange(o.TimeSplits);
+            o.TimeSplits.Clear();
         }
 
         o.Title = string.IsNullOrWhiteSpace(req.Title) ? null : req.Title.Trim();
@@ -169,6 +172,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         o.EndAt = req.EndAt;
         o.IsAllDay = req.IsAllDay;
         o.IsPlanned = req.IsPlanned;
+
+        var splitErr = ValidateTimeSplitFits(o);
+        if (splitErr is not null) return Result<OccurrenceDto>.Fail(splitErr);
 
         var linkErr = await ApplyDeadlineAsync(o, userId, req.DeadlineOccurrenceId, req.ClearDeadline);
         if (linkErr is not null) return Result<OccurrenceDto>.Fail(linkErr);
@@ -210,6 +216,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         foreach (var chunk in rows.Select(o => o.Id).Chunk(500))
         {
             await db.OccurrenceSubtasks.Where(s => chunk.Contains(s.OccurrenceId)).ExecuteDeleteAsync();
+            await db.OccurrenceTimeSplits.Where(t => chunk.Contains(t.OccurrenceId)).ExecuteDeleteAsync();
             await db.Occurrences.Where(o => chunk.Contains(o.Id)).ExecuteDeleteAsync();
         }
         await tx.CommitAsync();
@@ -332,12 +339,75 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         o.IsAllDay = req.IsAllDay;
         o.IsPlanned = req.IsPlanned;
 
+        var splitErr = ValidateTimeSplitFits(o);
+        if (splitErr is not null) return Result<OccurrenceDto>.Fail(splitErr);
+
         var linkErr = await ApplyDeadlineAsync(o, userId, req.DeadlineOccurrenceId, req.ClearDeadline);
         if (linkErr is not null) return Result<OccurrenceDto>.Fail(linkErr);
 
         var subtaskErr = ApplySubtasks(o, req.Subtasks);
         if (subtaskErr is not null) return Result<OccurrenceDto>.Fail(subtaskErr);
 
+        await db.SaveChangesAsync();
+        return Result<OccurrenceDto>.Success(await ToDtoAsync(o, userId));
+    }
+
+    public async Task<Result<OccurrenceDto>> SetTimeSplitAsync(Guid id, Guid userId, SetTimeSplitRequest req)
+    {
+        var inputs = req.Rows ?? [];
+        if (inputs.Any(i => i.Minutes is < 1))
+            return Result<OccurrenceDto>.Fail(new Error(ErrorType.Validation, "Time must be at least one minute."));
+        if (inputs.Select(i => i.WorkTypeId).Distinct().Count() != inputs.Count)
+            return Result<OccurrenceDto>.Fail(new Error(ErrorType.Validation, "A work type can only appear once."));
+
+        var o = await WithFullIncludes()
+            .FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId);
+        if (o is null) return Result<OccurrenceDto>.Fail(new Error(ErrorType.NotFound, "Occurrence not found."));
+
+        var existing = o.TimeSplits.ToDictionary(t => t.WorkTypeId);
+        var workTypes = o.Activity.WorkTypes.ToDictionary(w => w.Id);
+        foreach (var input in inputs)
+        {
+            if (!workTypes.TryGetValue(input.WorkTypeId, out var workType))
+                return Result<OccurrenceDto>.Fail(new Error(ErrorType.NotFound, "Work type not found."));
+            if (workType.IsArchived && !existing.ContainsKey(input.WorkTypeId))
+                return Result<OccurrenceDto>.Fail(new Error(ErrorType.Validation, "That work type has been removed."));
+        }
+
+        var duration = TimeSplitMath.DurationMinutes(o.StartAt, o.EndAt);
+        if (duration > 0 && inputs.Sum(i => i.Minutes ?? 0) > duration)
+            return Result<OccurrenceDto>.Fail(new Error(ErrorType.Validation,
+                "The time split adds up to more than the occurrence's length."));
+
+        var keptIds = inputs.Select(i => i.WorkTypeId).ToHashSet();
+        foreach (var removed in o.TimeSplits.Where(t => !keptIds.Contains(t.WorkTypeId)).ToList())
+        {
+            o.TimeSplits.Remove(removed);
+            db.OccurrenceTimeSplits.Remove(removed);
+        }
+
+        var added = new List<OccurrenceTimeSplit>();
+        for (var i = 0; i < inputs.Count; i++)
+        {
+            var input = inputs[i];
+            if (existing.TryGetValue(input.WorkTypeId, out var row))
+            {
+                row.Minutes = input.Minutes;
+                row.Position = i;
+            }
+            else
+            {
+                added.Add(new OccurrenceTimeSplit
+                {
+                    OccurrenceId = o.Id,
+                    WorkTypeId = input.WorkTypeId,
+                    Minutes = input.Minutes,
+                    Position = i,
+                });
+            }
+        }
+
+        db.OccurrenceTimeSplits.AddRange(added);
         await db.SaveChangesAsync();
         return Result<OccurrenceDto>.Success(await ToDtoAsync(o, userId));
     }
@@ -520,6 +590,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             .Include(a => a.Category)
             .Include(a => a.Goal)
             .Include(a => a.Subtasks)
+            .Include(a => a.WorkTypes)
             .FirstOrDefaultAsync(a => a.Id == activityId && a.UserId == userId);
 
     private IQueryable<Occurrence> WithFullIncludes() =>
@@ -527,7 +598,18 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             .Include(o => o.Activity).ThenInclude(a => a.Category)
             .Include(o => o.Activity).ThenInclude(a => a.Goal)
             .Include(o => o.Activity).ThenInclude(a => a.Subtasks)
-            .Include(o => o.Subtasks);
+            .Include(o => o.Activity).ThenInclude(a => a.WorkTypes)
+            .Include(o => o.Subtasks)
+            .Include(o => o.TimeSplits).ThenInclude(t => t.WorkType);
+
+    private static Error? ValidateTimeSplitFits(Occurrence o)
+    {
+        var duration = TimeSplitMath.DurationMinutes(o.StartAt, o.EndAt);
+        if (duration == 0) return null;
+        return o.TimeSplits.Sum(t => t.Minutes ?? 0) > duration
+            ? new Error(ErrorType.Validation, "The time split adds up to more than the occurrence's length.")
+            : null;
+    }
 
     private static Error? ValidateSubtaskInputs(List<OccurrenceSubtaskInput>? inputs)
     {

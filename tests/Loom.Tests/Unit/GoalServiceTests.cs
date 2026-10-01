@@ -15,11 +15,11 @@ public class GoalServiceTests : IDisposable
     private static DateTimeOffset At(int month, int day, int hour) =>
         new(2026, month, day, hour, 0, 0, TimeSpan.Zero);
 
-    private async Task<(Guid userId, Guid goalId, Activity activity)> SetupOngoingGoalAsync(
+    private async Task<(Guid userId, Guid goalId, Activity activity)> SetupGoalAsync(
         string timezone = "UTC", TimeOnly? dayBoundary = null)
     {
         var user = new User { Username = "u" + Guid.NewGuid().ToString("N")[..8], PasswordHash = "x", Timezone = timezone };
-        var goal = new Goal { UserId = user.Id, Title = "Practice", Kind = GoalKind.ongoing };
+        var goal = new Goal { UserId = user.Id, Title = "Practice" };
         var activity = new Activity { UserId = user.Id, Title = "Scales", GoalId = goal.Id };
         _ctx.Db.Users.Add(user);
         _ctx.Db.Goals.Add(goal);
@@ -45,7 +45,7 @@ public class GoalServiceTests : IDisposable
     [Fact]
     public async Task ListAsync_heatmap_buckets_occurrences_by_day()
     {
-        var (userId, _, activity) = await SetupOngoingGoalAsync();
+        var (userId, _, activity) = await SetupGoalAsync();
         await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.done);
         await AddOccurrenceAsync(userId, activity, At(7, 6, 18), EventStatus.done);
         await AddOccurrenceAsync(userId, activity, At(7, 5, 9), EventStatus.skipped);
@@ -63,7 +63,7 @@ public class GoalServiceTests : IDisposable
     [Fact]
     public async Task ListAsync_heatmap_window_ends_on_today()
     {
-        var (userId, _, _) = await SetupOngoingGoalAsync();
+        var (userId, _, _) = await SetupGoalAsync();
 
         var goals = await _ctx.GoalService.ListAsync(userId, nowUtc: Now);
 
@@ -74,7 +74,7 @@ public class GoalServiceTests : IDisposable
     [Fact]
     public async Task ListAsync_heatmap_spans_280_days_back_from_today()
     {
-        var (userId, _, activity) = await SetupOngoingGoalAsync();
+        var (userId, _, activity) = await SetupGoalAsync();
         await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.done);
 
         var heatmap = (await _ctx.GoalService.ListAsync(userId, nowUtc: Now))[0].Heatmap!;
@@ -88,7 +88,7 @@ public class GoalServiceTests : IDisposable
     [Fact]
     public async Task ListAsync_heatmap_excludes_days_before_the_window()
     {
-        var (userId, _, activity) = await SetupOngoingGoalAsync();
+        var (userId, _, activity) = await SetupGoalAsync();
         await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.done);
         await AddOccurrenceAsync(userId, activity, new DateTimeOffset(2025, 7, 6, 9, 0, 0, TimeSpan.Zero), EventStatus.done);
 
@@ -104,7 +104,7 @@ public class GoalServiceTests : IDisposable
     [Fact]
     public async Task ListAsync_heatmap_excludes_pending_and_floating_occurrences()
     {
-        var (userId, _, activity) = await SetupOngoingGoalAsync();
+        var (userId, _, activity) = await SetupGoalAsync();
         await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.pending);
         await AddOccurrenceAsync(userId, activity, startAt: null, status: EventStatus.done);
 
@@ -118,7 +118,7 @@ public class GoalServiceTests : IDisposable
     [Fact]
     public async Task ListAsync_heatmap_respects_the_day_boundary()
     {
-        var (userId, _, activity) = await SetupOngoingGoalAsync(dayBoundary: new TimeOnly(4, 0));
+        var (userId, _, activity) = await SetupGoalAsync(dayBoundary: new TimeOnly(4, 0));
         await AddOccurrenceAsync(userId, activity, At(7, 6, 1), EventStatus.done); // 01:00, before the boundary
 
         var goals = await _ctx.GoalService.ListAsync(userId, nowUtc: Now);
@@ -127,18 +127,18 @@ public class GoalServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task ListAsync_milestone_goals_get_no_heatmap()
+    public async Task ListAsync_goal_with_checkpoints_still_gets_a_heatmap()
     {
-        var (userId, goalId, activity) = await SetupOngoingGoalAsync();
-        await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.done);
-        var goal = await _ctx.Db.Goals.FindAsync(goalId);
-        goal!.Kind = GoalKind.milestone;
+        var (userId, goalId, activity) = await SetupGoalAsync();
+        _ctx.Db.Checkpoints.Add(new Checkpoint { GoalId = goalId, Title = "First draft" });
         await _ctx.Db.SaveChangesAsync();
+        await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.done);
 
         var goals = await _ctx.GoalService.ListAsync(userId, nowUtc: Now);
 
-        Assert.Null(goals[0].Heatmap);
-        Assert.Null(goals[0].OccurrenceStats);
+        Assert.Single(goals[0].Checkpoints);
+        Assert.Single(goals[0].Heatmap!.Days);
+        Assert.Equal(1, goals[0].OccurrenceStats!.Done);
     }
 
     // ── GetAggregateHeatmapAsync ─────────────────────────────────────────────
@@ -146,8 +146,8 @@ public class GoalServiceTests : IDisposable
     [Fact]
     public async Task GetAggregateHeatmapAsync_combines_occurrences_across_every_goal()
     {
-        var (userId, _, activity) = await SetupOngoingGoalAsync();
-        var milestoneGoal = new Goal { UserId = userId, Title = "Ship it", Kind = GoalKind.milestone };
+        var (userId, _, activity) = await SetupGoalAsync();
+        var milestoneGoal = new Goal { UserId = userId, Title = "Ship it" };
         var milestoneActivity = new Activity { UserId = userId, Title = "Draft", GoalId = milestoneGoal.Id };
         _ctx.Db.Goals.Add(milestoneGoal);
         _ctx.Db.Activities.Add(milestoneActivity);
@@ -162,14 +162,14 @@ public class GoalServiceTests : IDisposable
         // Skipped occurrences aren't progress toward a goal, so they don't put a day on the grid at all.
         Assert.Single(heatmap.Days);
         Assert.Equal(new DateOnly(2026, 7, 6), heatmap.Days[0].Date);
-        // A milestone goal's session counts too - the aggregate reads "toward any goal", not "ongoing only".
+        // A second goal's session counts too - the aggregate reads "toward any goal".
         Assert.Equal((2, 0), (heatmap.Days[0].Done, heatmap.Days[0].Skipped));
     }
 
     [Fact]
     public async Task GetAggregateHeatmapAsync_excludes_pending_skipped_and_floating_occurrences()
     {
-        var (userId, _, activity) = await SetupOngoingGoalAsync();
+        var (userId, _, activity) = await SetupGoalAsync();
         await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.pending);
         await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.skipped);
         await AddOccurrenceAsync(userId, activity, startAt: null, status: EventStatus.done);
