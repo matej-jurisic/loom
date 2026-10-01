@@ -62,6 +62,7 @@ export interface Goal {
   checkpoints: Checkpoint[]
   occurrenceStats: GoalOccurrenceStats | null
   lastOccurrenceAt: string | null
+  daysSinceLastOccurrence: number | null
   heatmap: GoalHeatmap | null
 }
 

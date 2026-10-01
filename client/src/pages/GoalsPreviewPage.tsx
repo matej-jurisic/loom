@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Check, History } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, History, ChevronDown } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
-import { goalsApi, checkpointsApi, ApiError } from '@/lib/api'
+import { goalsApi, checkpointsApi, settingsApi, ApiError } from '@/lib/api'
+import { recencyLabel, isStale } from '@/lib/goals'
+import { useMediaQuery } from '@/lib/useMediaQuery'
 import { toastError } from '@/store/toasts'
 import type { Goal, GoalStatus, Checkpoint, CheckpointSize } from '@/lib/types'
 import { OccurrenceHeatmap } from '@/components/events/OccurrenceHeatmap'
@@ -43,16 +45,6 @@ function clamp(n: number, lo: number, hi: number): number {
 
 function shortDate(ms: number): string {
   return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-function lastDoneLabel(lastAt: string | null): string {
-  if (!lastAt) return 'no activity yet'
-  const days = Math.floor((Date.now() - new Date(lastAt).getTime()) / 86400000)
-  if (days === 0) return 'active today'
-  if (days === 1) return 'active yesterday'
-  if (days < 7) return `active ${days}d ago`
-  if (days < 30) return `${Math.floor(days / 7)}w since last`
-  return `${Math.floor(days / 30)}mo since last`
 }
 
 const STATUS_TRANSITIONS: Record<GoalStatus, { label: string; value: GoalStatus }[]> = {
@@ -242,9 +234,10 @@ interface GoalCardProps {
   onEdit: (g: Goal) => void
   onAddCheckpoint: (goalId: string) => void
   onEditCheckpoint: (goalId: string, cp: Checkpoint) => void
+  wideHeatmap: boolean
 }
 
-function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint }: GoalCardProps) {
+function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, wideHeatmap }: GoalCardProps) {
   const qc = useQueryClient()
   const [statusError, setStatusError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -254,6 +247,10 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint }
   const transitions = STATUS_TRANSITIONS[goal.status]
   const hasCheckpoints = goal.checkpoints.length > 0
   const isClosed = goal.status === 'closed'
+  const collapsible = goal.status !== 'focus'
+  const [expanded, setExpanded] = useState(false)
+  const showBody = !collapsible || expanded
+  const stale = goal.status === 'focus' && isStale(goal.daysSinceLastOccurrence)
 
   const deleteMutation = useMutation({
     mutationFn: () => goalsApi.delete(goal.id),
@@ -278,28 +275,37 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint }
   return (
     <div className={`rounded-xl border border-border p-4 transition-opacity ${isClosed ? 'opacity-60' : ''}`}>
       <div className="flex items-start gap-3">
-        {/* Progress signal */}
         {hasCheckpoints ? (
-          <ProgressRing pct={believed} color={tierColor} />
+          <ProgressRing pct={believed} color={tierColor} size={showBody ? 52 : 40} stroke={showBody ? 5 : 4} />
         ) : (
           <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: tierColor }} />
         )}
 
-        {/* Title block */}
-        <div className="min-w-0 flex-1">
-          <button onClick={() => onEdit(goal)} className="block text-left">
-            <span className="text-sm font-semibold text-foreground hover:underline">{goal.title}</span>
-          </button>
-          {goal.description && <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{goal.description}</p>}
-          {(hasCheckpoints || goal.lastOccurrenceAt) && (
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+        <button onClick={() => onHistory(goal)} className="min-w-0 flex-1 self-center text-left">
+          <span className="block text-sm font-semibold text-foreground">{goal.title}</span>
+          {showBody && goal.description && <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">{goal.description}</span>}
+          {(hasCheckpoints || goal.daysSinceLastOccurrence !== null) && (
+            <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
               {hasCheckpoints && (
                 <span>{goal.checkpoints.filter((c) => c.status === 'reached').length}/{goal.checkpoints.length} checkpoints</span>
               )}
-              {goal.lastOccurrenceAt && <span>{lastDoneLabel(goal.lastOccurrenceAt)}</span>}
-            </div>
+              {goal.daysSinceLastOccurrence !== null && (
+                <span className={stale ? 'font-medium text-foreground' : ''}>{recencyLabel(goal.daysSinceLastOccurrence)}</span>
+              )}
+            </span>
           )}
-        </div>
+        </button>
+
+        {collapsible && (
+          <button
+            onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            aria-label={expanded ? 'Collapse goal' : 'Expand goal'}
+            className="rounded p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          </button>
+        )}
 
         <ActionMenu
           disabled={statusMutation.isPending}
@@ -317,23 +323,17 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint }
         />
       </div>
 
-      {/* Body */}
-      {hasCheckpoints && (
+      {showBody && goal.notes && (
+        <p className="mt-3 line-clamp-4 whitespace-pre-wrap text-xs text-muted-foreground">{goal.notes}</p>
+      )}
+      {showBody && hasCheckpoints && (
         <div className="mt-3">
           <CheckpointBreakdown goal={goal} tierColor={tierColor} onEditCheckpoint={(cp) => onEditCheckpoint(goal.id, cp)} />
         </div>
       )}
-      {goal.heatmap && (
+      {showBody && !isClosed && goal.heatmap && (
         <div className="mt-3">
-          {/* Same window either way; the narrow layout just draws the recent end of it. Both
-              counts are chosen so the grid fills the card at a ~14px square - each is two columns
-              short of what it would be without the weekday labels, which cost ~28px of width. */}
-          <div className="sm:hidden">
-            <OccurrenceHeatmap heatmap={goal.heatmap} color={tierColor} weeks={15} showWeekdays />
-          </div>
-          <div className="hidden sm:block">
-            <OccurrenceHeatmap heatmap={goal.heatmap} color={tierColor} weeks={37} showWeekdays />
-          </div>
+          <OccurrenceHeatmap heatmap={goal.heatmap} color={tierColor} weeks={wideHeatmap ? 37 : 15} showWeekdays />
         </div>
       )}
 
@@ -359,6 +359,8 @@ export function GoalsPreviewPage() {
   const [cpModal, setCpModal] = useState<{ open: boolean; goalId: string; checkpoint?: Checkpoint }>({ open: false, goalId: '' })
 
   const { data: goals = [], isLoading } = useQuery({ queryKey: ['goals'], queryFn: () => goalsApi.list() })
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
+  const wideHeatmap = useMediaQuery('(min-width: 40rem)')
 
   const grouped = STATUS_ORDER.reduce<Record<GoalStatus, Goal[]>>(
     (acc, s) => { acc[s] = goals.filter((g) => g.status === s); return acc },
@@ -411,13 +413,16 @@ export function GoalsPreviewPage() {
                       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         {status === 'closed' ? 'Closed' : `${TIER_META[tier].label} Goals`}
                       </h2>
-                      <span className="rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">{list.length}</span>
+                      <span className="rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">
+                        {status === 'focus' && settings ? `${list.length}/${settings.maxFocusGoals}` : list.length}
+                      </span>
                     </div>
                     <div className="flex flex-col gap-3">
                       {list.map((g) => (
                         <GoalCard
                           key={g.id}
                           goal={g}
+                          wideHeatmap={wideHeatmap}
                           onHistory={setHistoryFor}
                           onEdit={(g) => setGoalModal({ open: true, goal: g })}
                           onAddCheckpoint={(goalId) => setCpModal({ open: true, goalId })}

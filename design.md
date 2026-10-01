@@ -115,7 +115,7 @@ The panes are separated by a 1px `border-[var(--border)]` vertical divider. No g
 
 ### History dialog
 
-- Shared by activities and goals (`OccurrenceHistoryModal`). Titled `<name> - history`, opened from a row's or goal card's action menu. Activities get a meta line first (category, goal badge); goals have none, then four stat tiles, then the day strip, then the recent list. Widest-to-narrowest: the tiles answer the question in one glance, the strip shows the shape, the list is the detail you only sometimes want.
+- Shared by activities and goals (`OccurrenceHistoryModal`). Titled `<name> - history`, opened from a row's or goal card's action menu. Activities get a meta line first (category, goal badge); goals have none, then four stat tiles, then the day strip, then "Time by activity" (the Insights rows, shown only when some completed occurrence has a measured length), then the recent list. Widest-to-narrowest: the tiles answer the question in one glance, the strip shows the shape, the list is the detail you only sometimes want.
 - **Stat tiles:** `grid-cols-2 sm:grid-cols-4`, each `rounded-lg border border-border bg-muted/40 px-2.5 py-2` with a `text-[10px] uppercase tracking-wide` label over a `text-sm` value. A tile with nothing to show reads `Unknown` in muted text rather than vanishing: a missing figure is itself an answer, and four tiles that come and go make the dialog resize between activities.
 - **Day strip:** centered, laid out the way a calendar is - seven weekday columns under their `Mon`-`Sun` names, eight week rows, current week last. Eight is two months: enough to read a rhythm, not so much that the grid outweighs the tiles above it. Cells are `h-7 w-7 rounded-[4px]` with `gap-1`, sized so a three-letter weekday fits above the column rather than being abbreviated to an initial. Done is solid `bg-primary`, skipped `bg-muted-foreground/60`, pending an outlined `border-primary/50 bg-primary/10`, an empty day flat `bg-muted`, and a day that has not happened yet nothing at all. Each cell carries its date as a `title`; the legend, also centered, spells out the three fills and the window.
 - **Recent list:** an occurrence row at ten rows: status dot, date with `HH:mm` in mono when the occurrence has a time, status word on the right. The list is styled like the Edit Activity subtask list (bordered `divide-y` `ul`, so the last row closes cleanly) with a `max-h-60` that scrolls; each row shows the occurrence title over its date.
@@ -237,6 +237,10 @@ The `/plan` view is a single canvas holding (top to bottom):
 Mobile: single column.
 
 ---
+
+## Goals Page
+
+Sections run Focus, Active, Bench, Closed; the Focus count chip reads used/limit. Focus goals are full cards (ring, checkpoints, notes, heatmap). The rest are compact rows with a smaller ring and a chevron that expands the same body; Closed omits the heatmap. A stale Focus goal shows its recency in foreground weight instead of muted, with no colour change. Tapping the title block opens History; editing lives in the menu.
 
 ## Calendar Grid
 

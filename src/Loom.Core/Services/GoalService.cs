@@ -35,12 +35,15 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         if (goal is null) return Result<GoalDto>.Fail(new Error(ErrorType.NotFound, "Goal not found."));
         var progress = await GetProgressAsync([goal.Id], userId, nowUtc ?? DateTimeOffset.UtcNow);
         var lastAt = await GetLastOccurrenceAtAsync([goal.Id], userId);
+        var ctx = await settingsService.GetDayContextAsync(userId);
         var p = progress.GetValueOrDefault(goal.Id);
+        DateTimeOffset? last = lastAt.TryGetValue(goal.Id, out var lat) ? lat : null;
         return Result<GoalDto>.Success(GoalDto.FromEntity(
             goal,
             p.Stats,
-            lastAt.TryGetValue(goal.Id, out var lat) ? lat : null,
-            p.Heatmap));
+            last,
+            p.Heatmap,
+            DaysSince(last, ctx, nowUtc ?? DateTimeOffset.UtcNow)));
     }
 
     public async Task<List<GoalDto>> ListAsync(Guid userId, GoalStatus? status = null, DateTimeOffset? nowUtc = null)
@@ -60,21 +63,24 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
             ? await GetProgressAsync(allGoalIds, userId, nowUtc ?? DateTimeOffset.UtcNow)
             : [];
         var lastAt = allGoalIds.Count > 0 ? await GetLastOccurrenceAtAsync(allGoalIds, userId) : [];
+        var ctx = await settingsService.GetDayContextAsync(userId);
+        var now = nowUtc ?? DateTimeOffset.UtcNow;
 
         return goals
             .OrderBy(g => g.Status)
+            .ThenByDescending(g => lastAt.TryGetValue(g.Id, out var lat) ? lat : DateTimeOffset.MinValue)
             .ThenBy(g => g.CreatedAt)
             .Select(g =>
             {
                 var p = progress.GetValueOrDefault(g.Id);
-                return GoalDto.FromEntity(
-                    g,
-                    p.Stats,
-                    lastAt.TryGetValue(g.Id, out var lat) ? lat : null,
-                    p.Heatmap);
+                DateTimeOffset? last = lastAt.TryGetValue(g.Id, out var lat) ? lat : null;
+                return GoalDto.FromEntity(g, p.Stats, last, p.Heatmap, DaysSince(last, ctx, now));
             })
             .ToList();
     }
+
+    private static int? DaysSince(DateTimeOffset? last, DayContext ctx, DateTimeOffset nowUtc) =>
+        last is null ? null : Math.Max(0, DayMath.Today(ctx, nowUtc).DayNumber - DayMath.DayOf(last.Value, ctx).DayNumber);
 
     private async Task<Dictionary<Guid, DateTimeOffset>> GetLastOccurrenceAtAsync(List<Guid> goalIds, Guid userId)
     {

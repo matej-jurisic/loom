@@ -4,17 +4,8 @@ import { CircleDashed } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { insightsApi } from '@/lib/api'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
-import type { InsightsActivity, InsightsCategory } from '@/lib/types'
-
-// ── helpers ────────────────────────────────────────────────────────────────
-
-function formatTime(minutes: number): string {
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h === 0) return `${m}min`
-  if (m === 0) return `${h}h`
-  return `${h}h ${m}min`
-}
+import { ActivityList, formatTime } from '@/components/insights/TimeByActivityList'
+import type { InsightsCategory } from '@/lib/types'
 
 // ── sub-components ─────────────────────────────────────────────────────────
 
@@ -45,71 +36,6 @@ function PeriodToggle({ value, onChange }: { value: Period; onChange: (v: Period
         </button>
       ))}
     </div>
-  )
-}
-
-function ActivityList({ activities }: { activities: InsightsActivity[] }) {
-  if (activities.length === 0) {
-    return (
-      <div className="rounded-lg border border-border px-4 py-8 text-center">
-        <p className="text-sm text-muted-foreground">
-          No timed activities in this period.
-        </p>
-      </div>
-    )
-  }
-
-  const max = Math.max(...activities.map((a) => a.timeMinutes))
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-border">
-      <ul className="divide-y divide-border">
-        {activities.map((a) => (
-          <li key={a.activityId} className="flex flex-col gap-1.5 px-4 py-3">
-            <div className="flex items-center gap-2">
-              <span className="truncate text-sm text-foreground">{a.title}</span>
-              <span className="ml-auto shrink-0 text-sm tabular-nums text-foreground">
-                {formatTime(a.timeMinutes)}
-              </span>
-            </div>
-            <div className="h-1 overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full rounded-full"
-                style={{
-                  width: `${(a.timeMinutes / max) * 100}%`,
-                  backgroundColor: a.categoryColor ?? 'var(--primary)',
-                }}
-              />
-            </div>
-            <WorkTypeBreakdown activity={a} />
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
-
-function WorkTypeBreakdown({ activity }: { activity: InsightsActivity }) {
-  if (activity.workTypes.length === 0) return null
-
-  const split = activity.workTypes.reduce((sum, w) => sum + w.timeMinutes, 0)
-  const rest = activity.timeMinutes - split
-
-  return (
-    <ul className="mt-1 flex flex-col gap-0.5 pl-3">
-      {activity.workTypes.map((w) => (
-        <li key={w.workTypeId} className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="truncate">{w.title}</span>
-          <span className="ml-auto shrink-0 tabular-nums">{formatTime(w.timeMinutes)}</span>
-        </li>
-      ))}
-      {rest > 0 && (
-        <li className="flex items-center gap-2 text-xs text-muted-foreground">
-          <span className="truncate italic">Not split</span>
-          <span className="ml-auto shrink-0 tabular-nums">{formatTime(rest)}</span>
-        </li>
-      )}
-    </ul>
   )
 }
 

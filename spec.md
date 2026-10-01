@@ -299,7 +299,7 @@ A sustained intention with measurable progress.
 |---|---|
 | Title | Required |
 | Description | Optional |
-| Notes | Optional markdown; the goal dialog preserves it but has no field to edit it |
+| Notes | Optional free text; edited in the goal dialog, shown on the expanded card |
 | Status | `focus`, `active`, `bench`, `closed` |
 | Checkpoints | Unordered list of milestones |
 
@@ -312,7 +312,7 @@ A sustained intention with measurable progress.
 
 The number of simultaneous Focus goals is a user setting and a **hard boundary**: promoting a goal
 past the limit returns 409 with a message naming it. Goals are listed grouped Focus → Active → Bench
-→ Closed, creation order within a group. Deleting a goal removes its checkpoints and set-nulls its
+→ Closed, most recently active first within a group (latest completion across its activities; goals with none fall back to creation order, after the active ones). Deleting a goal removes its checkpoints and set-nulls its
 activities.
 
 ### Checkpoints
@@ -342,8 +342,12 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
   linked occurrence show no grid rather than an empty one.
   Goals also carry `OccurrenceStats` (lifetime done / skipped / pending counts), rendered as a
   proportional bar on the Plan page's goal chip.
-- **Every goal** carries `lastOccurrenceAt`, the most recent completion across its activities,
-  rendered as "active today" / "3d ago" / "2w since last".
+- **Every goal** carries `lastOccurrenceAt`, the most recent completion across its activities, and
+  `daysSinceLastOccurrence`, the whole days between that completion's day and today in the user's
+  timezone and day boundary (`DayMath`, so a session at 23:00 yesterday is "yesterday" at 08:00).
+  Rendered as "active today" / "active 3d ago" / "2w since last"; null reads "no activity yet".
+  A Focus goal whose last completion is 14 or more days back shows its recency in emphasised text,
+  a quiet hint rather than an alert. It is derived only from what was logged.
 
 ---
 
@@ -356,7 +360,7 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 | `/plan` | Daily Plan: one day's agenda. Index route. |
 | `/calendar` | Day / 3-day / week grid. Visualization, and the fastest way to add something. |
 | `/categories` | Occurrence lists per category, plus "Active" and "No category". |
-| `/goals` | Goal list with progress and checkpoints; the row menu edits, adds a checkpoint, changes status, opens History or deletes. |
+| `/goals` | Goal list grouped by status. Focus goals are always expanded and their section shows slots used (`2/3`); Active, Bench and Closed goals are one-line rows that a chevron expands to checkpoints, notes and heatmap (Closed has no heatmap). Tapping a goal opens its History; the menu edits, adds a checkpoint, changes status or deletes. |
 | `/activities` | Activity list; clicking a title edits, the row menu opens History. |
 | `/insights` | Totals over what was logged. |
 | `/settings` | Preferences, data export, sign out. |

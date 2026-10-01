@@ -6,6 +6,7 @@ import {
   OccurrenceHeatmap, addDays, keyOf, parseDay, startOfWeek,
   type HeatmapDayCounts, type HeatmapWindow,
 } from '@/components/events/OccurrenceHeatmap'
+import { ActivityList, activitiesFromOccurrences } from '@/components/insights/TimeByActivityList'
 import type { Occurrence } from '@/lib/types'
 
 /** Columns in the heatmap, one per week. Both are suffixes of the same window, with counts picked so
@@ -38,6 +39,7 @@ export function OccurrenceHistoryModal({
   })
 
   const summary = useMemo(() => summarise(occurrences ?? []), [occurrences])
+  const timeByActivity = useMemo(() => activitiesFromOccurrences(occurrences ?? []), [occurrences])
   const loading = isLoading || !occurrences
 
   return (
@@ -62,6 +64,15 @@ export function OccurrenceHistoryModal({
       </div>
 
       <HistoryHeatmap occurrences={occurrences ?? []} color={color} loading={loading} />
+
+      {!loading && timeByActivity.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Time by activity
+          </h3>
+          <ActivityList activities={timeByActivity} />
+        </div>
+      )}
 
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">

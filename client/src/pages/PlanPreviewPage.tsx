@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, Plus, CalendarCheck, ArrowRight } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { occurrencesApi, goalsApi, settingsApi } from '@/lib/api'
+import { recencyLabel } from '@/lib/goals'
 import { toastError } from '@/store/toasts'
 import type { Checkpoint, CheckpointSize, Occurrence, Goal } from '@/lib/types'
 import { OccurrenceBar } from '@/components/goals/OccurrenceBar'
@@ -92,16 +93,6 @@ function believedProgress(checkpoints: Checkpoint[]): number {
   return (reached / total) * 100
 }
 
-function formatLastOccurrence(lastAt: string | null): string {
-  if (!lastAt) return 'no activity yet'
-  const days = Math.floor((Date.now() - new Date(lastAt).getTime()) / (1000 * 60 * 60 * 24))
-  if (days === 0) return 'last today'
-  if (days === 1) return 'last yesterday'
-  if (days < 7) return `last ${days}d ago`
-  if (days < 30) return `last ${Math.floor(days / 7)}w ago`
-  return `last ${Math.floor(days / 30)}mo ago`
-}
-
 function GoalHealthChip({ goal }: { goal: Goal }) {
   const progress = believedProgress(goal.checkpoints)
   const hasCheckpoints = goal.checkpoints.length > 0
@@ -110,7 +101,7 @@ function GoalHealthChip({ goal }: { goal: Goal }) {
       <span className="h-2 w-2 shrink-0 rounded-full bg-goal-focus" />
       <div className="min-w-0">
         <p className="truncate text-xs font-medium text-foreground">{goal.title}</p>
-        <p className="text-[10px] text-muted-foreground/70">{formatLastOccurrence(goal.lastOccurrenceAt)}</p>
+        <p className="text-[10px] text-muted-foreground/70">{recencyLabel(goal.daysSinceLastOccurrence)}</p>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-2.5">
         {hasCheckpoints && (

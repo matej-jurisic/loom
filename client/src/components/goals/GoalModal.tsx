@@ -9,6 +9,7 @@ import type { Goal } from '@/lib/types'
 interface FormState {
   title: string
   description: string
+  notes: string
 }
 
 interface Errors {
@@ -32,7 +33,7 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
   const qc = useQueryClient()
   const isEdit = Boolean(goal)
 
-  const [form, setForm] = useState<FormState>({ title: '', description: '' })
+  const [form, setForm] = useState<FormState>({ title: '', description: '', notes: '' })
   const [errors, setErrors] = useState<Errors>({})
   const [apiError, setApiError] = useState('')
 
@@ -41,6 +42,7 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
       setForm({
         title: goal?.title ?? '',
         description: goal?.description ?? '',
+        notes: goal?.notes ?? '',
       })
       setErrors({})
       setApiError('')
@@ -52,7 +54,7 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
       const payload = {
         title: form.title.trim(),
         description: form.description.trim() || null,
-        notes: isEdit ? (goal!.notes ?? null) : null,
+        notes: form.notes.trim() || null,
       }
       return isEdit ? goalsApi.update(goal!.id, payload) : goalsApi.create(payload)
     },
@@ -102,6 +104,16 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
           onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
           placeholder="Optional: describe the goal and what success looks like."
           rows={3}
+          className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-medium text-foreground">Notes</label>
+        <textarea
+          value={form.notes}
+          onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+          placeholder="Optional: plans, links, reminders."
+          rows={4}
           className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
         />
       </div>

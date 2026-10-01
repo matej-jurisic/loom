@@ -230,17 +230,19 @@ public sealed record GoalDto(
     List<CheckpointDto> Checkpoints,
     GoalOccurrenceStats? OccurrenceStats = null,
     DateTimeOffset? LastOccurrenceAt = null,
-    GoalHeatmap? Heatmap = null)
+    GoalHeatmap? Heatmap = null,
+    int? DaysSinceLastOccurrence = null)
 {
     public static GoalDto FromEntity(
         Goal g,
         GoalOccurrenceStats? stats = null,
         DateTimeOffset? lastOccurrenceAt = null,
-        GoalHeatmap? heatmap = null) => new(
+        GoalHeatmap? heatmap = null,
+        int? daysSinceLastOccurrence = null) => new(
         g.Id, g.UserId, g.Title, g.Description, g.Notes,
         g.Status.ToString(), g.CreatedAt,
         g.Checkpoints.Select(CheckpointDto.FromEntity).ToList(),
-        stats, lastOccurrenceAt, heatmap);
+        stats, lastOccurrenceAt, heatmap, daysSinceLastOccurrence);
 }
 
 public sealed record CreateGoalRequest(string Title, string? Description, string? Notes = null);

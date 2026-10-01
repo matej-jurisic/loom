@@ -139,6 +139,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   "no category" on desktop since the sidebar is always visible there.
 - `lib/api.ts` — `request<T>` (bearer + one-shot 401 refresh). Key namespaces: `activitiesApi`, `occurrencesApi`, `categoriesApi`, `goalsApi`, `checkpointsApi`, `insightsApi`.
 - `lib/types.ts` — mirrors backend DTOs. Key types: `Activity`, `Occurrence` (has `effectiveTitle`), `Goal`, `Category`, `Insights`.
+- `lib/goals.ts` — `recencyLabel`/`isStale` over the server's `daysSinceLastOccurrence` (Goals page and Plan chips); `lib/useMediaQuery.ts` — `matchMedia` as a hook.
 - `lib/theme.ts` — light/dark/system preference (localStorage `loom-theme`).
 - `store/auth.ts` — Zustand; access token in memory only.
 - `store/toasts.ts` — Zustand toast store; `toastError(err)` for mutation failures without inline error display.
@@ -194,7 +195,9 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   query key + fetcher. `activities/ActivityHistoryModal.tsx` (activity row menu; `['events', 'activity', id]`)
   and `goals/GoalHistoryModal.tsx` (goal card menu; `['events', 'goal', id]`) are thin wrappers. **Every
   figure is derived in the component** from the occurrences it fetches (`summarise`): last done, median
-  gap between completion *days*, modal quarter-hour start, median measured length. No figure needs a
+  gap between completion *days*, modal quarter-hour start, median measured length, and a "Time by activity"
+  section (`insights/TimeByActivityList.tsx`, shared with `InsightsPage`; `activitiesFromOccurrences` mirrors
+  `InsightsService` over all fetched occurrences, no window). No figure needs a
   complete calendar to be right.
 - `pages/CalendarPage.tsx` — ⚠️ **plain click / tap on empty grid creates** (`openCreateAt`,
   `CLICK_CREATE_MINUTES`), reached from the mouse no-drag path and the touch tap in

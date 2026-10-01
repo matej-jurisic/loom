@@ -208,4 +208,45 @@ public class GoalServiceTests : IDisposable
         Assert.Equal(new DateOnly(2026, 7, 7), heatmap.End);
         Assert.Equal(new DateOnly(2026, 7, 7).AddDays(-279), heatmap.Start);
     }
+
+    [Fact]
+    public async Task ListAsync_days_since_last_counts_days_not_hours()
+    {
+        var (userId, _, activity) = await SetupGoalAsync();
+        await AddOccurrenceAsync(userId, activity, At(7, 6, 23), EventStatus.done);
+
+        var goals = await _ctx.GoalService.ListAsync(userId, nowUtc: new DateTimeOffset(2026, 7, 7, 1, 0, 0, TimeSpan.Zero));
+
+        Assert.Equal(1, goals[0].DaysSinceLastOccurrence);
+    }
+
+    [Fact]
+    public async Task ListAsync_days_since_last_is_null_without_a_completion()
+    {
+        var (userId, _, activity) = await SetupGoalAsync();
+        await AddOccurrenceAsync(userId, activity, At(7, 6, 9), EventStatus.skipped);
+
+        var goals = await _ctx.GoalService.ListAsync(userId, nowUtc: Now);
+
+        Assert.Null(goals[0].DaysSinceLastOccurrence);
+    }
+
+    [Fact]
+    public async Task ListAsync_orders_a_status_group_by_most_recent_activity()
+    {
+        var (userId, _, activity) = await SetupGoalAsync();
+        var quiet = new Goal { UserId = userId, Title = "Quiet" };
+        var busyActivity = new Activity { UserId = userId, Title = "Busy", GoalId = null };
+        var busy = new Goal { UserId = userId, Title = "Busy" };
+        busyActivity.GoalId = busy.Id;
+        _ctx.Db.Goals.AddRange(quiet, busy);
+        _ctx.Db.Activities.Add(busyActivity);
+        await _ctx.Db.SaveChangesAsync();
+        await AddOccurrenceAsync(userId, activity, At(7, 1, 9), EventStatus.done);
+        await AddOccurrenceAsync(userId, busyActivity, At(7, 6, 9), EventStatus.done);
+
+        var goals = await _ctx.GoalService.ListAsync(userId, nowUtc: Now);
+
+        Assert.Equal(["Busy", "Practice", "Quiet"], goals.Select(g => g.Title));
+    }
 }
