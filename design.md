@@ -240,7 +240,7 @@ Mobile: single column.
 
 ## Goals Page
 
-Sections run Focus, Active, Bench, Closed; the Focus count chip reads used/limit. Focus goals are full cards (ring, checkpoints, notes, heatmap). The rest are compact rows with a smaller ring and a chevron that expands the same body; Closed omits the heatmap. A stale Focus goal shows its recency in foreground weight instead of muted, with no colour change. Tapping the title block opens History; editing lives in the menu.
+Sections run Focus, Active, Bench, Closed; the Focus count chip reads used/limit. Focus goals are full cards (ring, checkpoints, notes, heatmap). The rest are compact rows with a smaller ring and a chevron that expands the same body; Closed omits the heatmap. A compact goal with nothing to reveal has no chevron. The goal menu's "Activities" item opens a modal listing the linked activities (category tile, title, category name); a row opens that activity's history. A stale Focus goal shows its recency in foreground weight instead of muted, with no colour change. Tapping the title block opens History; editing lives in the menu.
 
 ## Calendar Grid
 

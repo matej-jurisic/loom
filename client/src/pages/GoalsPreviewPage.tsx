@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, Pencil, Trash2, Check, History, ChevronDown } from 'lucide-react'
+import { Plus, Pencil, Trash2, Check, History, ChevronDown, ListChecks } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { goalsApi, checkpointsApi, settingsApi, ApiError } from '@/lib/api'
 import { recencyLabel, isStale } from '@/lib/goals'
@@ -10,6 +10,7 @@ import type { Goal, GoalStatus, Checkpoint, CheckpointSize } from '@/lib/types'
 import { OccurrenceHeatmap } from '@/components/events/OccurrenceHeatmap'
 import { GoalModal } from '@/components/goals/GoalModal'
 import { CheckpointModal } from '@/components/goals/CheckpointModal'
+import { GoalActivitiesModal } from '@/components/goals/GoalActivitiesModal'
 import { GoalHistoryModal } from '@/components/goals/GoalHistoryModal'
 import { ActionMenu, type ActionMenuEntry } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -235,9 +236,10 @@ interface GoalCardProps {
   onAddCheckpoint: (goalId: string) => void
   onEditCheckpoint: (goalId: string, cp: Checkpoint) => void
   wideHeatmap: boolean
+  onActivities: (g: Goal) => void
 }
 
-function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, wideHeatmap }: GoalCardProps) {
+function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, wideHeatmap, onActivities }: GoalCardProps) {
   const qc = useQueryClient()
   const [statusError, setStatusError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -247,7 +249,9 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, 
   const transitions = STATUS_TRANSITIONS[goal.status]
   const hasCheckpoints = goal.checkpoints.length > 0
   const isClosed = goal.status === 'closed'
-  const collapsible = goal.status !== 'focus'
+  // Focus goals always show their body; others collapse, but only if there is something to reveal.
+  const hasBody = !!goal.description || !!goal.notes || hasCheckpoints || (!isClosed && !!goal.heatmap)
+  const collapsible = goal.status !== 'focus' && hasBody
   const [expanded, setExpanded] = useState(false)
   const showBody = !collapsible || expanded
   const stale = goal.status === 'focus' && isStale(goal.daysSinceLastOccurrence)
@@ -314,6 +318,7 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, 
           items={[
             { icon: Pencil, label: 'Edit goal', onClick: () => onEdit(goal) },
             { icon: History, label: 'History', onClick: () => onHistory(goal) },
+            { icon: ListChecks, label: 'Activities', onClick: () => onActivities(goal) },
             { icon: Plus, label: 'Add checkpoint', onClick: () => onAddCheckpoint(goal.id) },
             ...(transitions.length > 0 ? ['separator' as const] : []),
             ...transitions.map((t): ActionMenuEntry => ({ label: t.label, onClick: () => statusMutation.mutate(t.value) })),
@@ -360,6 +365,7 @@ export function GoalsPreviewPage() {
 
   const { data: goals = [], isLoading } = useQuery({ queryKey: ['goals'], queryFn: () => goalsApi.list() })
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get })
+  const [activitiesFor, setActivitiesFor] = useState<Goal | null>(null)
   const wideHeatmap = useMediaQuery('(min-width: 40rem)')
 
   const grouped = STATUS_ORDER.reduce<Record<GoalStatus, Goal[]>>(
@@ -423,6 +429,7 @@ export function GoalsPreviewPage() {
                           key={g.id}
                           goal={g}
                           wideHeatmap={wideHeatmap}
+                          onActivities={setActivitiesFor}
                           onHistory={setHistoryFor}
                           onEdit={(g) => setGoalModal({ open: true, goal: g })}
                           onAddCheckpoint={(goalId) => setCpModal({ open: true, goalId })}
@@ -445,6 +452,7 @@ export function GoalsPreviewPage() {
         color={historyFor ? TIER_META[(historyFor.status === 'closed' ? 'bench' : historyFor.status) as Tier].varName : undefined}
         onClose={() => setHistoryFor(null)}
       />
+      <GoalActivitiesModal goal={activitiesFor} onClose={() => setActivitiesFor(null)} />
       <CheckpointModal open={cpModal.open} onClose={() => setCpModal({ open: false, goalId: '' })} goalId={cpModal.goalId} checkpoint={cpModal.checkpoint} />
     </div>
   )
