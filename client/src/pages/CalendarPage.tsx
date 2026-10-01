@@ -1754,13 +1754,14 @@ export function CalendarPage() {
           return
         }
         suppressClickRef.current = true
+        const copy = mu.ctrlKey && !isTouch
         if (capturedDropTarget === 'float') {
-          makeEventFloat(ev)
+          makeEventFloat(ev, copy)
           return
         }
         if (capturedDropTarget === 'allday') {
           const dropDayIdx = Math.max(0, Math.min(getDayIdxFromX(mu.clientX), days.length - 1))
-          makeEventAllDay(ev, days[dropDayIdx])
+          makeEventAllDay(ev, days[dropDayIdx], copy)
           return
         }
         const curY = getYInGrid(mu.clientY)
@@ -1772,7 +1773,7 @@ export function CalendarPage() {
         const newEnd = new Date(newStart.getTime() + dur)
         const origStartMs = new Date(ev.startAt!).getTime()
         if (newStart.getTime() === origStartMs) return
-        rescheduleEvent(ev, newStart, newEnd)
+        rescheduleEvent(ev, newStart, newEnd, copy)
       }
 
       function onPointerCancel(pc: PointerEvent) {
@@ -1877,7 +1878,27 @@ export function CalendarPage() {
     return ev.status === 'pending' && !!ev.startAt && !isSameDay(new Date(ev.startAt), newStart)
   }
 
-  function rescheduleEvent(ev: Occurrence, newStart: Date, newEnd: Date) {
+  function duplicateOccurrence(ev: Occurrence, startAt: string | null, endAt: string | null, isAllDay: boolean) {
+    occurrencesApi.create({
+      activityId: ev.activity.id,
+      title: ev.title,
+      startAt,
+      endAt,
+      isAllDay,
+      isPlanned: ev.isPlanned,
+      durationMinutes: ev.durationMinutes,
+    }).catch((err) => {
+      toastError(err, 'Could not duplicate the occurrence.')
+    }).finally(() => {
+      queryClient.invalidateQueries({ queryKey: ['events'] })
+    })
+  }
+
+  function rescheduleEvent(ev: Occurrence, newStart: Date, newEnd: Date, copy = false) {
+    if (copy) {
+      duplicateOccurrence(ev, newStart.toISOString(), ev.endAt ? newEnd.toISOString() : null, ev.isAllDay)
+      return
+    }
     if (movesToAnotherDay(ev, newStart)) {
       setPendingMove({
         occurrence: ev,
@@ -1917,7 +1938,11 @@ export function CalendarPage() {
     })
   }
 
-  function rescheduleFromAllDay(ev: Occurrence, newStart: Date, newEnd: Date) {
+  function rescheduleFromAllDay(ev: Occurrence, newStart: Date, newEnd: Date, copy = false) {
+    if (copy) {
+      duplicateOccurrence(ev, newStart.toISOString(), newEnd.toISOString(), false)
+      return
+    }
     if (movesToAnotherDay(ev, newStart)) {
       setPendingMove({
         occurrence: ev,
@@ -1986,7 +2011,11 @@ export function CalendarPage() {
     return null
   }
 
-  function makeEventFloat(ev: Occurrence) {
+  function makeEventFloat(ev: Occurrence, copy = false) {
+    if (copy) {
+      duplicateOccurrence(ev, null, null, false)
+      return
+    }
     queryClient.cancelQueries({ queryKey: ['events'] })
     queryClient.setQueryData<Occurrence[]>(
       ['events', 'calendar', rangeStart.toISOString(), rangeEnd.toISOString()],
@@ -2010,7 +2039,12 @@ export function CalendarPage() {
     })
   }
 
-  function makeEventAllDay(ev: Occurrence, day: Date) {
+  function makeEventAllDay(ev: Occurrence, day: Date, copy = false) {
+    if (copy) {
+      const newStart = sod(day)
+      duplicateOccurrence(ev, newStart.toISOString(), allDayEndAt(ev, newStart), true)
+      return
+    }
     if (movesToAnotherDay(ev, sod(day))) {
       const newStart = sod(day)
       setPendingMove({
@@ -2066,7 +2100,7 @@ export function CalendarPage() {
     })
   }
 
-  function handleAllDayPillMoveStart(e: React.PointerEvent, event: Occurrence, onDrop?: (ev: Occurrence, start: Date, end: Date) => void) {
+  function handleAllDayPillMoveStart(e: React.PointerEvent, event: Occurrence, onDrop?: (ev: Occurrence, start: Date, end: Date, copy?: boolean) => void) {
     if (e.pointerType === 'mouse' && e.button !== 0) return
     e.stopPropagation()
     suppressClickRef.current = false
@@ -2165,13 +2199,14 @@ export function CalendarPage() {
       setMovingEventId(null)
       if (!isDragging) return
       suppressClickRef.current = true
+      const copy = mu.ctrlKey && !isTouch
       if (capturedDropTarget === 'float') {
-        makeEventFloat(event)
+        makeEventFloat(event, copy)
         return
       }
       if (capturedDropTarget === 'allday') {
         const dropDayIdx = capturedDropDayIdx ?? Math.max(0, Math.min(getDayIdxFromX(mu.clientX), days.length - 1))
-        makeEventAllDay(event, days[dropDayIdx])
+        makeEventAllDay(event, days[dropDayIdx], copy)
         return
       }
       if (!isInGrid(mu.clientY)) return
@@ -2180,7 +2215,7 @@ export function CalendarPage() {
         ? snapToGridDue(days[curDayIdx], getYInGrid(mu.clientY), scaleFor(curDayIdx))
         : dragStartFor(days[curDayIdx], getYInGrid(mu.clientY), scaleFor(curDayIdx), durationMs)
       const newEnd = new Date(newStart.getTime() + durationMs)
-      ;(onDrop ?? rescheduleFromAllDay)(event, newStart, newEnd)
+      ;(onDrop ?? rescheduleFromAllDay)(event, newStart, newEnd, copy)
     }
 
     function onPointerCancel(pc: PointerEvent) {

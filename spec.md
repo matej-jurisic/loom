@@ -380,6 +380,9 @@ expects you to complete. Empty grid means nothing in particular.
   a new pending copy on the new date. Dismissing the dialog leaves it where it was. A same-day drag is
   only a time change and commits with no prompt, as does moving a done or skipped occurrence - only a
   pending one can be skipped.
+- **Holding Ctrl while dropping a mouse drag duplicates** instead of moving: the original stays put and
+  a new pending occurrence of the same activity is created at the drop position (grid, all-day or
+  FLOAT). No prompt is shown. Not available on touch.
 - A sticky **Due** row keeps due pins and overdue items visible while scrolling.
 - The header's **DUE** and **SOON** rows are anchored to *today*, not to the view: DUE lists every
   occurrence still pending and dated before today - all-day or timed, planned or not - so nothing
