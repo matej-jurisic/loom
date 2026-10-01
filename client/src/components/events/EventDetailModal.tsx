@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, X, Pencil, Trash2, Clock, CalendarPlus, Copy, History, MoreHorizontal, Pin, PinOff, Layers } from 'lucide-react'
+import { Check, X, Pencil, Trash2, Clock, CalendarPlus, Copy, History, MoreHorizontal, Pin, PinOff, Layers, Flag } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -52,18 +52,14 @@ function formatOccurrenceTime(o: Occurrence): string {
         if (sameDay(endInclusive, today)) endLabel = 'Today'
         else if (sameDay(endInclusive, tomorrow)) endLabel = 'Tomorrow'
         else endLabel = endInclusive.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-        const dur = formatDuration(o.durationMinutes)
-        return dur ? `${dateLabel} - ${endLabel} ~${dur}` : `${dateLabel} - ${endLabel}`
+        return `${dateLabel} - ${endLabel}`
       }
     }
-    const dur = formatDuration(o.durationMinutes)
-    return dur ? `${dateLabel}, Date only ~${dur}` : `${dateLabel}, Date only`
+    return `${dateLabel}, Date only`
   }
 
   if (o.startAt && o.endAt) {
-    const range = `${formatTime(o.startAt)} - ${formatTime(o.endAt)}`
-    const dur = formatDuration(o.durationMinutes)
-    return dur ? `${dateLabel}, ${range} ~${dur}` : `${dateLabel}, ${range}`
+    return `${dateLabel}, ${formatTime(o.startAt)} - ${formatTime(o.endAt)}`
   }
 
   if (o.startAt) return `${dateLabel}, ${formatTime(o.startAt)}`
@@ -151,7 +147,7 @@ const statusMutation = useMutation({
     mutationFn: () => {
       const d = new Date(occurrence!.startAt!)
       d.setHours(0, 0, 0, 0)
-      return occurrencesApi.update(occurrence!.id, { title: occurrence!.title, startAt: d.toISOString(), endAt: null, isAllDay: true, isPlanned: true, durationMinutes: occurrence!.durationMinutes })
+      return occurrencesApi.update(occurrence!.id, { title: occurrence!.title, startAt: d.toISOString(), endAt: null, isAllDay: true, isPlanned: true })
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['events'] })
@@ -161,7 +157,7 @@ const statusMutation = useMutation({
   })
 
   const floatMutation = useMutation({
-    mutationFn: () => occurrencesApi.update(occurrence!.id, { title: occurrence!.title, startAt: null, endAt: null, isAllDay: false, isPlanned: false, durationMinutes: occurrence!.durationMinutes }),
+    mutationFn: () => occurrencesApi.update(occurrence!.id, { title: occurrence!.title, startAt: null, endAt: null, isAllDay: false, isPlanned: false }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['events'] })
       onClose()
@@ -357,6 +353,28 @@ const statusMutation = useMutation({
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <CategoryIcon icon={category.icon} color={category.color} size={16} strokeWidth={2} />
             {category.name}
+          </div>
+        )}
+
+        {occurrence.deadline && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Flag className="h-4 w-4 shrink-0" strokeWidth={2} />
+            <span>
+              {occurrence.deadline.effectiveTitle}
+              {(occurrence.deadline.startAt ?? occurrence.deadline.endAt) && (
+                <> - {new Date((occurrence.deadline.startAt ?? occurrence.deadline.endAt)!).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</>
+              )}
+            </span>
+          </div>
+        )}
+
+        {occurrence.linkedDoneCount > 0 && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Check className="h-4 w-4 shrink-0" strokeWidth={2} />
+            <span>
+              {occurrence.linkedDoneCount} {occurrence.linkedDoneCount === 1 ? 'session' : 'sessions'} done
+              {occurrence.linkedDoneMinutes > 0 && `, ${formatDuration(occurrence.linkedDoneMinutes)}`}
+            </span>
           </div>
         )}
 

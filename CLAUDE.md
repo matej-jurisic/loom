@@ -77,7 +77,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `Dtos/Dtos.cs` — request/response records with `FromEntity` static factory. Never leak entities.
   Key DTOs: `ActivityDto` (has `Kind` — internal activity/event split — and `RecentOccurrenceCount`,
   filled only by `ActivityService.ListAsync`, which orders the new-occurrence modal's picker), `OccurrenceDto` (has
-  `EffectiveTitle = title ?? activity.title`, `IsPlanned`, `DurationMinutes`),
+  `EffectiveTitle = title ?? activity.title`, `IsPlanned`),
   `CategoryDto`/`CategorySummaryDto`, `CheckpointDto` (has `Size` enum — not numeric progress).
   `GoalHeatmap`/`GoalHeatmapDay` are shared by a single goal's `GoalDto.Heatmap` (ongoing goals only,
   built by `GoalService.GetOngoingProgressAsync`, includes skipped days) and
@@ -87,6 +87,11 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `Services/*Service.cs` — ctor-inject `LoomDbContext`; return `Result`/`Result<T>`. Registered in `AddLoomCore`.
 - `Services/InsightsService.cs` — totals over completed occurrences only. **Never add a stat whose
   denominator is the length of a day**; see the boundary above.
+- `Occurrence.DeadlineOccurrenceId` — self-reference (set-null) to a pending event-kind occurrence.
+  `OccurrenceService.ValidateDeadlineAsync` owns the rules (own user, event kind, pending unless
+  unchanged, no self/loop); `WithLinksAsync` fills `OccurrenceDto.Deadline` and the target's
+  `LinkedDoneCount`/`LinkedDoneMinutes` on every list and single read. On `PUT`, a null id means
+  "unchanged" and `ClearDeadline` removes it, so the many full-replace callers need not resend it.
 - ⚠️ **A child with a pre-set `Guid Id` added to a *tracked* parent's nav collection is treated as an
   existing row** (change detection sees a non-default key) and issues an UPDATE matching nothing. Use
   `db.Set<T>().Add(...)` explicitly — see `OccurrenceService.ApplySubtasks`. Relationship fixup then also appends it to the parent collection,
@@ -261,7 +266,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   (`dueRowRef`) and the Plan page's Unfinished section (`isBehind`), so a planned occurrence that
   slipped stays visible without being styled as late.
 - ⚠️ **`PUT /api/occurrences/{id}` is a full replace**: `UpdateAsync` assigns `Title`, `StartAt`,
-  `EndAt`, `IsAllDay`, `IsPlanned` and `DurationMinutes` unconditionally, so any field left out of the
+  `EndAt`, `IsAllDay` and `IsPlanned` unconditionally, so any field left out of the
   body is cleared. Resend everything that isn't changing (see the Plan page sweep). `Subtasks` is the
   sole exception — `ApplySubtasks` no-ops when the key is absent.
 - **Destructive actions confirm via `ConfirmDialog`** (never inline or immediate); mutations without

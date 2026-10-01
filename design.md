@@ -128,6 +128,13 @@ The panes are separated by a 1px `border-[var(--border)]` vertical divider. No g
 - Checked (done): `bg-primary` fill, white checkmark SVG.
 - Skipped: gray outline, gray "×" or dashed style.
 
+### Deadline link
+
+Quiet metadata, never a badge or progress bar. On a list row's meta line a linked session shows a
+`Flag` icon and the deadline's title in `text-muted-foreground`, truncated; the deadline itself shows
+"3 sessions, 4h 30m" in the same tone. The detail modal repeats both as icon + text lines. The edit
+modal's "Deadline (optional)" select sits first in "More options", for both kinds.
+
 ### Cards
 
 - `border border-border bg-card rounded-[var(--radius-lg)]`. **No shadow.**

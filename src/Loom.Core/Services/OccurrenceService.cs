@@ -13,12 +13,16 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     {
         var err = ValidateOptionalTitle(req.Title)
             ?? ValidateWindowAndStartAt(req.StartAt, req.WindowStart)
-            ?? Validators.ValidateDateRange(req.StartAt, req.EndAt)
-            ?? ValidateDuration(req.IsPlanned, req.StartAt, req.EndAt, req.DurationMinutes);
+            ?? Validators.ValidateDateRange(req.StartAt, req.EndAt);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
         var activity = await FindActivityAsync(req.ActivityId, userId);
         if (activity is null) return Result<OccurrenceDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."));
+        if (req.DeadlineOccurrenceId is { } deadlineId)
+        {
+            var deadlineErr = await ValidateDeadlineAsync(userId, null, deadlineId, null);
+            if (deadlineErr is not null) return Result<OccurrenceDto>.Fail(deadlineErr);
+        }
         // An event's activity is a backing row owned by exactly one occurrence, so it is never a
         // target here: CreateEventAsync is the only thing allowed to attach one.
         if (activity.Kind == ActivityKind.@event)
@@ -35,10 +39,10 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             EndAt = req.EndAt,
             IsAllDay = req.IsAllDay,
             IsPlanned = req.IsPlanned,
-            DurationMinutes = req.DurationMinutes,
             WindowStart = req.WindowStart,
             WindowEnd = req.WindowEnd,
             WindowDurationMinutes = req.WindowDurationMinutes,
+            DeadlineOccurrenceId = req.DeadlineOccurrenceId,
         };
 
         var subtaskCopies = activity.Subtasks
@@ -120,18 +124,18 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
 
         var ctx = await settings.GetDayContextAsync(userId);
         var now = DateTimeOffset.UtcNow;
-        return occurrences
+        var dtos = occurrences
             .OrderBy(o => o.StartAt ?? o.EndAt ?? DateTimeOffset.MaxValue)
             .ThenBy(o => o.CreatedAt)
             .Select(o => OccurrenceDto.FromEntity(o, ctx, now))
             .ToList();
+        return await WithLinksAsync(dtos, userId);
     }
 
     public async Task<Result<OccurrenceDto>> UpdateAsync(Guid id, Guid userId, UpdateOccurrenceRequest req)
     {
         var err = ValidateOptionalTitle(req.Title)
             ?? Validators.ValidateDateRange(req.StartAt, req.EndAt)
-            ?? ValidateDuration(req.IsPlanned, req.StartAt, req.EndAt, req.DurationMinutes)
             ?? ValidateSubtaskInputs(req.Subtasks);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
@@ -165,7 +169,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         o.EndAt = req.EndAt;
         o.IsAllDay = req.IsAllDay;
         o.IsPlanned = req.IsPlanned;
-        o.DurationMinutes = req.DurationMinutes;
+
+        var linkErr = await ApplyDeadlineAsync(o, userId, req.DeadlineOccurrenceId, req.ClearDeadline);
+        if (linkErr is not null) return Result<OccurrenceDto>.Fail(linkErr);
 
         var subtaskErr = ApplySubtasks(o, req.Subtasks);
         if (subtaskErr is not null) return Result<OccurrenceDto>.Fail(subtaskErr);
@@ -230,8 +236,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     public async Task<Result<OccurrenceDto>> CreateEventAsync(Guid userId, CreateEventRequest req)
     {
         var err = Validators.ValidateTitle(req.Title, "Title")
-            ?? Validators.ValidateDateRange(req.StartAt, req.EndAt)
-            ?? ValidateDuration(req.IsPlanned, req.StartAt, req.EndAt, req.DurationMinutes);
+            ?? Validators.ValidateDateRange(req.StartAt, req.EndAt);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
         var a = new Activity
@@ -257,6 +262,12 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             a.Goal = goal;
         }
 
+        if (req.DeadlineOccurrenceId is { } deadlineId)
+        {
+            var deadlineErr = await ValidateDeadlineAsync(userId, null, deadlineId, null);
+            if (deadlineErr is not null) return Result<OccurrenceDto>.Fail(deadlineErr);
+        }
+
         db.Activities.Add(a);
 
         var o = new Occurrence
@@ -268,7 +279,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             EndAt = req.EndAt,
             IsAllDay = req.IsAllDay,
             IsPlanned = req.IsPlanned,
-            DurationMinutes = req.DurationMinutes,
+            DeadlineOccurrenceId = req.DeadlineOccurrenceId,
         };
         db.Occurrences.Add(o);
         await db.SaveChangesAsync();
@@ -279,7 +290,6 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     {
         var err = Validators.ValidateTitle(req.Title, "Title")
             ?? Validators.ValidateDateRange(req.StartAt, req.EndAt)
-            ?? ValidateDuration(req.IsPlanned, req.StartAt, req.EndAt, req.DurationMinutes)
             ?? ValidateSubtaskInputs(req.Subtasks);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
@@ -321,7 +331,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         o.EndAt = req.EndAt;
         o.IsAllDay = req.IsAllDay;
         o.IsPlanned = req.IsPlanned;
-        o.DurationMinutes = req.DurationMinutes;
+
+        var linkErr = await ApplyDeadlineAsync(o, userId, req.DeadlineOccurrenceId, req.ClearDeadline);
+        if (linkErr is not null) return Result<OccurrenceDto>.Fail(linkErr);
 
         var subtaskErr = ApplySubtasks(o, req.Subtasks);
         if (subtaskErr is not null) return Result<OccurrenceDto>.Fail(subtaskErr);
@@ -407,7 +419,96 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     private async Task<OccurrenceDto> ToDtoAsync(Occurrence o, Guid userId)
     {
         var ctx = await settings.GetDayContextAsync(userId);
-        return OccurrenceDto.FromEntity(o, ctx, DateTimeOffset.UtcNow);
+        var dto = OccurrenceDto.FromEntity(o, ctx, DateTimeOffset.UtcNow);
+        return (await WithLinksAsync([dto], userId))[0];
+    }
+
+    private async Task<List<OccurrenceDto>> WithLinksAsync(List<OccurrenceDto> dtos, Guid userId)
+    {
+        var links = await db.Occurrences
+            .AsNoTracking()
+            .Where(o => o.UserId == userId && o.DeadlineOccurrenceId != null)
+            .Select(o => new { o.DeadlineOccurrenceId, o.Status, o.StartAt, o.EndAt })
+            .ToListAsync();
+
+        var stats = links
+            .Where(l => l.Status == EventStatus.done)
+            .GroupBy(l => l.DeadlineOccurrenceId!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => (Count: g.Count(), Minutes: g.Sum(l => LinkedMinutes(l.StartAt, l.EndAt))));
+
+        var targetIds = dtos.Where(d => d.DeadlineOccurrenceId.HasValue)
+            .Select(d => d.DeadlineOccurrenceId!.Value)
+            .Distinct()
+            .ToList();
+        var refs = targetIds.Count == 0
+            ? []
+            : (await db.Occurrences
+                .AsNoTracking()
+                .Include(o => o.Activity)
+                .Where(o => o.UserId == userId && targetIds.Contains(o.Id))
+                .ToListAsync())
+                .ToDictionary(o => o.Id, DeadlineRefDto.FromEntity);
+
+        return dtos.Select(d =>
+        {
+            var deadline = d.DeadlineOccurrenceId is { } id && refs.TryGetValue(id, out var r) ? r : null;
+            return stats.TryGetValue(d.Id, out var s)
+                ? d with { Deadline = deadline, LinkedDoneCount = s.Count, LinkedDoneMinutes = s.Minutes }
+                : d with { Deadline = deadline };
+        }).ToList();
+    }
+
+    private static int LinkedMinutes(DateTimeOffset? startAt, DateTimeOffset? endAt)
+    {
+        if (!startAt.HasValue || !endAt.HasValue) return 0;
+        return Math.Max(0, (int)(endAt.Value - startAt.Value).TotalMinutes);
+    }
+
+    private async Task<Error?> ApplyDeadlineAsync(Occurrence o, Guid userId, Guid? targetId, bool clear)
+    {
+        if (clear)
+        {
+            o.DeadlineOccurrenceId = null;
+            return null;
+        }
+        if (targetId is not { } id || id == o.DeadlineOccurrenceId) return null;
+
+        var err = await ValidateDeadlineAsync(userId, o.Id, id, o.DeadlineOccurrenceId);
+        if (err is not null) return err;
+        o.DeadlineOccurrenceId = id;
+        return null;
+    }
+
+    private async Task<Error?> ValidateDeadlineAsync(Guid userId, Guid? selfId, Guid targetId, Guid? currentId)
+    {
+        if (targetId == selfId)
+            return new Error(ErrorType.Validation, "An occurrence cannot be its own deadline.");
+
+        var target = await db.Occurrences
+            .AsNoTracking()
+            .Where(o => o.Id == targetId && o.UserId == userId)
+            .Select(o => new { o.Status, o.DeadlineOccurrenceId, IsEvent = o.Activity.Kind == ActivityKind.@event })
+            .FirstOrDefaultAsync();
+        if (target is null) return new Error(ErrorType.NotFound, "Deadline not found.");
+        if (!target.IsEvent)
+            return new Error(ErrorType.Validation, "A deadline must be an event.");
+        if (target.Status != EventStatus.pending && targetId != currentId)
+            return new Error(ErrorType.Validation, "A deadline must be pending.");
+
+        var next = target.DeadlineOccurrenceId;
+        for (var hops = 0; selfId.HasValue && next.HasValue && hops < 100; hops++)
+        {
+            if (next == selfId)
+                return new Error(ErrorType.Validation, "That link would make the deadlines loop.");
+            next = await db.Occurrences
+                .AsNoTracking()
+                .Where(o => o.Id == next.Value)
+                .Select(o => o.DeadlineOccurrenceId)
+                .FirstOrDefaultAsync();
+        }
+        return null;
     }
 
     /// <summary>
@@ -480,19 +581,4 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         !string.IsNullOrWhiteSpace(title) && title.Length > 255
             ? new Error(ErrorType.Validation, "Title cannot exceed 255 characters.")
             : null;
-
-    private static Error? ValidateDuration(
-        bool isPlanned,
-        DateTimeOffset? startAt,
-        DateTimeOffset? endAt,
-        int? durationMinutes)
-    {
-        if (isPlanned && startAt.HasValue && endAt.HasValue && durationMinutes.HasValue)
-        {
-            var windowMinutes = (int)(endAt.Value - startAt.Value).TotalMinutes;
-            if (durationMinutes.Value > windowMinutes)
-                return new Error(ErrorType.Validation, "Duration cannot exceed the length of the window.");
-        }
-        return null;
-    }
 }

@@ -125,11 +125,23 @@ export interface Occurrence {
   status: EventStatus
   isAllDay: boolean
   isPlanned: boolean
-  durationMinutes: number | null
   createdAt: string
   isOverdue: boolean
   subtasks: OccurrenceSubtask[]
   activity: Activity
+  deadlineOccurrenceId: string | null
+  deadline: DeadlineRef | null
+  linkedDoneCount: number
+  linkedDoneMinutes: number
+}
+
+export interface DeadlineRef {
+  id: string
+  effectiveTitle: string
+  startAt: string | null
+  endAt: string | null
+  isAllDay: boolean
+  status: EventStatus
 }
 
 export interface InsightsActivity {

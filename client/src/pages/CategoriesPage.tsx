@@ -24,15 +24,6 @@ function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 }
 
-function formatDuration(minutes: number | null): string {
-  if (!minutes) return ''
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h > 0 && m > 0) return `${h}h ${m}m`
-  if (h > 0) return `${h}h`
-  return `${m}m`
-}
-
 function getDayLabel(iso: string): string {
   const d = new Date(iso)
   const now = new Date()
@@ -48,14 +39,11 @@ function formatOccurrenceDate(o: Occurrence): string {
   const refIso = o.startAt ?? o.endAt
   if (!refIso) return ''
   if (o.isAllDay) {
-    const dur = formatDuration(o.durationMinutes)
-    return dur ? `${getDayLabel(refIso)}, Date only · ~${dur}` : `${getDayLabel(refIso)}, Date only`
+    return `${getDayLabel(refIso)}, Date only`
   }
   const dayLabel = getDayLabel(refIso)
   if (o.startAt && o.endAt) {
-    const range = `${formatTime(o.startAt)} - ${formatTime(o.endAt)}`
-    const dur = formatDuration(o.durationMinutes)
-    return dur ? `${dayLabel}, ${range} ~${dur}` : `${dayLabel}, ${range}`
+    return `${dayLabel}, ${formatTime(o.startAt)} - ${formatTime(o.endAt)}`
   }
   if (o.startAt) return `${dayLabel}, ${formatTime(o.startAt)}`
   return `${dayLabel}, Due ${formatTime(o.endAt!)}`

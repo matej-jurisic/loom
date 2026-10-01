@@ -13,12 +13,13 @@ public class Occurrence
     public EventStatus Status { get; set; } = EventStatus.pending;
     public bool IsAllDay { get; set; } = false;
     public bool IsPlanned { get; set; } = false;
-    public int? DurationMinutes { get; set; }
     public DateTimeOffset? WindowStart { get; set; }
     public DateTimeOffset? WindowEnd { get; set; }
     public int? WindowDurationMinutes { get; set; }
+    public Guid? DeadlineOccurrenceId { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public Activity Activity { get; set; } = null!;
+    public Occurrence? DeadlineOccurrence { get; set; }
     public List<OccurrenceSubtask> Subtasks { get; set; } = [];
 }

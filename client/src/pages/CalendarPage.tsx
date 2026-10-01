@@ -22,6 +22,7 @@ const MAX_HOUR_PX = 128
 const MIN_EVENT_PX = 16
 // Span given to an occurrence created by a single click or tap on empty grid.
 const CLICK_CREATE_MINUTES = 30
+const PILL_DROP_MINUTES = 60
 // Longest touch that still counts as a tap. A press held past this was going for the long-press
 // create and let go early, or was a finger parked on the grid mid-scroll - neither is a create.
 // Comfortably under the 350ms the long press itself needs.
@@ -348,12 +349,6 @@ function EventBlock({
     ? `${timeLabel(event.startAt)}${event.endAt ? ` – ${timeLabel(event.endAt)}` : ''}`
     : ''
 
-  const durationLabel = isPlanned && event.durationMinutes
-    ? event.durationMinutes >= 60
-      ? `~${Math.floor(event.durationMinutes / 60)}h${event.durationMinutes % 60 ? `${event.durationMinutes % 60}m` : ''}`
-      : `~${event.durationMinutes}m`
-    : null
-
   // Handles show always when resizing (touch mode), or on mouse hover via CSS
   const handleVisibility = isResizing ? 'flex' : 'hidden group-hover/calev:flex'
 
@@ -411,7 +406,7 @@ function EventBlock({
               className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[10px] font-medium leading-none ${isDone ? 'line-through text-muted-foreground' : isSkipped ? 'text-muted-foreground' : ''}`}
               style={isDone || isSkipped ? undefined : { color: accentColor }}
             >
-              {event.effectiveTitle}{durationLabel ? ` ${durationLabel}` : ''}
+              {event.effectiveTitle}
             </p>
             <span className="shrink-0 text-[9px] leading-none opacity-60" style={{ color: accentColor }}>
               {timeLabel(event.startAt!)}
@@ -451,7 +446,7 @@ function EventBlock({
                   className={`overflow-hidden whitespace-nowrap text-[10px] font-medium ${compact ? 'leading-none' : 'leading-tight'}`}
                   style={{ color: accentColor }}
                 >
-                  {event.effectiveTitle}{durationLabel ? ` ${durationLabel}` : ''}
+                  {event.effectiveTitle}
                 </p>
               </div>
             </button>
@@ -837,7 +832,7 @@ function FloatingTasksRow({
                   className={`shrink-0 max-w-[160px] truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${movingEventId === o.id ? 'opacity-20' : pendingDragId === o.id ? 'opacity-50 scale-95' : ''} ${className}`}
                   style={{ touchAction: 'none', ...style }}
                 >
-                  {o.effectiveTitle}{o.durationMinutes ? ` ~${o.durationMinutes >= 60 ? `${Math.floor(o.durationMinutes / 60)}h${o.durationMinutes % 60 ? `${o.durationMinutes % 60}m` : ''}` : `${o.durationMinutes}m`}` : ''}
+                  {o.effectiveTitle}
                 </button>
               )
             })}
@@ -1205,7 +1200,7 @@ export function CalendarPage() {
   const [navDir, setNavDir] = useState<'forward' | 'back' | null>(null)
   const [navCount, setNavCount] = useState(0)
   const navDirTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const allDayDragStateRef = useRef<{ durationMinutes: number; curDayIdx: number; isDue: boolean } | null>(null)
+  const allDayDragStateRef = useRef<{ curDayIdx: number; isDue: boolean } | null>(null)
   const allDayDragActiveRef = useRef(false)
   const floatRowRef = useRef<HTMLDivElement>(null)
   const allDayRowRef = useRef<HTMLDivElement>(null)
@@ -1886,7 +1881,7 @@ export function CalendarPage() {
       endAt,
       isAllDay,
       isPlanned: ev.isPlanned,
-      durationMinutes: ev.durationMinutes,
+      deadlineOccurrenceId: ev.deadline?.status === 'pending' ? ev.deadline.id : null,
     }).catch((err) => {
       toastError(err, 'Could not duplicate the occurrence.')
     }).finally(() => {
@@ -1930,7 +1925,6 @@ export function CalendarPage() {
       endAt: newEndAt,
       isAllDay: ev.isAllDay,
       isPlanned: ev.isPlanned,
-      durationMinutes: ev.durationMinutes,
     }).catch((err) => {
       toastError(err, 'Could not reschedule the occurrence.')
     }).finally(() => {
@@ -1971,7 +1965,6 @@ export function CalendarPage() {
       endAt: newEnd.toISOString(),
       isAllDay: false,
       isPlanned: ev.isPlanned,
-      durationMinutes: ev.durationMinutes,
     }).catch((err) => {
       toastError(err, 'Could not reschedule the occurrence.')
     }).finally(() => {
@@ -1995,7 +1988,6 @@ export function CalendarPage() {
       endAt: newEnd.toISOString(),
       isAllDay: false,
       isPlanned: ev.isPlanned,
-      durationMinutes: ev.durationMinutes,
     }).catch((err) => {
       toastError(err, 'Could not schedule the task.')
     }).finally(() => {
@@ -2031,7 +2023,6 @@ export function CalendarPage() {
       endAt: null,
       isAllDay: false,
       isPlanned: ev.isPlanned,
-      durationMinutes: ev.durationMinutes,
     }).catch((err) => {
       toastError(err, 'Could not unschedule the event.')
     }).finally(() => {
@@ -2092,7 +2083,6 @@ export function CalendarPage() {
       endAt,
       isAllDay: true,
       isPlanned: ev.isPlanned,
-      durationMinutes: ev.durationMinutes,
     }).catch((err) => {
       toastError(err, 'Could not convert to all-day.')
     }).finally(() => {
@@ -2107,8 +2097,7 @@ export function CalendarPage() {
 
     // All-day events also have endAt null, so check isAllDay before treating as a due pin
     const isDue = !event.isAllDay && isDueOccurrence(event)
-    const durationMinutes = event.durationMinutes ?? 60
-    const durationMs = durationMinutes * 60 * 1000
+    const durationMs = PILL_DROP_MINUTES * 60 * 1000
     const pointerId = e.pointerId
     const isTouch = e.pointerType === 'touch'
     const startClientX = e.clientX
@@ -2136,7 +2125,7 @@ export function CalendarPage() {
       }
 
       const curDayIdx = Math.max(0, Math.min(getDayIdxFromX(mv.clientX), days.length - 1))
-      allDayDragStateRef.current = { durationMinutes, curDayIdx, isDue }
+      allDayDragStateRef.current = { curDayIdx, isDue }
 
       const dropTarget = getDropTarget(mv.clientY)
       if (dropTarget !== dragDropTargetRef.current) {
@@ -2164,7 +2153,7 @@ export function CalendarPage() {
         setMoveOverlay({
           dayIdx: curDayIdx,
           topPx: sc.toPx(startMin),
-          heightPx: isDue ? duePinHeight(sc.hourPx) : Math.max((durationMinutes / 60) * sc.hourPx, MIN_EVENT_PX),
+          heightPx: isDue ? duePinHeight(sc.hourPx) : Math.max((PILL_DROP_MINUTES / 60) * sc.hourPx, MIN_EVENT_PX),
         })
         startAutoScroll(mv.clientX, mv.clientY)
       } else {
@@ -2635,15 +2624,15 @@ export function CalendarPage() {
             setResizeOverlay(computeResizeOverlays(rs.origStartMs, Math.max(snappedMs, rs.origStartMs + 15 * 60 * 1000)))
           }
         } else if (allDayDragActiveRef.current && allDayDragStateRef.current) {
-          const { durationMinutes: dur, curDayIdx, isDue: isPillDue } = allDayDragStateRef.current
+          const { curDayIdx, isDue: isPillDue } = allDayDragStateRef.current
           if (gridRef.current && state.clientY >= gridRef.current.getBoundingClientRect().top) {
             const curY = getYInGrid(state.clientY)
             const sc = scaleFor(curDayIdx)
             const startSnapped = isPillDue
               ? snapToGridDue(days[curDayIdx], curY, sc)
-              : dragStartFor(days[curDayIdx], curY, sc, dur * 60000)
+              : dragStartFor(days[curDayIdx], curY, sc, PILL_DROP_MINUTES * 60000)
             const startMin = startSnapped.getHours() * 60 + startSnapped.getMinutes()
-            setMoveOverlay({ dayIdx: curDayIdx, topPx: sc.toPx(startMin), heightPx: isPillDue ? duePinHeight(sc.hourPx) : Math.max((dur / 60) * sc.hourPx, MIN_EVENT_PX) })
+            setMoveOverlay({ dayIdx: curDayIdx, topPx: sc.toPx(startMin), heightPx: isPillDue ? duePinHeight(sc.hourPx) : Math.max((PILL_DROP_MINUTES / 60) * sc.hourPx, MIN_EVENT_PX) })
           }
         }
       }
@@ -3255,7 +3244,6 @@ export function CalendarPage() {
                       {allDayLayout.map(({ id, row, startIdx, endIdx }) => {
                         const e = allDayEvents.find((ev) => ev.id === id)!
                         const n = days.length
-                        const durationLabel = e.durationMinutes ? ` ~${e.durationMinutes >= 60 ? `${Math.floor(e.durationMinutes / 60)}h${e.durationMinutes % 60 ? `${e.durationMinutes % 60}m` : ''}` : `${e.durationMinutes}m`}` : ''
                         return (
                           <button
                             key={e.id}
@@ -3272,7 +3260,7 @@ export function CalendarPage() {
                             }}
                             className={`truncate rounded-[3px] px-1.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : e.status === 'skipped' ? 'opacity-30' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`}
                           >
-                            {e.effectiveTitle}{durationLabel}
+                            {e.effectiveTitle}
                           </button>
                         )
                       })}
@@ -3324,7 +3312,7 @@ export function CalendarPage() {
                     <div className="flex flex-1 flex-col gap-0.5 border-l border-r px-0.5 py-0.5 min-h-[26px]" style={{ borderColor: 'var(--calendar-line)' }}>
                       {dayAllDayEvents.map((e) => (
                         <button key={e.id} onPointerDown={(ev) => handleAllDayPillMoveStart(ev, e)} onClick={() => { if (!suppressClickRef.current) openDetail(e) }} className={`w-full truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status !== 'pending' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`} style={{ touchAction: 'none', ...eventAllDayColors(e).style }}>
-                          {e.effectiveTitle}{e.durationMinutes ? ` ~${e.durationMinutes >= 60 ? `${Math.floor(e.durationMinutes / 60)}h${e.durationMinutes % 60 ? `${e.durationMinutes % 60}m` : ''}` : `${e.durationMinutes}m`}` : ''}
+                          {e.effectiveTitle}
                         </button>
                       ))}
                     </div>

@@ -23,20 +23,18 @@ interface FormState {
   goalId: string
   startAt: string
   endAt: string
-  durationHours: string
-  durationMins: string
+  deadlineId: string
 }
 
 interface Errors {
   activityId?: string
   title?: string
   endAt?: string
-  duration?: string
 }
 
 type TimeMode = 'due' | 'scheduled' | 'floating'
 
-function validate(form: FormState, kind: ActivityKind, timeMode: TimeMode, isPlanned: boolean, isAllDay: boolean): Errors {
+function validate(form: FormState, kind: ActivityKind, timeMode: TimeMode, isAllDay: boolean): Errors {
   const errs: Errors = {}
   if (kind === 'activity' && !form.activityId) errs.activityId = 'Please select an activity.'
   if (kind === 'event' && !form.title.trim()) errs.title = 'Title is required.'
@@ -45,13 +43,6 @@ function validate(form: FormState, kind: ActivityKind, timeMode: TimeMode, isPla
   }
   if (timeMode === 'scheduled' && isAllDay && form.startAt && form.endAt && form.endAt.substring(0, 10) < form.startAt.substring(0, 10)) {
     errs.endAt = 'End date must be on or after the start date.'
-  }
-  if (form.durationHours || form.durationMins) {
-    const totalMins = (parseInt(form.durationHours || '0') * 60) + parseInt(form.durationMins || '0')
-    if (isPlanned && timeMode === 'scheduled' && form.startAt && form.endAt) {
-      const windowMins = (new Date(form.endAt).getTime() - new Date(form.startAt).getTime()) / 60000
-      if (totalMins > windowMins) errs.duration = 'Duration cannot exceed the length of the window.'
-    }
   }
   return errs
 }
@@ -100,11 +91,6 @@ function toAllDayExclusiveEndIso(displayDate: string): string {
   return d.toISOString()
 }
 
-function durationToHM(minutes: number | null): { h: string; m: string } {
-  if (!minutes) return { h: '', m: '' }
-  return { h: String(Math.floor(minutes / 60)), m: String(minutes % 60) }
-}
-
 interface OccurrenceModalProps {
   open: boolean
   onClose: () => void
@@ -123,7 +109,6 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
 
   const source = occurrence ?? duplicateFrom
 
-  const dur = durationToHM(source?.durationMinutes ?? null)
   const isEventKind = source?.activity.kind === 'event'
 
   const [kind, setKind] = useState<ActivityKind>(() => isEventKind ? 'event' : 'activity')
@@ -137,8 +122,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     endAt: source?.isAllDay && source?.endAt
       ? toAllDayEndInput(source.endAt)
       : (occurrence ? toInputValue(occurrence.endAt) : (duplicateFrom ? toInputValue(duplicateFrom.endAt) : (defaultEndAt ?? ''))),
-    durationHours: dur.h,
-    durationMins: dur.m,
+    deadlineId: source?.deadline && (occurrence || source.deadline.status === 'pending') ? source.deadline.id : '',
   }))
 
   const [errors, setErrors] = useState<Errors>({})
@@ -160,9 +144,9 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   const [showAdvanced, setShowAdvanced] = useState(() => {
     if (isEdit || scheduleOnly) return true
     if (!source) return false
-    if (source.durationMinutes) return true
     if (source.title) return true
     if (source.activity?.categoryId || source.activity?.goalId) return true
+    if (source.deadlineOccurrenceId) return true
     return false
   })
 
@@ -204,6 +188,12 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     enabled: open && kind === 'event',
   })
 
+  const { data: pendingEvents = [] } = useQuery({
+    queryKey: ['events', 'pending-deadlines'],
+    queryFn: () => occurrencesApi.list({ status: 'pending' }),
+    enabled: open && !scheduleOnly,
+  })
+
   const createActivityMutation = useMutation({
     mutationFn: ({ title, categoryId }: { title: string; categoryId: string | null }) =>
       activitiesApi.create({ title, categoryId }),
@@ -218,10 +208,6 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
 
   const mutation = useMutation({
     mutationFn: () => {
-      const durationMinutes = (form.durationHours || form.durationMins)
-        ? (parseInt(form.durationHours || '0') * 60) + parseInt(form.durationMins || '0')
-        : null
-
       const schedulePayload = {
         startAt: timeMode === 'floating' ? null : toIso(form.startAt),
         endAt: isAllDay
@@ -229,7 +215,6 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
           : (timeMode !== 'scheduled' ? null : toIso(form.endAt)),
         isAllDay: timeMode === 'floating' ? false : isAllDay,
         isPlanned,
-        durationMinutes,
         // Subtasks are edited as a draft and applied here; omitted when the section
         // is not shown so the server leaves them untouched.
         subtasks: isEdit && !scheduleOnly
@@ -237,12 +222,20 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
           : undefined,
       }
 
+      const linkPayload = scheduleOnly
+        ? {}
+        : {
+            deadlineOccurrenceId: form.deadlineId || null,
+            clearDeadline: isEdit && !form.deadlineId && Boolean(occurrence?.deadlineOccurrenceId),
+          }
+
       if (kind === 'event') {
         const eventPayload = {
           title: form.title.trim(),
           categoryId: form.categoryId || null,
           goalId: form.goalId || null,
           ...schedulePayload,
+          ...linkPayload,
         }
         return isEdit
           ? occurrencesApi.updateEvent(occurrence!.id, eventPayload)
@@ -253,6 +246,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
         activityId: form.activityId,
         title: form.title.trim() || null,
         ...schedulePayload,
+        ...linkPayload,
       }
       return isEdit
         ? occurrencesApi.update(occurrence!.id, occurrencePayload)
@@ -286,7 +280,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   }
 
   function handleSubmit() {
-    const errs = validate(form, kind, timeMode, isPlanned, isAllDay)
+    const errs = validate(form, kind, timeMode, isAllDay)
     if (Object.keys(errs).length > 0) {
       setErrors(errs)
       return
@@ -298,12 +292,11 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     setTimeMode(mode)
     if (mode === 'floating') {
       setIsAllDay(false)
-      setForm((f) => ({ ...f, startAt: '', endAt: '', durationHours: '', durationMins: '' }))
+      setForm((f) => ({ ...f, startAt: '', endAt: '' }))
       setErrors({})
     } else if (mode === 'scheduled') {
       if (!form.endAt && form.startAt && !isAllDay) {
-        const durationMins = (parseInt(form.durationHours || '0') * 60) + parseInt(form.durationMins || '0')
-        setForm((f) => ({ ...f, endAt: durationMins > 0 ? addMinutes(f.startAt, durationMins) : addOneHour(f.startAt) }))
+        setForm((f) => ({ ...f, endAt: addOneHour(f.startAt) }))
       }
       setErrors({})
     } else {
@@ -344,6 +337,19 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     [activities],
   )
 
+  const deadlineOptions = useMemo(() => {
+    const dateLabel = (iso: string | null) =>
+      iso ? new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : undefined
+    const fromList = pendingEvents
+      .filter((o) => o.activity.kind === 'event' && o.id !== occurrence?.id)
+      .map((o) => ({ value: o.id, label: o.effectiveTitle, sublabel: dateLabel(o.startAt ?? o.endAt) }))
+    const current = source?.deadline
+    if (current && !fromList.some((o) => o.value === current.id) && (occurrence || current.status === 'pending')) {
+      fromList.push({ value: current.id, label: current.effectiveTitle, sublabel: dateLabel(current.startAt ?? current.endAt) })
+    }
+    return [{ value: '', label: 'No deadline', sublabel: undefined }, ...fromList]
+  }, [pendingEvents, occurrence, source])
+
   const segmentClass = (active: boolean) =>
     `flex-1 rounded-md py-2 text-xs font-medium transition-colors ${
       active
@@ -354,8 +360,6 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   const kindTitle = isEdit
     ? (kind === 'event' ? 'Edit Event' : 'Edit Occurrence')
     : (kind === 'event' ? 'New Event' : 'New Occurrence')
-
-  const showDuration = !scheduleOnly
 
   const allDayButton = (
     <button
@@ -675,40 +679,16 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
       {/* Details */}
       {!scheduleOnly && showAdvanced && (
         <div className="flex flex-col gap-3">
-          {/* Duration */}
-          {showDuration && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">
-                Duration <span className="font-normal text-muted-foreground">(optional)</span>
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex h-9 items-center gap-2 rounded-lg border border-input bg-background px-3">
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="0"
-                    value={form.durationHours}
-                    onChange={(e) => setForm((f) => ({ ...f, durationHours: e.target.value }))}
-                    className="min-w-0 flex-1 bg-transparent text-sm text-foreground focus:outline-none"
-                  />
-                  <span className="shrink-0 text-sm text-muted-foreground">h</span>
-                </div>
-                <div className="flex h-9 items-center gap-2 rounded-lg border border-input bg-background px-3">
-                  <input
-                    type="number"
-                    min="0"
-                    max="59"
-                    placeholder="0"
-                    value={form.durationMins}
-                    onChange={(e) => setForm((f) => ({ ...f, durationMins: e.target.value }))}
-                    className="min-w-0 flex-1 bg-transparent text-sm text-foreground focus:outline-none"
-                  />
-                  <span className="shrink-0 text-sm text-muted-foreground">min</span>
-                </div>
-              </div>
-              {errors.duration && <p className="text-xs text-destructive">{errors.duration}</p>}
-            </div>
-          )}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-foreground">
+              Deadline <span className="font-normal text-muted-foreground">(optional)</span>
+            </label>
+            <Select
+              value={form.deadlineId}
+              onChange={(v) => setForm((f) => ({ ...f, deadlineId: v }))}
+              options={deadlineOptions}
+            />
+          </div>
 
           {/* Activity: title override */}
           {kind === 'activity' && (

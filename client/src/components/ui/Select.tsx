@@ -33,7 +33,7 @@ export function Select({
 }: SelectProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const [pos, setPos] = useState<{ top: number; left: number; width: number; maxOptionsH: number } | null>(null)
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number; maxOptionsH: number } | null>(null)
   const [highlighted, setHighlighted] = useState(0)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
@@ -120,7 +120,8 @@ export function Select({
       const spaceBelow = vpH - tBottom - MARGIN
       const spaceAbove = tTop - MARGIN
 
-      let top: number
+      let top: number | undefined
+      let bottom: number | undefined
       let maxOptionsH: number
 
       if (spaceBelow >= spaceAbove) {
@@ -128,11 +129,11 @@ export function Select({
         maxOptionsH = Math.max(60, Math.min(MAX_OPT_H, spaceBelow - SEARCH_H - CREATE_H - GAP))
       } else {
         maxOptionsH = Math.max(60, Math.min(MAX_OPT_H, spaceAbove - SEARCH_H - CREATE_H - GAP))
-        top = vpOffsetTop + tTop - SEARCH_H - maxOptionsH - CREATE_H - GAP * 2
+        bottom = window.innerHeight - (vpOffsetTop + tTop - GAP)
       }
 
       const left = Math.max(MARGIN, Math.min(rect.left, vpW - Math.max(rect.width, 220) - MARGIN))
-      setPos({ top, left, width: rect.width, maxOptionsH })
+      setPos({ top, bottom, left, width: rect.width, maxOptionsH })
     }
 
     reposition()
@@ -185,7 +186,8 @@ export function Select({
             ref={dropdownRef}
             style={{
               position: 'fixed',
-              top: pos?.top ?? 0,
+              top: pos ? pos.top : 0,
+              bottom: pos?.bottom,
               left: pos?.left ?? 0,
               width: pos ? Math.max(pos.width, 220) : 220,
               zIndex: 60,

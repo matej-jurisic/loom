@@ -51,7 +51,7 @@ export function SkipRescheduleModal({ open, onClose, occurrence, onDone }: SkipR
           endAt: o.endAt ? shiftToDate(o.endAt, date) : null,
           isAllDay: o.isAllDay,
           isPlanned: o.isPlanned,
-          durationMinutes: o.durationMinutes,
+          deadlineOccurrenceId: o.deadline?.status === 'pending' ? o.deadline.id : null,
         })
       }
     },

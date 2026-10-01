@@ -48,7 +48,7 @@ export function MoveOrSkipModal({ open, onClose, move }: MoveOrSkipModalProps) {
         endAt,
         isAllDay,
         isPlanned: occurrence.isPlanned,
-        durationMinutes: occurrence.durationMinutes,
+        deadlineOccurrenceId: occurrence.deadline?.status === 'pending' ? occurrence.deadline.id : null,
       })
       qc.invalidateQueries({ queryKey: ['events'] })
       onClose()

@@ -83,7 +83,7 @@ public sealed record CreateEventRequest(
     DateTimeOffset? EndAt,
     bool IsAllDay,
     bool IsPlanned,
-    int? DurationMinutes);
+    Guid? DeadlineOccurrenceId = null);
 
 public sealed record UpdateEventRequest(
     string Title,
@@ -93,8 +93,9 @@ public sealed record UpdateEventRequest(
     DateTimeOffset? EndAt,
     bool IsAllDay,
     bool IsPlanned,
-    int? DurationMinutes,
-    List<OccurrenceSubtaskInput>? Subtasks = null);
+    List<OccurrenceSubtaskInput>? Subtasks = null,
+    Guid? DeadlineOccurrenceId = null,
+    bool ClearDeadline = false);
 
 // Occurrences
 public sealed record OccurrenceDto(
@@ -110,12 +111,15 @@ public sealed record OccurrenceDto(
     bool IsOverdue,
     bool IsAllDay,
     bool IsPlanned,
-    int? DurationMinutes,
     DateTimeOffset? WindowStart,
     DateTimeOffset? WindowEnd,
     int? WindowDurationMinutes,
     List<OccurrenceSubtaskDto> Subtasks,
-    ActivityDto Activity)
+    ActivityDto Activity,
+    Guid? DeadlineOccurrenceId = null,
+    DeadlineRefDto? Deadline = null,
+    int LinkedDoneCount = 0,
+    int LinkedDoneMinutes = 0)
 {
     public static OccurrenceDto FromEntity(Occurrence o, DayContext ctx, DateTimeOffset nowUtc) => new(
         o.Id, o.UserId, o.ActivityId, o.Title,
@@ -124,10 +128,23 @@ public sealed record OccurrenceDto(
         o.Status.ToString(), o.CreatedAt,
         DayMath.IsOverdue(o, ctx, nowUtc),
         o.IsAllDay,
-        o.IsPlanned, o.DurationMinutes,
+        o.IsPlanned,
         o.WindowStart, o.WindowEnd, o.WindowDurationMinutes,
         o.Subtasks.OrderBy(s => s.CreatedAt).Select(OccurrenceSubtaskDto.FromEntity).ToList(),
-        ActivityDto.FromEntity(o.Activity));
+        ActivityDto.FromEntity(o.Activity),
+        o.DeadlineOccurrenceId);
+}
+
+public sealed record DeadlineRefDto(
+    Guid Id,
+    string EffectiveTitle,
+    DateTimeOffset? StartAt,
+    DateTimeOffset? EndAt,
+    bool IsAllDay,
+    string Status)
+{
+    public static DeadlineRefDto FromEntity(Occurrence d) => new(
+        d.Id, d.Title ?? d.Activity.Title, d.StartAt, d.EndAt, d.IsAllDay, d.Status.ToString());
 }
 
 public sealed record CreateOccurrenceRequest(
@@ -137,10 +154,10 @@ public sealed record CreateOccurrenceRequest(
     DateTimeOffset? EndAt,
     bool IsAllDay,
     bool IsPlanned,
-    int? DurationMinutes,
     DateTimeOffset? WindowStart,
     DateTimeOffset? WindowEnd,
-    int? WindowDurationMinutes);
+    int? WindowDurationMinutes,
+    Guid? DeadlineOccurrenceId = null);
 
 /// <param name="ActivityId">
 /// Re-points the occurrence at a different activity. Null leaves it where it is, so a caller that
@@ -153,9 +170,10 @@ public sealed record UpdateOccurrenceRequest(
     DateTimeOffset? EndAt,
     bool IsAllDay,
     bool IsPlanned,
-    int? DurationMinutes,
     List<OccurrenceSubtaskInput>? Subtasks = null,
-    Guid? ActivityId = null);
+    Guid? ActivityId = null,
+    Guid? DeadlineOccurrenceId = null,
+    bool ClearDeadline = false);
 
 public sealed record SetOccurrenceStatusRequest(EventStatus Status);
 
@@ -230,7 +248,7 @@ public sealed record CreateCategoryRequest(string Name, string Color, string? Ic
 public sealed record UpdateCategoryRequest(string Name, string Color, string? Icon);
 
 // Insights — server-side day bucketing; floating occurrences (no StartAt) are excluded.
-// Time = EndAt-StartAt when both set, else DurationMinutes, else 0.
+// Time = EndAt-StartAt when both set, else 0.
 //
 // Every stat here sums only what the user chose to log. Nothing divides by the length of a day or
 // reads meaning into unlogged time: the app does not assume the calendar is complete, so a stat that
@@ -254,18 +272,19 @@ public sealed record ExportOccurrenceDto(
     DateTimeOffset? EndAt,
     bool IsAllDay,
     bool IsPlanned,
-    int? DurationMinutes,
     DateTimeOffset? WindowStart,
     DateTimeOffset? WindowEnd,
     int? WindowDurationMinutes,
     DateTimeOffset CreatedAt,
-    List<OccurrenceSubtaskDto> Subtasks)
+    List<OccurrenceSubtaskDto> Subtasks,
+    Guid? DeadlineOccurrenceId)
 {
     public static ExportOccurrenceDto FromEntity(Occurrence o) => new(
         o.Id, o.ActivityId, o.Title ?? o.Activity.Title, o.Status.ToString(),
-        o.StartAt, o.EndAt, o.IsAllDay, o.IsPlanned, o.DurationMinutes,
+        o.StartAt, o.EndAt, o.IsAllDay, o.IsPlanned,
         o.WindowStart, o.WindowEnd, o.WindowDurationMinutes, o.CreatedAt,
-        o.Subtasks.OrderBy(s => s.CreatedAt).Select(OccurrenceSubtaskDto.FromEntity).ToList());
+        o.Subtasks.OrderBy(s => s.CreatedAt).Select(OccurrenceSubtaskDto.FromEntity).ToList(),
+        o.DeadlineOccurrenceId);
 }
 
 public sealed record ExportDto(

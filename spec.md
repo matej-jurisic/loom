@@ -150,9 +150,25 @@ Two levels, deliberately separate:
 | End datetime | Window end when `IsPlanned`; deadline or span end otherwise. Must be after start. |
 | Is all day | Marks a date-only occurrence. |
 | Is planned | Marks a flexible/windowed occurrence (dashed on the calendar, never overdue). May be set on a floating occurrence. |
-| Duration minutes | Effort estimate, valid on any occurrence type. On a planned occurrence with both window bounds it may not exceed the window length. |
 | Status | `pending`, `done`, `skipped`. Marking done clears `IsPlanned`. |
 | Subtasks | Per-occurrence checklist with `IsDone`, seeded from the activity's template. |
+| Deadline | Optional link to a pending event-kind occurrence (`DeadlineOccurrenceId`). Any occurrence may point at one, including another event, so a draft can feed a final. |
+
+**Deadline link.** A "Lab work" session can point at the "Lab 3 report" event it is working toward.
+It is a plain optional reference, so nothing depends on it being filled in: an unlinked occurrence
+behaves exactly as before and a partly linked history is still correct.
+
+- The target must be the user's own, event-kind, and pending when the link is set. Self-links and
+  loops (A to B to A) are rejected. A link set earlier survives its target later being completed.
+- Deleting the target clears the link on whatever pointed at it; nothing cascades either way.
+- On update, a null `DeadlineOccurrenceId` leaves the link alone (callers that resend the rest of the
+  body don't need to know about it); `ClearDeadline: true` removes it. Create takes the id directly.
+- The DTO carries `deadline` (title, dates, status of the target) on the session, and on the target
+  `linkedDoneCount` / `linkedDoneMinutes`: completed linked sessions and their summed time (elapsed
+  between start and end when both are set, else nothing). Skipped and pending sessions
+  contribute nothing. There is deliberately no progress percentage or "on track" signal.
+- Skip-and-reschedule, move-or-skip and calendar duplicate carry the link onto the new copy while the
+  target is still pending.
 
 `effectiveTitle` on the DTO is `title ?? activity.title`. The DTO also carries the full activity
 (with its category and goal), which is why occurrence lists are invalidated after an activity write. Legacy `windowStart`/`windowEnd`/`windowDurationMinutes` columns remain on the row

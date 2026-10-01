@@ -59,27 +59,11 @@ function formatDayLabel(iso: string): string {
   return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function formatDuration(minutes: number | null): string {
-  if (!minutes) return ''
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h > 0 && m > 0) return `${h}h ${m}m`
-  if (h > 0) return `${h}h`
-  return `${m}m`
-}
-
 function formatTimeRange(event: Occurrence): string {
-  if (event.isAllDay) {
-    const dur = formatDuration(event.durationMinutes)
-    return dur ? `Date only ~${dur}` : 'Date only'
-  }
+  if (event.isAllDay) return 'Date only'
   if (!event.startAt && event.endAt) return `Due ${formatTime(event.endAt)}`
   if (!event.startAt) return ''
-  if (event.endAt) {
-    const range = `${formatTime(event.startAt)} - ${formatTime(event.endAt)}`
-    const dur = formatDuration(event.durationMinutes)
-    return dur ? `${range} ~${dur}` : range
-  }
+  if (event.endAt) return `${formatTime(event.startAt)} - ${formatTime(event.endAt)}`
   return formatTime(event.startAt)
 }
 
@@ -351,7 +335,6 @@ export function PlanPreviewPage() {
             endAt: o.endAt ? shiftToDate(o.endAt, tomorrow) : null,
             isAllDay: o.isAllDay,
             isPlanned: o.isPlanned,
-            durationMinutes: o.durationMinutes,
           }),
         ),
       )

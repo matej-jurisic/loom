@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, X, Pencil, Trash2, CalendarPlus, Clock, History, ListChecks } from 'lucide-react'
+import { Check, X, Pencil, Trash2, CalendarPlus, Clock, History, ListChecks, Flag } from 'lucide-react'
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Occurrence, EventStatus } from '@/lib/types'
@@ -17,6 +17,13 @@ const GOAL_TONE: Record<string, 'focus' | 'active' | 'bench' | 'neutral'> = {
   active: 'active',
   bench: 'bench',
   closed: 'neutral',
+}
+
+function formatMinutes(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h > 0 && m > 0) return `${h}h ${m}m`
+  return h > 0 ? `${h}h` : `${m}m`
 }
 
 interface OccurrenceListRowProps {
@@ -41,6 +48,10 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
   const completedCount = occurrence.subtasks.filter((s) => s.isDone).length
   const cat = occurrence.activity.category
   const goal = occurrence.activity.goal
+  const deadline = occurrence.deadline
+  const linkedLabel = occurrence.linkedDoneCount > 0
+    ? `${occurrence.linkedDoneCount} ${occurrence.linkedDoneCount === 1 ? 'session' : 'sessions'}${occurrence.linkedDoneMinutes > 0 ? `, ${formatMinutes(occurrence.linkedDoneMinutes)}` : ''}`
+    : null
 
   const statusMutation = useMutation({
     mutationFn: (status: EventStatus) => occurrencesApi.setStatus(occurrence.id, status),
@@ -119,7 +130,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
           </span>
           {goal && <Badge tone={GOAL_TONE[goal.status] ?? 'neutral'}>{goal.title}</Badge>}
         </div>
-        {(timeText || cat || hasSubtasks) && (
+        {(timeText || cat || hasSubtasks || deadline || linkedLabel) && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             {timeText && (
               <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
@@ -131,6 +142,17 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 <CategoryIcon icon={cat.icon} color={cat.color} size={11} strokeWidth={2} />
                 {cat.name}
+              </span>
+            )}
+            {deadline && (
+              <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground" title="Deadline">
+                <Flag className="h-3 w-3 shrink-0" strokeWidth={2} />
+                <span className="truncate">{deadline.effectiveTitle}</span>
+              </span>
+            )}
+            {linkedLabel && (
+              <span className="whitespace-nowrap text-xs text-muted-foreground" title="Completed sessions linked to this deadline">
+                {linkedLabel}
               </span>
             )}
             {hasSubtasks && (

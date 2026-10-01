@@ -259,7 +259,7 @@ interface Summary {
   medianGapDays: number | null
   /** Most common quarter-hour start across timed completions, "HH:mm". */
   usualStartTime: string | null
-  /** Median measured length across completions, falling back to a typed estimate. */
+  /** Median measured length across completions. */
   usualDurationMinutes: number | null
   recent: Occurrence[]
 }
@@ -331,13 +331,11 @@ function modeStartTime(completions: Occurrence[]): string | null {
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0]
 }
 
-/** Measured span when both ends exist, else the typed estimate. An all-day row has no span. */
+/** Measured span when both ends exist. An all-day row has no span. */
 function lengthOf(o: Occurrence): number | null {
-  if (o.startAt && o.endAt && !o.isAllDay) {
-    const mins = Math.round((new Date(o.endAt).getTime() - new Date(o.startAt).getTime()) / 60000)
-    if (mins > 0) return mins
-  }
-  return o.durationMinutes && o.durationMinutes > 0 ? o.durationMinutes : null
+  if (!o.startAt || !o.endAt || o.isAllDay) return null
+  const mins = Math.round((new Date(o.endAt).getTime() - new Date(o.startAt).getTime()) / 60000)
+  return mins > 0 ? mins : null
 }
 
 function median(values: number[]): number | null {

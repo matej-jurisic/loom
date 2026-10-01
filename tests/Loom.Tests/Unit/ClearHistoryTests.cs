@@ -20,7 +20,7 @@ public class ClearHistoryTests : IDisposable
 
     private Task<Loom.Core.Common.Result<OccurrenceDto>> AddOccurrenceAsync(Guid userId, Guid activityId) =>
         _ctx.OccurrenceService.CreateAsync(userId,
-            new CreateOccurrenceRequest(activityId, null, null, null, false, false, null, null, null, null));
+            new CreateOccurrenceRequest(activityId, null, null, null, false, false, null, null, null));
 
     [Fact]
     public async Task ClearAllAsync_removes_occurrences_and_events_but_keeps_activities_goals_categories()
@@ -33,7 +33,7 @@ public class ClearHistoryTests : IDisposable
         Assert.True((await AddOccurrenceAsync(userId, activity.Id)).IsSuccess);
         Assert.True((await AddOccurrenceAsync(userId, activity.Id)).IsSuccess);
         var ev = await _ctx.OccurrenceService.CreateEventAsync(userId,
-            new CreateEventRequest("Dentist", null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(1), false, false, null));
+            new CreateEventRequest("Dentist", null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddHours(1), false, false));
         Assert.True(ev.IsSuccess);
 
         var removed = await _ctx.OccurrenceService.ClearAllAsync(userId);
@@ -55,11 +55,11 @@ public class ClearHistoryTests : IDisposable
         var now = DateTimeOffset.UtcNow;
         foreach (var start in new DateTimeOffset?[] { now.AddDays(-10), now.AddDays(-3), now.AddDays(5), null })
             Assert.True((await _ctx.OccurrenceService.CreateAsync(userId,
-                new CreateOccurrenceRequest(activity.Id, null, start, null, false, false, null, null, null, null))).IsSuccess);
+                new CreateOccurrenceRequest(activity.Id, null, start, null, false, false, null, null, null))).IsSuccess);
         var pastEvent = await _ctx.OccurrenceService.CreateEventAsync(userId,
-            new CreateEventRequest("Old", null, null, now.AddDays(-7), now.AddDays(-7).AddHours(1), false, false, null));
+            new CreateEventRequest("Old", null, null, now.AddDays(-7), now.AddDays(-7).AddHours(1), false, false));
         var futureEvent = await _ctx.OccurrenceService.CreateEventAsync(userId,
-            new CreateEventRequest("Soon", null, null, now.AddDays(7), now.AddDays(7).AddHours(1), false, false, null));
+            new CreateEventRequest("Soon", null, null, now.AddDays(7), now.AddDays(7).AddHours(1), false, false));
         Assert.True(pastEvent.IsSuccess && futureEvent.IsSuccess);
 
         var removed = await _ctx.OccurrenceService.ClearAllAsync(userId, pastOnly: true);
