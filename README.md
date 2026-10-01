@@ -90,3 +90,12 @@ dotnet ef migrations add <Name> --project src/Loom.Core --startup-project src/Lo
 
 Export your data any time from Settings (a JSON download). To back up the database itself, copy the SQLite
 file from the `loom_data` volume while the app is stopped, or use `sqlite3 loom.db ".backup 'copy.db'"`.
+
+## Releasing from the homeserver
+
+`./loom-build.sh` builds the signed Android APK inside Docker (`tools/android-builder`), publishes
+`loom.apk` and `loom-v<name>-<code>.apk` to `/data/loom/releases`, then redeploys the web app with
+`docker compose -f /opt/homeserver/apps/loom/compose.yml up -d --build`. `--no-web` skips the redeploy,
+`--web-only` skips the APK. The keystore and its generated password are created once in `~/.loom`;
+back that directory up, because a new keystore forces a reinstall on every device. The version in
+`client/android/app/build.gradle` is bumped by the script; commit it afterwards.

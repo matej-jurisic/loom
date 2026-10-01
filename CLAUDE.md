@@ -58,6 +58,9 @@ dotnet ef migrations add <Name> --project src/Loom.Core --startup-project src/Lo
 
 # Docker:
 cp .env.example .env && docker compose up --build   # http://localhost:8080
+
+# Release (homeserver): signed APK built in Docker -> /data/loom/releases, then web redeploy
+./loom-build.sh [--no-web | --web-only]   # keystore + password live in ~/.loom (back it up)
 ```
 
 ## Architecture reference (file map)
