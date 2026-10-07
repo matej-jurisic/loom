@@ -332,7 +332,7 @@ lit.
 One day, read as a list. There is no score for the day: no completion ring and no done/left counts,
 because those rate how much of a day was executed, which is the planner reading this app is not for.
 
-The page opens on the day's own lists - Unfinished, the agenda, Planned, Floating - and closes with
+The page opens on the day's own lists - Unfinished, the agenda, Deadlines, Planned, Floating - and closes with
 the goal sections, which are standing context rather than something to clear before starting.
 
 - **Unfinished** — on today's view only, every pending occurrence whose date has passed, regardless
@@ -347,8 +347,13 @@ the goal sections, which are standing context rather than something to clear bef
   time belongs here too, not in the Planned section: it is a commitment on this day like any other,
   and the row says which it is with a `~` on the gutter time and a hollow spine dot - the list-view
   echo of the calendar's dashed block.
+- **Deadlines** — every pending **Due** occurrence (the modal's Due type: one date, no span) dated
+  today or later, soonest first, each with its date and how many days away it is. Shown on every
+  day and always counted from today, not from the day being viewed. It is the complete list, so a
+  deadline due today appears here and on the agenda; ones already past are in Unfinished instead.
+  The section collapses to its header and count, and the choice is remembered on the device.
 - **Planned** — the planned occurrences with no hour to place them at: all-day ones, and windows
-  whose start was never set. Below the agenda.
+  whose start was never set. Below Deadlines.
 - **Floating** — unplanned occurrences with no date at all, on every day. Below Planned.
 - **Focus goals** — one chip per focus goal: title, last-session recency, its checkpoint
   percentage when it has checkpoints, and its occurrence bar when it has linked occurrences.

@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, Plus, CalendarCheck, ArrowRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, CalendarCheck, ArrowRight } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { occurrencesApi, goalsApi, settingsApi } from '@/lib/api'
 import { recencyLabel } from '@/lib/goals'
@@ -74,6 +74,25 @@ function agendaTimeText(event: Occurrence, showDate = false): string | null {
   const dateRef = showDate ? event.startAt ?? event.endAt : null
   if (dateRef) return base ? `${formatDayLabel(dateRef)}, ${base}` : formatDayLabel(dateRef)
   return base || null
+}
+
+// The "Due" option of the event modal's type picker: one date and no span. Same test the
+// modal uses to pick that segment when it opens an occurrence, so the Deadlines section
+// lists exactly what the picker calls Due - including the end-only shape.
+function isDue(o: Occurrence): boolean {
+  return (o.startAt === null) !== (o.endAt === null)
+}
+
+const DEADLINES_COLLAPSED_KEY = 'loom-plan-deadlines-collapsed'
+
+// "Oct 12, 14:00 · in 6 days". Counted in calendar days from the effective today, so a
+// deadline tomorrow morning reads "tomorrow" late tonight rather than "in 0 days".
+function deadlineText(o: Occurrence, today: Date): string {
+  const ref = (o.startAt ?? o.endAt)!
+  const days = Math.round((sod(new Date(ref)).getTime() - today.getTime()) / 86_400_000)
+  const when = o.isAllDay ? formatDayLabel(ref) : `${formatDayLabel(ref)}, ${formatTime(ref)}`
+  const away = days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`
+  return `${when} · ${away}`
 }
 
 // Shift an ISO datetime onto a target calendar date, preserving clock time.
@@ -307,6 +326,34 @@ export function PlanPage() {
   })
   const floatingEvents = useMemo(() => allFloating.filter((o) => !o.isPlanned), [allFloating])
 
+  // Every pending Due occurrence from today on, whichever day is being viewed: deadlines
+  // are measured against now, like the calendar's Soon row (same query, same cache entry).
+  // Ones already behind today are Unfinished's job. Unlike Soon, nothing is dropped for
+  // being visible elsewhere - today's deadlines sit on the agenda and here both, because
+  // this list is the one place that has to be complete.
+  const deadlineCutoff = effectiveToday.toISOString()
+  const { data: upcomingPending = [] } = useQuery({
+    queryKey: ['events', 'upcoming', deadlineCutoff],
+    queryFn: () => occurrencesApi.list({ startFrom: deadlineCutoff, status: 'pending' }),
+    staleTime: 30 * 1000,
+  })
+  const deadlines = useMemo(
+    () =>
+      upcomingPending
+        .filter((o) => isDue(o) && refTime(o) >= effectiveToday.getTime())
+        .sort((a, b) => refTime(a) - refTime(b)),
+    [upcomingPending, effectiveToday.getTime()],
+  )
+
+  const [deadlinesCollapsed, setDeadlinesCollapsed] = useState(() => localStorage.getItem(DEADLINES_COLLAPSED_KEY) === '1')
+  function toggleDeadlines() {
+    setDeadlinesCollapsed((c) => {
+      if (c) localStorage.removeItem(DEADLINES_COLLAPSED_KEY)
+      else localStorage.setItem(DEADLINES_COLLAPSED_KEY, '1')
+      return !c
+    })
+  }
+
   // Split the day's timeline around "now".
   const nowMs = now.getTime()
   const pastEvents = isToday ? timedEvents.filter((e) => new Date(e.endAt ?? e.startAt!).getTime() < nowMs || e.status !== 'pending') : []
@@ -478,6 +525,31 @@ export function PlanPage() {
                     </div>
                   )}
                 </section>
+
+                {/* Deadlines */}
+                {deadlines.length > 0 && (
+                  <section>
+                    <button
+                      type="button"
+                      onClick={toggleDeadlines}
+                      aria-expanded={!deadlinesCollapsed}
+                      className="mb-2 flex w-full items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Deadlines
+                      <span className="font-mono font-normal text-muted-foreground/70">{deadlines.length}</span>
+                      <ChevronDown className={`ml-auto h-3.5 w-3.5 transition-transform ${deadlinesCollapsed ? '' : 'rotate-180'}`} strokeWidth={2} />
+                    </button>
+                    {!deadlinesCollapsed && (
+                      <div className="rounded-lg border border-border">
+                        <ul>
+                          {deadlines.map((event) => (
+                            <OccurrenceListRow key={event.id} occurrence={event} timeText={deadlineText(event, effectiveToday)} onEdit={openEdit} />
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </section>
+                )}
 
                 {/* Planned */}
                 {plannedEvents.length > 0 && (
