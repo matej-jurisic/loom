@@ -323,7 +323,7 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 
 Navigation: a 240px desktop sidebar (Daily Plan, Calendar, Goals, Activities, Insights, then the
 category list with inline add/edit/delete, and Settings pinned at the bottom); on mobile a 5-slot
-bottom bar (Plan, Categories, Calendar, Goals) plus a "More" sheet holding Activities, Insights, and
+bottom bar (Plan, Activities, Calendar, Goals) plus a "More" sheet holding Categories, Insights, and
 Settings. Nav items are not `end`-matched, so drilling into a goal or activity keeps the parent item
 lit.
 

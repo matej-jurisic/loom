@@ -271,7 +271,6 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
     by the shortfall. The spacer adds a viewport of room under the grid while `dragExpanded`.
 - `components/settings/SettingSection.tsx` — `SettingSection`/`SettingRow`/`SectionFooter`, the layout
   primitives `SettingsPage` is built from. Settings holds preferences only.
-- `lib/quotes.ts` — local array of motivational quotes; Plan page picks one by day-of-year.
 
 **Tests**
 - `Unit/TestContext.cs` — in-memory SQLite + real services. Naming: `Method_scenario`.

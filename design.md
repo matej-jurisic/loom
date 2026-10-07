@@ -26,11 +26,11 @@ Modern, clean, minimalist web-based dashboard. Spacious, organized, strictly pro
 ### Accent & Brand Colors
 
 - **Primary Brand:** Slate Blue `#8499B1`. Logo text, active nav icons, primary action buttons, checkboxes (checked state), active progress bars.
-- **Goal Status Colors (calendar blocks and tags):**
+- **Goal Status Colors (Goals page: status dot, progress ring, checkpoints, heatmap):**
   - Focus Goals: Primary/blue tones
   - Active Goals: Teal/Light Blue tones
-  - Bench Goals: Neutral Gray
-- Event blocks use a very light (low-opacity) background of their parent goal's color, with a solid 1px border of the same color. Events without goals use neutral gray.
+  - Bench Goals: Neutral Gray (Closed goals share it)
+- Event blocks take their activity's **category** colour, never the goal's: a low-opacity background of it with a solid left border in the same colour. Occurrences without a category use neutral gray (`bg-muted`, `border`).
 
 ### Brand Mark
 
@@ -87,7 +87,7 @@ The panes are separated by a 1px `border-[var(--border)]` vertical divider. No g
 - **The tray** (`.calendar-tray`): the DUE / SOON / FLOAT / all-day rows as one band, each labelled in the gutter, divided by `--calendar-line` hairlines. It stays on the page surface - it is not a separate panel - and closes with `--calendar-edge`, which doubles as the grid's 00:00 rule. That edge separates by colour alone, at the same hairline width as every other rule, so the band reads as closed without a divider thick enough to make it look like its own panel. Those rows are drop targets whenever something is being dragged, and on the grid's own hairlines they otherwise read as more grid. The band renders only when one of its rows has content or a drag is in progress. The DUE row is the exception: it lists what is already overdue and nothing can be dropped on it, so it is withdrawn for the length of a drag - otherwise it pushes the live drop targets down into the grid's edge-scroll zone, and the grid starts scrolling while the pointer is still over a row that cannot take the drop.
 - **Due pins row:** the same band treatment upside down, pinned to the bottom of the scroll container: chips for occurrences due today, closed off the grid by `--calendar-edge` on its top side. Both bands are chips rather than time, so both are fenced off from the grid the same way.
 - **Content:** Time-based vertical grid. Hours listed on the far left. Event blocks placed in their time slots.
-- **Event blocks:** Light-tinted background + solid 1px colored left border, matching the event's goal color. Title + time range inside.
+- **Event blocks:** Light-tinted background + solid 1px colored left border, matching the activity's category color. Title + time range inside.
 - **Clicking empty grid creates** a 30-minute occurrence there, pre-filled in the create modal. The calendar's job is to show what you decided and to make adding something cheap, so the cheapest gesture does the most common thing. A drag still sets an exact span, and a long press does it on touch, for when the length matters.
 - **Hover guide (mouse hover, and the long-press drag that creates on touch):** a hairline in `primary` at the 15-minute slot a click would create, with an `HH:mm` tab on its left edge in `primary-foreground` on `primary` mixed 50% with black (plain `primary` is light in dark mode and the near-white text would vanish on it). Hidden over event blocks and during event move or resize drags; it stays visible while dragging out a new occurrence, so the end can be matched to a time. Placed through the column's own scale, so it also works in compact mode.
 - Nothing is drawn on empty grid: no availability overlay, no suggested slots. An empty hour means nothing in particular, because the calendar is not assumed to be complete.
@@ -211,10 +211,6 @@ The same list is editable in the Edit Activity dialog (below Subtasks, existing 
 
 - Internal scroll areas (sidebar category list, calendar grid, the history dialog's recent list) use the `.scroll-slim` utility from `index.css`: a thin scrollbar whose thumb is invisible until the container is hovered, tinted from `--muted-foreground`. Never leave a default OS scrollbar visible inside a panel.
 
-### Sidebar & Panel Animations
-
-The left sidebar and the middle recommendation panel slide in/out with CSS transitions when toggled. Use `transition-all duration-300` (or equivalent) on the width/transform; content fades with it. Never animate the canvas width directly — only the panel element.
-
 ---
 
 ## Dark Mode
@@ -301,7 +297,7 @@ Everything on this page is a **sum of what was logged**. Nothing is a percentage
 
 - Border radius: buttons/tags `6px`, cards/modals `8-12px`, avatars fully round.
 - Column dividers: `border-r border-[var(--border)]` (1px, `#E5E7EB`).
-- Sidebar: `w-60` (240px). Middle column: fixed `w-80` (320px).
+- Sidebar: `w-60` (240px).
 - List row hover: `hover:bg-accent` (light gray tint), `rounded-[var(--radius-md)]`.
 - Section group labels: `text-xs font-medium text-muted-foreground uppercase tracking-wide`.
 
