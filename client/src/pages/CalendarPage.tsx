@@ -109,6 +109,7 @@ export function CalendarPage() {
     isDragging: boolean
   } | null>(null)
   const suppressClickRef = useRef(false)
+  const [hoverLine, setHoverLine] = useState<{ dayIdx: number; topPx: number; label: string } | null>(null)
   const [moveOverlay, setMoveOverlay] = useState<{ dayIdx: number; topPx: number; heightPx: number } | null>(null)
   const [movingEventId, setMovingEventId] = useState<string | null>(null)
   const [pendingAllDayDragId, setPendingAllDayDragId] = useState<string | null>(null)
@@ -1140,6 +1141,7 @@ export function CalendarPage() {
       const endDayIdx = getDayIdxFromX(mv.clientX)
       const endY = getYInGrid(mv.clientY)
       setDragOverlays(computeOverlays(dragRef.current.startDayIdx, dragRef.current.startY, endDayIdx, endY))
+      showHoverLineAt(mv.clientX, mv.clientY)
     }
 
     function onMouseUp(mu: MouseEvent) {
@@ -1250,6 +1252,7 @@ export function CalendarPage() {
           const endDayIdx = getDayIdxFromX(state.clientX)
           const endY = getYInGrid(state.clientY)
           setDragOverlays(computeOverlays(dragRef.current.startDayIdx, dragRef.current.startY, endDayIdx, endY))
+          showHoverLineAt(state.clientX, state.clientY)
         } else if (eventMoveRef.current?.isDragging) {
           const curY = getYInGrid(state.clientY)
           const anchorY = Math.max(0, curY - eventMoveRef.current.offsetPx)
@@ -1346,6 +1349,7 @@ export function CalendarPage() {
       const armedY = scaleFor(startDayIdx).toPx(startMin)
       dragRef.current = { startDayIdx, startClientX, startClientY, startY: armedY, startMin, isDrag: true }
       setDragOverlays(computeOverlays(startDayIdx, armedY, startDayIdx, armedY))
+      showHoverLineAt(startClientX, startClientY)
       startAutoScroll(startClientX, startClientY)
       if (navigator.vibrate) navigator.vibrate(30)
     }, 350)
@@ -1357,7 +1361,30 @@ export function CalendarPage() {
     }
   }
 
+  function updateHoverLine(e: React.PointerEvent<HTMLDivElement>) {
+    const creating = !!dragRef.current?.isDrag
+    if (!creating && (e.buttons !== 0 || (e.target as Element).closest('button'))) {
+      setHoverLine(null)
+      return
+    }
+    showHoverLineAt(e.clientX, e.clientY)
+  }
+
+  function showHoverLineAt(clientX: number, clientY: number) {
+    const dayIdx = getDayIdxFromX(clientX)
+    const scale = scaleFor(dayIdx)
+    const start = snapToGrid(days[dayIdx], getYInGrid(clientY), scale)
+    const minutes = Math.round((start.getTime() - sod(days[dayIdx]).getTime()) / 60000)
+    const label = `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
+    const topPx = scale.toPx(minutes)
+    setHoverLine((prev) => (prev && prev.dayIdx === dayIdx && prev.topPx === topPx ? prev : { dayIdx, topPx, label }))
+  }
+
   function handleGridPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.pointerType === 'mouse') {
+      updateHoverLine(e)
+      return
+    }
     if (e.pointerType !== 'touch') return
     if (pendingTouchRef.current && !dragRef.current) {
       const dx = e.clientX - pendingTouchRef.current.startClientX
@@ -1379,6 +1406,7 @@ export function CalendarPage() {
     const endDayIdx = getDayIdxFromX(e.clientX)
     const endY = getYInGrid(e.clientY)
     setDragOverlays(computeOverlays(dragRef.current.startDayIdx, dragRef.current.startY, endDayIdx, endY))
+    showHoverLineAt(e.clientX, e.clientY)
     startAutoScroll(e.clientX, e.clientY)
   }
 
@@ -1388,6 +1416,7 @@ export function CalendarPage() {
     const { startDayIdx, startY } = dragRef.current
     dragRef.current = null
     setDragOverlays(new Map())
+    setHoverLine(null)
     // Drags can now start on an event's overflow zone; swallow the click the
     // browser fires on the underlying button so the detail modal doesn't open.
     suppressClickRef.current = true
@@ -1457,6 +1486,7 @@ export function CalendarPage() {
     }
     dragRef.current = null
     setDragOverlays(new Map())
+    setHoverLine(null)
     collapseAfterDrag(e.clientX, e.clientY)
     if (scrollRef.current) scrollRef.current.style.overflowY = ''
   }
@@ -1776,6 +1806,7 @@ export function CalendarPage() {
               onMouseDown={handleGridMouseDown}
               onPointerDown={handleGridPointerDown}
               onPointerMove={handleGridPointerMove}
+              onPointerLeave={() => setHoverLine(null)}
               onPointerUp={handleGridPointerUp}
               onPointerCancel={handleGridPointerCancel}
             >
@@ -1785,6 +1816,7 @@ export function CalendarPage() {
                   day={day}
                   allEvents={calendarEvents}
                   onEventClick={openDetail}
+                  hoverLine={hoverLine?.dayIdx === idx ? hoverLine : null}
                   overlay={dragOverlays.get(idx) ?? null}
                   moveOverlay={moveOverlay?.dayIdx === idx ? { topPx: moveOverlay.topPx, heightPx: moveOverlay.heightPx } : null}
                   resizeOverlay={resizeOverlay.get(idx) ?? null}

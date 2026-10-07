@@ -27,52 +27,6 @@ The calendar is a **visualization and a fast way to add things**, not a planner 
 
 ---
 
-## Stack & shells
-
-| Layer | Choice |
-|---|---|
-| Backend | ASP.NET Core (.NET 10) minimal APIs, EF Core, SQLite |
-| Frontend | React 19 + Vite + TypeScript, Tailwind CSS v4, TanStack Query, React Router |
-| Tests | xUnit: unit (in-memory SQLite + real services) and integration (`WebApplicationFactory`) |
-| Web deployment | Docker Compose; the API serves the built SPA with a fallback route |
-| Android | Capacitor wraps the SPA in a native WebView (`dev.loom.app`), signed APK |
-
-The API is one process: it hosts the endpoints and serves the client. On Android the client cannot
-use relative `/api` paths, so a **server URL** is stored in `localStorage` and prepended to every
-request; empty means web mode and all URLs stay relative. The field appears on the login, register,
-and Settings screens only when running natively.
-
----
-
-## Auth
-
-Username + password (BCrypt hash). Registration requires a username of at least 3 characters and a
-password of at least 8.
-
-- **Access token:** JWT in the response body, ~15 minute expiry, held in memory only (Zustand).
-- **Refresh token:** 6-month lifetime, stored as a SHA-256 hash, delivered as an httpOnly `Secure`
-  cookie scoped to `/api/auth`, and **rotated on every refresh** (the old row is revoked and points
-  at its replacement). Native clients receive the raw token in the body and send it back in an
-  `X-Refresh-Token` header, since a WebView origin cannot hold the cookie.
-- The client makes one silent refresh attempt on a 401 and retries the request once.
-- On mount the app calls `/api/auth/refresh` to restore a session; a denied refresh routes to `/login`.
-- Every route except `/api/auth/*` requires a valid access token. The user id is read from the `sub`
-  claim.
-- Registration captures the browser's timezone.
-- **Attempt limit:** login and register share a per-client-IP fixed window (10 attempts per 60 seconds
-  by default, `RateLimit:Auth:*`); beyond it the API answers `429` with `Retry-After`. Refresh is not
-  limited, since every page load calls it.
-- **Startup check:** the API refuses to start unless `Jwt:Secret` is at least 32 bytes, and says so.
-- **Response headers:** every response carries `nosniff`, `X-Frame-Options: DENY`,
-  `Referrer-Policy: no-referrer` and a `Permissions-Policy`; outside Development also a same-origin
-  `Content-Security-Policy`, plus HSTS on HTTPS requests.
-- **Session survives an unreachable server.** At startup the client distinguishes a refresh the server
-  *denied* (go to `/login`) from one that got no answer or a 5xx (stay signed in, show a "Cannot reach the
-  server" screen with retry). A request that finds the server unreachable fails with a readable message and
-  does not clear the session.
-
----
-
 ## Timezone & day semantics
 
 All day-bucketing happens **server-side**, in the user's IANA timezone (`User.Timezone`) offset by
@@ -528,35 +482,3 @@ Settings holds preferences only.
 **Data export** (`GET /api/export`) is a single JSON document: user, settings, categories, goals with
 checkpoints, activities with subtasks and work types, and flat occurrences (effective title, time split, no nested activity). Good enough to hand to a person or an LLM for analysis; not a
 backup format, since there is no import path and the shape may change freely.
-
----
-
-## API surface
-
-All routes require a bearer token except `/api/auth/*` and `/api/health`. Endpoints are thin: parse →
-service → `Result` → problem details, with Validation→400, NotFound→404, Conflict→409,
-Unauthorized→401, Forbidden→403.
-
-| Route | Methods |
-|---|---|
-| `/api/health` | `GET` |
-| `/api/auth/register`, `/login`, `/refresh`, `/logout` | `POST` |
-| `/api/auth/me` | `GET` |
-| `/api/activities` | `GET` (`goalId`), `POST` |
-| `/api/activities/{id}` | `GET`, `PUT`, `DELETE` |
-| `/api/activities/{id}/subtasks[/{subtaskId}]` | `POST`, `PUT`, `DELETE` |
-| `/api/activities/{id}/work-types[/{workTypeId}]` | `POST`, `PUT`, `DELETE` |
-| `/api/occurrences` | `GET` (`status`, `startFrom`, `endBefore`, `floating`, `goalId`, `activityId`), `POST` |
-| `/api/occurrences/{id}` | `GET`, `PUT`, `DELETE` |
-| `/api/occurrences/{id}/status` | `POST` |
-| `/api/occurrences/{id}/subtasks[/{subtaskId}[/toggle]]` | `POST`, `PUT`, `DELETE` |
-| `/api/occurrences/{id}/time-split` | `PUT` |
-| `/api/occurrences/event`, `/api/occurrences/{id}/event` | `POST`, `PUT` |
-| `/api/goals` | `GET` (`status`), `POST` |
-| `/api/goals/{id}` | `GET`, `PUT`, `DELETE` |
-| `/api/goals/{id}/status` | `POST` |
-| `/api/goals/{goalId}/checkpoints[/{id}[/status]]` | `GET`, `POST`, `PUT`, `DELETE` |
-| `/api/categories[/{id}]` | `GET`, `POST`, `PUT`, `DELETE` |
-| `/api/insights` | `GET` (`period`) |
-| `/api/settings` | `GET`, `PUT` |
-| `/api/export` | `GET` |

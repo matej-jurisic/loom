@@ -9,6 +9,7 @@ export interface DayColumnProps {
   day: Date
   allEvents: Occurrence[]
   onEventClick: (e: Occurrence) => void
+  hoverLine: { topPx: number; label: string } | null
   overlay: { topPx: number; heightPx: number } | null
   moveOverlay: { topPx: number; heightPx: number } | null
   resizeOverlay: { topPx: number; heightPx: number } | null
@@ -27,7 +28,7 @@ export interface DayColumnProps {
   navCount: number
 }
 
-export function DayColumn({ day, allEvents, onEventClick, overlay, moveOverlay, resizeOverlay, isToday, borderLeft, borderRight, onEventMoveStart, onEventResizeStart, suppressClickRef, movingEventId, resizingEventId, scale, gridHeight, animateDir, navCount }: DayColumnProps) {
+export function DayColumn({ day, allEvents, onEventClick, hoverLine, overlay, moveOverlay, resizeOverlay, isToday, borderLeft, borderRight, onEventMoveStart, onEventResizeStart, suppressClickRef, movingEventId, resizingEventId, scale, gridHeight, animateDir, navCount }: DayColumnProps) {
   const dayStart = sod(day)
   const dayEnd = addDays(dayStart, 1)
 
@@ -99,6 +100,16 @@ export function DayColumn({ day, allEvents, onEventClick, overlay, moveOverlay, 
         >
           <div className="h-[9px] w-[9px] shrink-0 rounded-full bg-destructive -ml-[5px]" />
           <div className="h-px flex-1 bg-destructive" />
+        </div>
+      )}
+      {hoverLine && !moveOverlay && !resizeOverlay && (
+        <div
+          className="pointer-events-none absolute inset-x-0 z-[6] border-t border-primary/70"
+          style={{ top: hoverLine.topPx }}
+        >
+          <span className="absolute left-0 top-0 rounded-br-[3px] bg-[color-mix(in_srgb,var(--primary)_50%,black)] px-1 text-[10px] font-medium leading-4 text-primary-foreground">
+            {hoverLine.label}
+          </span>
         </div>
       )}
       {/* Drag selection overlay */}

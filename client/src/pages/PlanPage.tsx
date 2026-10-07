@@ -54,7 +54,7 @@ function formatDayTitleCompact(d: Date): string {
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
 function formatDayLabel(iso: string): string {
@@ -192,7 +192,7 @@ function TimelineRow({
       </div>
       {/* Card */}
       <div className="min-w-0 pb-2">
-        <ul>
+        <ul className="overflow-hidden rounded-lg border border-border">
           <OccurrenceListRow occurrence={event} timeText={agendaTimeText(event, showDate)} onEdit={onEdit} onSchedule={onSchedule} />
         </ul>
       </div>
@@ -461,7 +461,7 @@ export function PlanPage() {
                         <div className="contents">
                           <div className="flex items-center whitespace-nowrap py-1">
                             <span className="text-[10px] font-semibold uppercase tracking-wide text-primary tabular-nums">
-                              {now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                              {formatTime(now.toISOString())}
                             </span>
                           </div>
                           <div className="flex items-center justify-center py-1">
