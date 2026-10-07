@@ -10,6 +10,7 @@ import { toastError } from '@/store/toasts'
 import { useAuthStore } from '@/store/auth'
 import { getThemePref, setThemePref, type ThemePref } from '@/lib/theme'
 import { isNative, getServerUrl, setServerUrl } from '@/lib/server-config'
+import { invalidateAll, invalidateOccurrences } from '@/lib/invalidate'
 
 function timezoneOptions(current: string): string[] {
   const supported =
@@ -62,7 +63,7 @@ export function SettingsPage() {
     onSuccess: () => {
       setSaved(true)
       qc.invalidateQueries({ queryKey: ['settings'] })
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
     },
   })
 
@@ -80,10 +81,7 @@ export function SettingsPage() {
     onSuccess: () => {
       setConfirmClear(false)
       // Goal progress, heatmaps and activity counts are all derived from occurrences.
-      qc.invalidateQueries({ queryKey: ['events'] })
-      qc.invalidateQueries({ queryKey: ['activities'] })
-      qc.invalidateQueries({ queryKey: ['goals'] })
-      qc.invalidateQueries({ queryKey: ['insights'] })
+      invalidateAll(qc)
     },
     onError: (err) => toastError(err),
   })

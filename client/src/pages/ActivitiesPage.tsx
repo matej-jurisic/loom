@@ -19,6 +19,7 @@ import { ActivityModal } from "@/components/activities/ActivityModal";
 import { ActivityListRow } from "@/components/activities/ActivityListRow";
 import { ActivityHistoryModal } from "@/components/activities/ActivityHistoryModal";
 import { BulkAssignModal } from "@/components/activities/BulkAssignModal";
+import { invalidateActivities } from "@/lib/invalidate";
 
 type GroupBy = "goal" | "category" | "none";
 
@@ -78,8 +79,7 @@ export function ActivitiesPage() {
     mutationFn: (id: string) => activitiesApi.delete(id),
     onSuccess: () => {
       setDeleting(null);
-      qc.invalidateQueries({ queryKey: ["activities"] });
-      qc.invalidateQueries({ queryKey: ["events"] });
+      invalidateActivities(qc);
     },
     onError: (err) => toastError(err, "Could not delete the activity."),
   });
@@ -92,8 +92,7 @@ export function ActivitiesPage() {
       setBulkDeleting(false);
       setSelected(new Set());
       setSelecting(false);
-      qc.invalidateQueries({ queryKey: ["activities"] });
-      qc.invalidateQueries({ queryKey: ["events"] });
+      invalidateActivities(qc);
     },
     onError: (err) => toastError(err, "Could not delete the selected activities."),
   });

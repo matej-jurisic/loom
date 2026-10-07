@@ -31,9 +31,6 @@ public class DeadlineLinkTests : IDisposable
         _ctx.OccurrenceService.CreateAsync(userId,
             new CreateOccurrenceRequest(activityId, null, start, end, false, false, null, null, null, deadlineId));
 
-    private static UpdateOccurrenceRequest Resend(OccurrenceDto o, Guid? deadlineId = null, bool clear = false) =>
-        new(o.Title, o.StartAt, o.EndAt, o.IsAllDay, o.IsPlanned, null, null, deadlineId, clear);
-
     [Fact]
     public async Task CreateAsync_links_session_to_pending_event()
     {
@@ -90,28 +87,28 @@ public class DeadlineLinkTests : IDisposable
     }
 
     [Fact]
-    public async Task UpdateAsync_without_link_fields_keeps_the_link()
+    public async Task PatchAsync_without_link_fields_keeps_the_link()
     {
         var userId = await CreateUserAsync();
         var activityId = await CreateActivityAsync(userId);
         var deadline = await CreateDeadlineAsync(userId);
         var session = (await CreateSessionAsync(userId, activityId, deadline.Id)).Value!;
 
-        var result = await _ctx.OccurrenceService.UpdateAsync(session.Id, userId, Resend(session));
+        var result = await _ctx.OccurrenceService.PatchAsync(session.Id, userId, new PatchOccurrenceRequest());
 
         Assert.True(result.IsSuccess);
         Assert.Equal(deadline.Id, result.Value!.DeadlineOccurrenceId);
     }
 
     [Fact]
-    public async Task UpdateAsync_clear_removes_the_link()
+    public async Task PatchAsync_null_deadline_removes_the_link()
     {
         var userId = await CreateUserAsync();
         var activityId = await CreateActivityAsync(userId);
         var deadline = await CreateDeadlineAsync(userId);
         var session = (await CreateSessionAsync(userId, activityId, deadline.Id)).Value!;
 
-        var result = await _ctx.OccurrenceService.UpdateAsync(session.Id, userId, Resend(session, clear: true));
+        var result = await _ctx.OccurrenceService.PatchAsync(session.Id, userId, new PatchOccurrenceRequest(DeadlineOccurrenceId: new(true, null)));
 
         Assert.True(result.IsSuccess);
         Assert.Null(result.Value!.DeadlineOccurrenceId);
@@ -119,7 +116,7 @@ public class DeadlineLinkTests : IDisposable
     }
 
     [Fact]
-    public async Task UpdateAsync_keeps_an_existing_link_after_the_deadline_is_done()
+    public async Task PatchAsync_keeps_an_existing_link_after_the_deadline_is_done()
     {
         var userId = await CreateUserAsync();
         var activityId = await CreateActivityAsync(userId);
@@ -127,7 +124,7 @@ public class DeadlineLinkTests : IDisposable
         var session = (await CreateSessionAsync(userId, activityId, deadline.Id)).Value!;
         await _ctx.OccurrenceService.SetStatusAsync(deadline.Id, userId, Loom.Core.Enums.EventStatus.done);
 
-        var result = await _ctx.OccurrenceService.UpdateAsync(session.Id, userId, Resend(session, deadline.Id));
+        var result = await _ctx.OccurrenceService.PatchAsync(session.Id, userId, new PatchOccurrenceRequest(DeadlineOccurrenceId: new(true, deadline.Id)));
 
         Assert.True(result.IsSuccess);
         Assert.Equal(deadline.Id, result.Value!.DeadlineOccurrenceId);

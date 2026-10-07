@@ -160,7 +160,7 @@ public class OccurrenceTests : IDisposable
         var occ = await (await _client.PostAsJsonAsync("/api/occurrences", new { activityId = from }))
             .ReadAsync<OccurrenceDto>();
 
-        var res = await _client.PutAsJsonAsync($"/api/occurrences/{occ.Id}", new
+        var res = await _client.PatchAsJsonAsync($"/api/occurrences/{occ.Id}", new
         {
             activityId = to,
             isAllDay = false,
@@ -184,7 +184,7 @@ public class OccurrenceTests : IDisposable
             .ReadAsync<OccurrenceDto>();
 
         // Omitting the field is how every existing caller updates an occurrence
-        var res = await _client.PutAsJsonAsync($"/api/occurrences/{occ.Id}", new
+        var res = await _client.PatchAsJsonAsync($"/api/occurrences/{occ.Id}", new
         {
             title = "Renamed",
             isAllDay = false,
@@ -197,6 +197,51 @@ public class OccurrenceTests : IDisposable
     }
 
     [Fact]
+    public async Task PatchOccurrence_AbsentFieldsAreKept_NullFieldsAreCleared()
+    {
+        var token = await _client.SetupUserAsync();
+        _client.UseBearer(token);
+        var activityId = await CreateActivityAsync();
+        var start = new DateTimeOffset(2026, 7, 7, 14, 0, 0, TimeSpan.Zero);
+
+        var occ = await (await _client.PostAsJsonAsync("/api/occurrences", new
+        {
+            activityId,
+            title = "Chapter 4",
+            startAt = start,
+            endAt = start.AddMinutes(60),
+        })).ReadAsync<OccurrenceDto>();
+
+        var kept = await (await _client.PatchAsJsonAsync($"/api/occurrences/{occ.Id}", new { isPlanned = true }))
+            .ReadAsync<OccurrenceDto>();
+        Assert.Equal("Chapter 4", kept.Title);
+        Assert.Equal(start, kept.StartAt);
+        Assert.Equal(start.AddMinutes(60), kept.EndAt);
+        Assert.True(kept.IsPlanned);
+
+        var cleared = await (await _client.PatchAsJsonAsync($"/api/occurrences/{occ.Id}", new { title = (string?)null, endAt = (DateTimeOffset?)null }))
+            .ReadAsync<OccurrenceDto>();
+        Assert.Null(cleared.Title);
+        Assert.Null(cleared.EndAt);
+        Assert.Equal(start, cleared.StartAt);
+        Assert.True(cleared.IsPlanned);
+    }
+
+    [Fact]
+    public async Task PatchOccurrence_NullForABooleanField_Returns400()
+    {
+        var token = await _client.SetupUserAsync();
+        _client.UseBearer(token);
+        var activityId = await CreateActivityAsync();
+        var occ = await (await _client.PostAsJsonAsync("/api/occurrences", new { activityId }))
+            .ReadAsync<OccurrenceDto>();
+
+        var res = await _client.PatchAsJsonAsync($"/api/occurrences/{occ.Id}", new { isPlanned = (bool?)null });
+
+        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+    }
+
+    [Fact]
     public async Task UpdateOccurrence_ToAnUnknownActivity_Returns404()
     {
         var token = await _client.SetupUserAsync();
@@ -206,7 +251,7 @@ public class OccurrenceTests : IDisposable
         var occ = await (await _client.PostAsJsonAsync("/api/occurrences", new { activityId }))
             .ReadAsync<OccurrenceDto>();
 
-        var res = await _client.PutAsJsonAsync($"/api/occurrences/{occ.Id}", new
+        var res = await _client.PatchAsJsonAsync($"/api/occurrences/{occ.Id}", new
         {
             activityId = Guid.NewGuid(),
             isAllDay = false,
@@ -227,7 +272,7 @@ public class OccurrenceTests : IDisposable
         var evt = await (await _client.PostAsJsonAsync("/api/occurrences/event", new { title = "Theater" }))
             .ReadAsync<OccurrenceDto>();
 
-        var res = await _client.PutAsJsonAsync($"/api/occurrences/{evt.Id}", new
+        var res = await _client.PatchAsJsonAsync($"/api/occurrences/{evt.Id}", new
         {
             activityId,
             isAllDay = false,
@@ -250,7 +295,7 @@ public class OccurrenceTests : IDisposable
             .ReadAsync<OccurrenceDto>();
 
         // Would give the backing activity two occurrences, and deleting either would take both
-        var res = await _client.PutAsJsonAsync($"/api/occurrences/{occ.Id}", new
+        var res = await _client.PatchAsJsonAsync($"/api/occurrences/{occ.Id}", new
         {
             activityId = evt.ActivityId,
             isAllDay = false,
@@ -277,5 +322,5 @@ public class OccurrenceTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     private sealed record ActivityDto(Guid Id);
-    private sealed record OccurrenceDto(Guid Id, Guid ActivityId, string? Title, string EffectiveTitle, string Status, DateTimeOffset? StartAt, DateTimeOffset? WindowStart, DateTimeOffset? WindowEnd, int? WindowDurationMinutes);
+    private sealed record OccurrenceDto(Guid Id, Guid ActivityId, string? Title, string EffectiveTitle, string Status, DateTimeOffset? StartAt, DateTimeOffset? WindowStart, DateTimeOffset? WindowEnd, int? WindowDurationMinutes, DateTimeOffset? EndAt = null, bool IsPlanned = false);
 }

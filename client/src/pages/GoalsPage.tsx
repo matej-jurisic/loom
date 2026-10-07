@@ -14,6 +14,7 @@ import { GoalActivitiesModal } from '@/components/goals/GoalActivitiesModal'
 import { GoalHistoryModal } from '@/components/goals/GoalHistoryModal'
 import { ActionMenu, type ActionMenuEntry } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+import { invalidateGoals } from '@/lib/invalidate'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -260,8 +261,7 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, 
     mutationFn: () => goalsApi.delete(goal.id),
     onSuccess: () => {
       setConfirmDelete(false)
-      qc.invalidateQueries({ queryKey: ['goals'] })
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateGoals(qc)
     },
     onError: (err) => toastError(err, 'Could not delete the goal.'),
   })
@@ -270,8 +270,7 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, 
     mutationFn: (status: GoalStatus) => goalsApi.setStatus(goal.id, status),
     onSuccess: () => {
       setStatusError('')
-      qc.invalidateQueries({ queryKey: ['goals'] })
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateGoals(qc)
     },
     onError: (err) => setStatusError(err instanceof ApiError ? err.message : 'Something went wrong.'),
   })
@@ -358,7 +357,7 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, 
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
-export function GoalsPreviewPage() {
+export function GoalsPage() {
   const [historyFor, setHistoryFor] = useState<Goal | null>(null)
   const [goalModal, setGoalModal] = useState<{ open: boolean; goal?: Goal }>({ open: false })
   const [cpModal, setCpModal] = useState<{ open: boolean; goalId: string; checkpoint?: Checkpoint }>({ open: false, goalId: '' })

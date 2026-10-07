@@ -141,7 +141,14 @@
 *::before,
 *::after {
   box-sizing: border-box;
-  border-color: var(--border);
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--border);
+  }
 }
 
 body {

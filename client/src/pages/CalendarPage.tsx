@@ -1,10 +1,8 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
 import { flushSync } from 'react-dom'
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Plus, CalendarCheck, FoldVertical, UnfoldVertical } from 'lucide-react'
-import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { occurrencesApi, settingsApi, goalsApi, categoriesApi } from '@/lib/api'
-import { toastError } from '@/store/toasts'
-import type { Activity, Occurrence } from '@/lib/types'
+import type { Occurrence } from '@/lib/types'
 import { EventModal } from '@/components/events/EventModal'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
 import { MoveOrSkipModal } from '@/components/events/MoveOrSkipModal'
@@ -12,14 +10,19 @@ import type { PendingMove } from '@/components/events/MoveOrSkipModal'
 import { ActivityModal } from '@/components/activities/ActivityModal'
 import { DAY_MIN, linearScale, compactScale } from '@/lib/timeScale'
 import type { TimeScale } from '@/lib/timeScale'
+import { DayColumn } from '@/components/calendar/DayColumn'
+import { useCalendarModals } from '@/lib/useCalendarModals'
+import { useOccurrenceMutations } from '@/lib/useOccurrenceMutations'
+import { CalendarHeader } from '@/components/calendar/CalendarHeader'
+import { CalendarTray } from '@/components/calendar/CalendarTray'
+import type { FloatingDragInfo } from '@/components/calendar/TrayPillRow'
+import { VIEW_OPTIONS, addDays, assignAllDayRows, dayHeader, effectiveAllDayEnd, formatDateInput, formatDatetimeLocal, hourLabel, isSameDay, sod, startOfWeek } from '@/lib/calendarDates'
+import type { ViewMode } from '@/lib/calendarDates'
+import { DUE_SPAN_MINUTES, MIN_EVENT_PX, dragStartFor, duePinHeight, dueRowRef, eventAllDayColors, isDueOccurrence, isEODDue, occursOnDay, snapToGrid, snapToGridDue } from '@/lib/calendarLayout'
 
 const DEFAULT_HOUR_PX = 64
 const MIN_HOUR_PX = 32
 const MAX_HOUR_PX = 128
-// Visual floor for short events. 16px = 30 min at MIN_HOUR_PX, so at max
-// zoom-out a half-hour block still matches its true span and only shorter
-// events get inflated.
-const MIN_EVENT_PX = 16
 // Span given to an occurrence created by a single click or tap on empty grid.
 const CLICK_CREATE_MINUTES = 30
 const PILL_DROP_MINUTES = 60
@@ -37,1075 +40,7 @@ const SCROLL_SETTLE_MS = 400
 const ANCHOR_TTL_MS = 120
 
 
-// ── Date utilities ─────────────────────────────────────────────────────────
-
-function sod(d: Date): Date {
-  const r = new Date(d)
-  r.setHours(0, 0, 0, 0)
-  return r
-}
-
-function addDays(d: Date, n: number): Date {
-  const r = new Date(d)
-  r.setDate(r.getDate() + n)
-  return r
-}
-
-function startOfWeek(d: Date): Date {
-  const r = new Date(d)
-  const dow = r.getDay()
-  r.setDate(r.getDate() - (dow === 0 ? 6 : dow - 1))
-  r.setHours(0, 0, 0, 0)
-  return r
-}
-
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  )
-}
-
-function effectiveAllDayEnd(e: { startAt: string | null; endAt: string | null }): number {
-  return e.endAt ? new Date(e.endAt).getTime() : new Date(e.startAt!).getTime() + 86400000
-}
-
-function getEventDayRange(e: { startAt: string | null; endAt: string | null }, days: Date[]): { startIdx: number; endIdx: number } {
-  const startMs = new Date(e.startAt!).getTime()
-  const endMs = effectiveAllDayEnd(e)
-  const viewStart = days[0].getTime()
-  const dayMs = 86400000
-  const startIdx = Math.max(0, Math.round((startMs - viewStart) / dayMs))
-  const endIdx = Math.min(days.length, Math.round((endMs - viewStart) / dayMs))
-  return { startIdx, endIdx }
-}
-
-function assignAllDayRows(events: { id: string; startAt: string | null; endAt: string | null }[], days: Date[]): Array<{ id: string; row: number; startIdx: number; endIdx: number }> {
-  const rowEnds: number[] = []
-  return events.map((e) => {
-    const { startIdx, endIdx } = getEventDayRange(e, days)
-    let row = rowEnds.findIndex((end) => end <= startIdx)
-    if (row === -1) {
-      row = rowEnds.length
-      rowEnds.push(endIdx)
-    } else {
-      rowEnds[row] = endIdx
-    }
-    return { id: e.id, row, startIdx, endIdx }
-  })
-}
-
-function formatDatetimeLocal(d: Date): string {
-  const z = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`
-}
-
-function formatDateInput(d: Date): string {
-  const z = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`
-}
-
-// ── Label helpers ──────────────────────────────────────────────────────────
-
-function hourLabel(h: number): string {
-  return `${String(h).padStart(2, '0')}:00`
-}
-
-function timeLabel(iso: string): string {
-  const d = new Date(iso)
-  const h = d.getHours()
-  const m = d.getMinutes()
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-}
-
-function pageTitle(view: ViewMode, days: Date[]): string {
-  if (view === 'day') {
-    return days[0].toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
-  const f = days[0]
-  const l = days[days.length - 1]
-  if (f.getFullYear() !== l.getFullYear()) {
-    return `${f.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${l.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-  }
-  if (f.getMonth() !== l.getMonth()) {
-    return `${f.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${l.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${l.getFullYear()}`
-  }
-  return `${f.toLocaleDateString('en-US', { month: 'long' })} ${f.getDate()} – ${l.getDate()}, ${l.getFullYear()}`
-}
-
-function compactTitle(view: ViewMode, days: Date[]): string {
-  if (view === 'day') {
-    return days[0].toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-  }
-  const f = days[0]
-  const l = days[days.length - 1]
-  if (f.getMonth() === l.getMonth() && f.getFullYear() === l.getFullYear()) {
-    return `${f.toLocaleDateString('en-US', { month: 'short' })} ${f.getDate()}-${l.getDate()}`
-  }
-  return `${f.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${l.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-}
-
-function dayHeader(d: Date): string {
-  return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })
-}
-
-// ── Layout algorithm ────────────────────────────────────────────────────────
-
-interface LayoutEvent {
-  event: Occurrence
-  col: number
-  totalCols: number
-  topPx: number
-  heightPx: number
-  trueEndPx: number
-}
-
-/**
- * Greedy side-by-side packing for overlapping spans (minutes from day start).
- * Items must be sorted by start; returns each item's column and the divisor its
- * width should use.
- *
- * Blocks are positioned on a global `col / totalCols` percentage grid, so every
- * item in a cluster of transitively-overlapping events must share one
- * `totalCols` — deriving it from an item's direct neighbours understates it
- * whenever a column was recycled after a gap, and the blocks then overlap.
- */
-function packColumns(items: { s: number; end: number }[]): { col: number; totalCols: number }[] {
-  const result: { col: number; totalCols: number }[] = []
-  const colEnds: number[] = []
-  let cluster: number[] = []
-  let clusterEnd = -Infinity
-
-  function flush() {
-    const total = colEnds.length || 1
-    for (const i of cluster) result[i].totalCols = total
-    cluster = []
-    colEnds.length = 0
-  }
-
-  items.forEach((it, i) => {
-    // Starts at or after every span seen so far ends → disjoint, start a cluster
-    if (it.s >= clusterEnd) flush()
-    let c = colEnds.findIndex((e) => e <= it.s)
-    if (c === -1) {
-      c = colEnds.length
-      colEnds.push(it.end)
-    } else {
-      colEnds[c] = it.end
-    }
-    result[i] = { col: c, totalCols: 0 }
-    cluster.push(i)
-    clusterEnd = Math.max(clusterEnd, it.end)
-  })
-  flush()
-
-  return result
-}
-
-interface DayLayout {
-  events: LayoutEvent[]
-}
-
-/** Lays out one day's events, packing transitively-overlapping spans into shared columns. */
-function layoutDay(events: Occurrence[], day: Date, scale: TimeScale): DayLayout {
-  const dayStartMs = sod(day).getTime()
-  const hourPx = scale.hourPx
-
-  const eventItems = events
-    .filter((e) => !!e.startAt)
-    .map((e) => {
-      const startMs = new Date(e.startAt!).getTime()
-      const endMs = e.endAt ? new Date(e.endAt).getTime() : startMs + DUE_SPAN_MINUTES * 60 * 1000
-      // Clip to this day's boundaries (handles cross-midnight events)
-      const clipStartMin = Math.max((startMs - dayStartMs) / 60000, 0)
-      const clipEndMin = Math.min((endMs - dayStartMs) / 60000, 24 * 60)
-      const s = Math.round(clipStartMin)
-      const end = Math.max(Math.round(clipEndMin), s + 15)
-      return { event: e, s, end: Math.min(end, 24 * 60) }
-    })
-    .filter((it) => it.s < 24 * 60 && it.end > it.s)
-
-  const merged = eventItems
-    .map((it, i) => ({ s: it.s, end: it.end, i }))
-    .sort((a, b) => a.s - b.s)
-
-  const cols = packColumns(merged)
-
-  const eventLayout: LayoutEvent[] = merged.map((m, k) => {
-    const { col, totalCols } = cols[k]
-    const { event, s, end } = eventItems[m.i]
-    // Only the top is scale-dependent: an event's own span always falls inside an
-    // expanded segment, so its height is linear in both modes.
-    const topPx = scale.toPx(s)
-    const spanPx = ((end - s) / 60) * hourPx
-    return {
-      event,
-      col,
-      totalCols,
-      topPx,
-      // Due pins keep their exact 30-minute height so they scale with zoom
-      heightPx: isDueOccurrence(event) ? spanPx : Math.max(spanPx, MIN_EVENT_PX),
-      trueEndPx: topPx + spanPx,
-    }
-  })
-
-  return { events: eventLayout }
-}
-
-// ── Due occurrence helper ───────────────────────────────────────────────────
-
-// Due pins render as a 30-minute block: the smallest span that stays readable
-// at max zoom out (30 min at MIN_HOUR_PX = 16px), scaling up with zoom.
-const DUE_SPAN_MINUTES = 30
-
-function duePinHeight(hourPx: number): number {
-  return (DUE_SPAN_MINUTES / 60) * hourPx
-}
-
-function isDueOccurrence(o: Occurrence): boolean {
-  return !!o.startAt && !o.endAt
-}
-
-// The date the Due row sorts and labels a straggler by. Falls back to endAt so a
-// deadline-only occurrence (end, no start) is carried too - those are exactly the
-// ones you least want to lose track of. Null means fully floating: the FLOAT row's job.
-function dueRowRef(o: Occurrence): string | null {
-  return o.startAt ?? o.endAt ?? null
-}
-
-function isEODDue(o: Occurrence): boolean {
-  if (!isDueOccurrence(o)) return false
-  const d = new Date(o.startAt!)
-  return d.getHours() > 23 || (d.getHours() === 23 && d.getMinutes() >= 30)
-}
-
-// ── Event coloring ──────────────────────────────────────────────────────────
-
-type EventColors = { bgClass: string; bgHex?: string; leftColor: string; textClass: string }
-
-function eventColors(o: Occurrence): EventColors {
-  const category = o.activity.category
-  if (category) {
-    return {
-      bgClass: '',
-      bgHex: category.color,
-      leftColor: category.color,
-      textClass: 'text-foreground',
-    }
-  }
-  return { bgClass: 'bg-muted', leftColor: 'var(--color-border)', textClass: 'text-foreground' }
-}
-
-function eventAllDayColors(o: Occurrence): { className: string; style?: React.CSSProperties } {
-  const category = o.activity.category
-  const plannedBorder = o.isPlanned ? { border: `1px dashed ${category?.color ?? 'var(--color-primary)'}` } : undefined
-  if (category) {
-    return { className: 'text-foreground', style: { backgroundColor: category.color + '26', ...plannedBorder } }
-  }
-  return { className: 'bg-primary/10 text-primary', style: plannedBorder }
-}
-
-// ── EventBlock ──────────────────────────────────────────────────────────────
-
-function EventBlock({
-  layout,
-  onClick,
-  onMoveStart,
-  onResizeStart,
-  suppressClickRef,
-  dimmed,
-  isResizing,
-}: {
-  layout: LayoutEvent
-  onClick: (e: Occurrence) => void
-  onMoveStart?: (e: React.PointerEvent, topPx: number) => void
-  onResizeStart?: (e: React.PointerEvent, side: 'top' | 'bottom') => void
-  suppressClickRef?: { current: boolean }
-  dimmed?: boolean
-  isResizing?: boolean
-}) {
-  const { event, col, totalCols, topPx, heightPx, trueEndPx } = layout
-  const { bgClass, bgHex, leftColor, textClass } = eventColors(event)
-  const isDone = event.status === 'done'
-  const isSkipped = event.status === 'skipped'
-  const isPlanned = event.isPlanned
-  const isDue = isDueOccurrence(event)
-  const accentColor = event.activity.category ? event.activity.category.color : 'var(--color-primary)'
-  const isHex = accentColor.startsWith('#')
-  const accentFaded = isHex ? `${accentColor}18` : `color-mix(in srgb, ${accentColor} 9%, transparent)`
-  const accentMid   = isHex ? `${accentColor}60` : `color-mix(in srgb, ${accentColor} 38%, transparent)`
-
-  const GAP = 2
-  const leftPct = (col / totalCols) * 100
-  const widthPct = 100 / totalCols
-
-  const timeText = event.startAt && !event.isPlanned
-    ? `${timeLabel(event.startAt)}${event.endAt ? ` – ${timeLabel(event.endAt)}` : ''}`
-    : ''
-
-  // Handles show always when resizing (touch mode), or on mouse hover via CSS
-  const handleVisibility = isResizing ? 'flex' : 'hidden group-hover/calev:flex'
-
-  // Below this height the normal padding + line-height overflow the block, so
-  // drop to a single tightly-packed text line.
-  const compact = heightPx < 20
-
-  function stopAll(e: React.SyntheticEvent) {
-    e.stopPropagation()
-  }
-
-  const bodyPointerProps = {
-    style: { touchAction: 'pan-y' as const },
-    onPointerDown: (e: React.PointerEvent) => {
-      if (e.pointerType === 'mouse' && e.button !== 0) return
-      onMoveStart?.(e, topPx)
-    },
-    onClick: (e: React.MouseEvent) => {
-      if (suppressClickRef?.current) return
-      e.stopPropagation()
-      onClick(event)
-    },
-  }
-
-  return (
-    <div
-      className={`absolute group/calev ${dimmed ? 'opacity-20' : ''}`}
-      data-event-id={event.id}
-      data-true-end-px={trueEndPx}
-      style={{
-        top: topPx + GAP,
-        height: Math.max(heightPx - GAP, 14),
-        left: `calc(${leftPct}% + ${GAP}px)`,
-        width: `calc(${widthPct}% - ${GAP * 2}px)`,
-        zIndex: isResizing ? 25 : undefined,
-        pointerEvents: 'auto',
-      }}
-    >
-      {isDue ? (
-        /* Due pin — flat deadline marker, no resize handles */
-        <button
-          className={`absolute inset-0 flex items-start overflow-hidden rounded-[4px] text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-40' : isSkipped ? 'opacity-25' : ''}`}
-          style={{
-            border: isPlanned ? `1.5px dashed ${accentColor}` : `1px solid ${accentColor}`,
-            // Opaque card base so the likely-free hatch never bleeds through
-            background: `linear-gradient(${accentColor}18, ${accentColor}18), var(--color-card)`,
-            touchAction: 'pan-y',
-          }}
-          onPointerDown={bodyPointerProps.onPointerDown}
-          onClick={bodyPointerProps.onClick}
-        >
-          <div style={{ width: 3, minWidth: 3, alignSelf: 'stretch', background: leftColor }} className="shrink-0" />
-          <div className="flex min-w-0 flex-1 items-center gap-1 px-1.5 py-0.5">
-            <p
-              className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[10px] font-medium leading-none ${isDone ? 'line-through text-muted-foreground' : isSkipped ? 'text-muted-foreground' : ''}`}
-              style={isDone || isSkipped ? undefined : { color: accentColor }}
-            >
-              {event.effectiveTitle}
-            </p>
-            <span className="shrink-0 text-[9px] leading-none opacity-60" style={{ color: accentColor }}>
-              {timeLabel(event.startAt!)}
-            </span>
-          </div>
-        </button>
-      ) : (
-        <>
-          {/* Top resize handle */}
-          <div
-            data-resize-handle="true"
-            className={`absolute inset-x-0 top-0 z-20 h-2.5 cursor-ns-resize ${handleVisibility} items-center justify-center`}
-            style={{ touchAction: 'none' }}
-            onMouseDown={stopAll}
-            onPointerDown={(e) => { e.stopPropagation(); onResizeStart?.(e, 'top') }}
-            onClick={stopAll}
-          >
-            <div className="h-0.5 w-6 rounded-full bg-primary/70" />
-          </div>
-
-          {/* Event body */}
-          {isPlanned ? (
-            <button
-              className={`absolute inset-0 overflow-hidden rounded-[4px] text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-40' : isSkipped ? 'opacity-25' : ''}`}
-              style={{
-                // Opaque card base so the likely-free hatch (same stripe pattern)
-                // never shows through a planned block
-                background: `repeating-linear-gradient(135deg, transparent, transparent 4px, ${accentFaded} 4px, ${accentFaded} 8px), var(--color-card)`,
-                border: `1.5px dashed ${accentMid}`,
-                touchAction: 'pan-y',
-              }}
-              onPointerDown={bodyPointerProps.onPointerDown}
-              onClick={bodyPointerProps.onClick}
-            >
-              <div className={compact ? 'px-1.5 py-px' : 'px-1.5 py-0.5'}>
-                <p
-                  className={`overflow-hidden whitespace-nowrap text-[10px] font-medium ${compact ? 'leading-none' : 'leading-tight'}`}
-                  style={{ color: accentColor }}
-                >
-                  {event.effectiveTitle}
-                </p>
-              </div>
-            </button>
-          ) : (
-            <button
-              className={`absolute inset-0 overflow-hidden rounded-[4px] border bg-card text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-50' : isSkipped ? 'opacity-30' : ''} ${isResizing ? 'border-primary/60 ring-1 ring-primary/40' : 'border-border/50'}`}
-              {...bodyPointerProps}
-            >
-              <div
-                className={`absolute inset-0 ${bgClass}`}
-                style={bgHex ? { backgroundColor: bgHex + '22' } : undefined}
-              />
-              <div className="relative flex h-full">
-                <div style={{ width: 3, minWidth: 3, background: leftColor }} className="shrink-0" />
-                <div className={`@container min-w-0 flex-1 px-1.5 ${compact ? 'py-px' : 'py-0.5'}`}>
-                  <p
-                    className={`@max-[10px]:hidden overflow-hidden font-medium ${
-                      compact ? 'whitespace-nowrap text-[10px] leading-none' : 'break-all text-[11px] leading-tight'
-                    } ${
-                      isDone ? 'line-through text-muted-foreground' : isSkipped ? 'text-muted-foreground/60' : textClass
-                    }`}
-                  >
-                    {event.effectiveTitle}
-                  </p>
-                  {heightPx >= 44 && timeText && (
-                    <p className={`@max-[10px]:hidden overflow-hidden whitespace-nowrap text-[10px] leading-tight opacity-70 ${isDone ? 'text-muted-foreground' : textClass}`}>
-                      {timeText}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </button>
-          )}
-
-          {/* Bottom resize handle */}
-          <div
-            data-resize-handle="true"
-            className={`absolute inset-x-0 bottom-0 z-20 h-2.5 cursor-ns-resize ${handleVisibility} items-center justify-center`}
-            style={{ touchAction: 'none' }}
-            onMouseDown={stopAll}
-            onPointerDown={(e) => { e.stopPropagation(); onResizeStart?.(e, 'bottom') }}
-            onClick={stopAll}
-          >
-            <div className="h-0.5 w-6 rounded-full bg-primary/70" />
-          </div>
-        </>
-      )}
-    </div>
-  )
-}
-
-// ── DayColumn ────────────────────────────────────────────────────────────────
-
-// ── snapToGrid ──────────────────────────────────────────────────────────────
-
-function snapToGrid(day: Date, yPx: number, scale: TimeScale): Date {
-  const totalMin = scale.toMin(yPx)
-  const hrs = Math.floor(totalMin / 60)
-  const snapMins = Math.round((totalMin % 60) / 15) * 15
-  const d = new Date(day)
-  if (snapMins >= 60) {
-    if (hrs >= 23) {
-      // Past 23:52.5 → snap to midnight (start of next day)
-      d.setDate(d.getDate() + 1)
-      d.setHours(0, 0, 0, 0)
-    } else {
-      d.setHours(hrs + 1, 0, 0, 0)
-    }
-  } else {
-    d.setHours(Math.min(hrs, 23), snapMins, 0, 0)
-  }
-  return d
-}
-
-function snapToGridDue(day: Date, yPx: number, scale: TimeScale): Date {
-  const totalMin = scale.toMin(yPx)
-  const hrs = Math.floor(totalMin / 60)
-  const snapMins = Math.round((totalMin % 60) / 15) * 15
-  const d = new Date(day)
-  if (snapMins >= 60) {
-    // Past 23:52.5 → snap to EOD instead of wrapping back to 23:00
-    d.setHours(hrs >= 23 ? 23 : hrs + 1, hrs >= 23 ? 59 : 0, 0, 0)
-  } else {
-    d.setHours(Math.min(hrs, 23), snapMins, 0, 0)
-  }
-  return d
-}
-
-/**
- * Start time for a dragged block, snapped, then held inside the day by its *end*
- * rather than by the pointer. Clamping the pointer alone stops the drag as soon
- * as the cursor reaches midnight, which leaves the block's tail hanging past it
- * whenever the grab was above the block's middle - the deeper you grab, the more
- * hangs over. Clamping the end instead makes the block stop where it looks like
- * it should. The final clamp is in the time domain, not pixels, because snapping
- * to the quarter hour can round back up over a pixel limit.
- */
-function dragStartFor(day: Date, topPx: number, scale: TimeScale, durationMs: number): Date {
-  const snapped = snapToGrid(day, topPx, scale)
-  const dayStartMs = sod(day).getTime()
-  const latest = Math.max(dayStartMs, dayStartMs + 86400000 - durationMs)
-  return snapped.getTime() > latest ? new Date(latest) : snapped
-}
-
-// ── DayColumn ────────────────────────────────────────────────────────────────
-
-/**
- * Does this occurrence render in the given day's grid column? Shared by the
- * column and by the compact scale builder, which has to reserve room for exactly
- * the events the column will draw.
- */
-function occursOnDay(e: Occurrence, dayStartMs: number, dayEndMs: number): boolean {
-  if (!e.startAt) return false
-  // EOD due pins never render in the grid; they live in the sticky Due row
-  if (isEODDue(e)) return false
-  const startMs = new Date(e.startAt).getTime()
-  // Due pins are point-in-time — only show in the day their start falls in
-  if (!e.endAt) return startMs >= dayStartMs && startMs < dayEndMs
-  return startMs < dayEndMs && new Date(e.endAt).getTime() > dayStartMs
-}
-
-interface DayColumnProps {
-  day: Date
-  allEvents: Occurrence[]
-  onEventClick: (e: Occurrence) => void
-  overlay: { topPx: number; heightPx: number } | null
-  moveOverlay: { topPx: number; heightPx: number } | null
-  resizeOverlay: { topPx: number; heightPx: number } | null
-  isToday: boolean
-  borderLeft: boolean
-  borderRight: boolean
-  onEventMoveStart: (e: React.PointerEvent, event: Occurrence, topPx: number) => void
-  onEventResizeStart: (e: React.PointerEvent, event: Occurrence, side: 'top' | 'bottom') => void
-  suppressClickRef: { current: boolean }
-  movingEventId: string | null
-  resizingEventId: string | null
-  scale: TimeScale
-  /** Height of the tallest column, so every column's borders run the full grid. */
-  gridHeight: number
-  animateDir?: 'forward' | 'back' | null
-  navCount: number
-}
-
-function DayColumn({ day, allEvents, onEventClick, overlay, moveOverlay, resizeOverlay, isToday, borderLeft, borderRight, onEventMoveStart, onEventResizeStart, suppressClickRef, movingEventId, resizingEventId, scale, gridHeight, animateDir, navCount }: DayColumnProps) {
-  const dayStart = sod(day)
-  const dayEnd = addDays(dayStart, 1)
-
-  const dayEvents = useMemo(
-    () => allEvents.filter((e) => occursOnDay(e, dayStart.getTime(), dayEnd.getTime())),
-    [allEvents, dayStart.getTime(), dayEnd.getTime()],
-  )
-
-  const { events: layout } = useMemo(
-    () => layoutDay(dayEvents, day, scale),
-    [dayEvents, day, scale],
-  )
-
-  const now = new Date()
-  const nowMin = now.getHours() * 60 + now.getMinutes()
-  const nowPx = scale.toPx(nowMin)
-
-  const eventsLayerRef = useRef<HTMLDivElement | null>(null)
-  useLayoutEffect(() => {
-    const el = eventsLayerRef.current
-    if (!el || !animateDir) return
-    el.style.animation = 'none'
-    void el.offsetHeight
-    el.style.animation = animateDir === 'forward'
-      ? 'cal-slide-in-forward 180ms ease-out forwards'
-      : 'cal-slide-in-back 180ms ease-out forwards'
-  }, [navCount])
-
-  return (
-    <div
-      className={`relative flex-1 ${borderLeft ? 'border-l' : ''} ${borderRight ? 'border-r' : ''}`}
-      style={{ minHeight: gridHeight, borderColor: 'var(--calendar-line)' }}
-    >
-      {/* Hour + half-hour lines, all one weight. Stepped from absolute half-hours,
-          not from the segment's own start, because segment edges land on quarter
-          hours - the rhythm has to stay on the clock. The m=0 line is skipped: the
-          sticky header's border-b already provides that separator.
-          Compact mode draws none of them, and no segment-break line either: a
-          segment is exactly one block's span there, so every line would land on a
-          block edge or run straight through the block itself. The stack of blocks
-          is the only structure that column needs. */}
-      {!scale.isCompact && scale.segments.flatMap((seg, i) => {
-        const lines: React.ReactNode[] = []
-        for (let m = Math.ceil(seg.startMin / 30) * 30; m <= seg.endMin; m += 30) {
-          if (m === 0) continue
-          lines.push(
-            <div
-              key={`l${i}-${m}`}
-              className="absolute inset-x-0 border-t"
-              style={{
-                // Rounded: toPx lands on fractions, and a 1px border smeared across
-                // two device pixels reads lighter than one that lands on a pixel.
-                top: Math.round(scale.toPx(m)),
-                // Set inline, not as a border-* utility: the unlayered `*` rule in
-                // index.css sets border-color on everything, and unlayered CSS beats
-                // Tailwind's @layer utilities, so a class here silently does nothing.
-                borderTopColor: 'var(--calendar-line)',
-              }}
-            />,
-          )
-        }
-        return lines
-      })}
-      {/* Current time indicator. Compact mode has no continuous time axis to place
-          it on: between two stacked blocks the grid jumps forward by however long
-          the dropped gap was, so a line drawn at "now" would sit at a position that
-          means nothing. Elided time is elided, marker included. */}
-      {isToday && !scale.isCompact && (
-        <div
-          className="pointer-events-none absolute inset-x-0 z-[5] flex items-center"
-          style={{ top: nowPx }}
-        >
-          <div className="h-[9px] w-[9px] shrink-0 rounded-full bg-destructive -ml-[5px]" />
-          <div className="h-px flex-1 bg-destructive" />
-        </div>
-      )}
-      {/* Drag selection overlay */}
-      {overlay && (
-        <div
-          className="pointer-events-none absolute inset-x-0 z-20 rounded-[4px] bg-primary/20 border border-primary/60"
-          style={{ top: overlay.topPx, height: overlay.heightPx }}
-        />
-      )}
-      {/* Event move ghost */}
-      {moveOverlay && (
-        <div
-          className="pointer-events-none absolute inset-x-0 z-30 rounded-[4px] border-2 border-primary bg-primary/20"
-          style={{ top: moveOverlay.topPx, height: moveOverlay.heightPx }}
-        />
-      )}
-      {/* Event resize ghost */}
-      {resizeOverlay && (
-        <div
-          className="pointer-events-none absolute inset-x-0 z-30 rounded-[4px] border-2 border-dashed border-primary/80 bg-primary/10"
-          style={{ top: resizeOverlay.topPx, height: resizeOverlay.heightPx }}
-        />
-      )}
-      {/* Event blocks — animated layer; pointer-events:none on the wrapper lets
-          drag-to-create pass through to the grid; buttons inside override to auto */}
-      <div ref={eventsLayerRef} className="absolute inset-0" style={{ pointerEvents: 'none' }}>
-        {layout.map((l) => (
-          <EventBlock
-            key={l.event.id}
-            layout={l}
-            onClick={onEventClick}
-            onMoveStart={(e, topPx) => onEventMoveStart(e, l.event, topPx)}
-            onResizeStart={(e, side) => onEventResizeStart(e, l.event, side)}
-            suppressClickRef={suppressClickRef}
-            dimmed={l.event.id === movingEventId}
-            isResizing={l.event.id === resizingEventId}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── FloatingTasksRow ─────────────────────────────────────────────────────────
-
-type FloatingDragInfo = { pointerId: number; clientX: number; clientY: number; pointerType: string }
-
-function FloatingTasksRow({
-  tasks,
-  onSchedule,
-  onDragStart,
-  rowRef,
-  isHighlighted,
-  forceVisible,
-  movingEventId,
-  pendingDragId,
-}: {
-  tasks: Occurrence[]
-  onSchedule: (o: Occurrence) => void
-  onDragStart?: (info: FloatingDragInfo, o: Occurrence) => void
-  rowRef?: React.RefObject<HTMLDivElement | null>
-  isHighlighted?: boolean
-  forceVisible?: boolean
-  movingEventId?: string | null
-  pendingDragId?: string | null
-}) {
-  const scrollElRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const el = scrollElRef.current
-    if (!el) return
-    function onWheel(e: WheelEvent) {
-      if (!el) return
-      const canScrollH = el.scrollWidth > el.clientWidth
-      if (!canScrollH) return
-      e.preventDefault()
-      e.stopPropagation()
-      el.scrollLeft += e.deltaY + e.deltaX
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [])
-
-  const pendingRef = useRef<{
-    timer: ReturnType<typeof setTimeout>
-    pointerId: number
-    startX: number
-    startY: number
-    scrollStart: number
-    scrolling: boolean
-    occ: Occurrence
-    pointerType: string
-  } | null>(null)
-
-  function cancelPending() {
-    if (!pendingRef.current) return
-    clearTimeout(pendingRef.current.timer)
-    pendingRef.current = null
-  }
-
-  function handlePointerDown(e: React.PointerEvent<HTMLButtonElement>, o: Occurrence) {
-    if (e.pointerType === 'mouse') {
-      if (e.button !== 0) return
-      onDragStart?.({ pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType }, o)
-      return
-    }
-    if (!onDragStart) return
-    const { pointerId, clientX, clientY, pointerType } = e
-    const scrollStart = scrollElRef.current?.scrollLeft ?? 0
-    const timer = setTimeout(() => {
-      const p = pendingRef.current
-      pendingRef.current = null
-      if (!p) return
-      if (navigator.vibrate) navigator.vibrate(30)
-      onDragStart({ pointerId, clientX, clientY, pointerType }, o)
-    }, 350)
-    pendingRef.current = { timer, pointerId, startX: clientX, startY: clientY, scrollStart, scrolling: false, occ: o, pointerType }
-  }
-
-  function handlePointerMove(e: React.PointerEvent) {
-    const p = pendingRef.current
-    if (!p || e.pointerId !== p.pointerId) return
-    const dx = e.clientX - p.startX
-    const dy = e.clientY - p.startY
-    if (p.scrolling) {
-      if (scrollElRef.current) scrollElRef.current.scrollLeft = p.scrollStart - dx
-      return
-    }
-    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      // Horizontal — cancel hold timer, scroll manually
-      clearTimeout(p.timer)
-      p.scrolling = true
-      if (scrollElRef.current) scrollElRef.current.scrollLeft = p.scrollStart - dx
-    }
-    // Vertical movement: let the hold timer fire
-  }
-
-  function handlePointerUp(e: React.PointerEvent) {
-    if (pendingRef.current?.pointerId === e.pointerId) cancelPending()
-  }
-
-  if (tasks.length === 0 && !forceVisible) return null
-  return (
-    <div
-      ref={rowRef}
-      className={`flex transition-colors ${isHighlighted ? 'bg-primary/10' : ''}`}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={cancelPending}
-    >
-      <div className="w-12 shrink-0 flex items-center justify-end pr-2 py-1">
-        <span className="text-[9px] font-medium uppercase tracking-wide text-muted-foreground">Float</span>
-      </div>
-      <div ref={scrollElRef} className="flex-1 overflow-x-auto border-l" style={{ scrollbarWidth: 'none', borderColor: 'var(--calendar-line)' }}>
-        {tasks.length > 0 ? (
-          <div className="flex gap-1 px-1 py-1">
-            {tasks.map((o) => {
-              const { className, style } = eventAllDayColors(o)
-              return (
-                <button
-                  key={o.id}
-                  onPointerDown={(e) => handlePointerDown(e, o)}
-                  onClick={() => onSchedule(o)}
-                  className={`shrink-0 max-w-[160px] truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${movingEventId === o.id ? 'opacity-20' : pendingDragId === o.id ? 'opacity-50 scale-95' : ''} ${className}`}
-                  style={{ touchAction: 'none', ...style }}
-                >
-                  {o.effectiveTitle}
-                </button>
-              )
-            })}
-          </div>
-        ) : (
-          <div className="h-[26px]" />
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── DueRow ────────────────────────────────────────────────────────────────────
-
-function DueRow({
-  tasks,
-  onTaskClick,
-  onDragStart,
-  movingEventId,
-  pendingDragId,
-}: {
-  tasks: Occurrence[]
-  onTaskClick: (o: Occurrence) => void
-  onDragStart?: (info: FloatingDragInfo, o: Occurrence) => void
-  movingEventId?: string | null
-  pendingDragId?: string | null
-}) {
-  const scrollElRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const el = scrollElRef.current
-    if (!el) return
-    function onWheel(e: WheelEvent) {
-      if (!el) return
-      const canScrollH = el.scrollWidth > el.clientWidth
-      if (!canScrollH) return
-      e.preventDefault()
-      e.stopPropagation()
-      el.scrollLeft += e.deltaY + e.deltaX
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [])
-
-  const pendingRef = useRef<{
-    timer: ReturnType<typeof setTimeout>
-    pointerId: number
-    startX: number
-    startY: number
-    scrollStart: number
-    scrolling: boolean
-    occ: Occurrence
-    pointerType: string
-  } | null>(null)
-
-  function cancelPending() {
-    if (!pendingRef.current) return
-    clearTimeout(pendingRef.current.timer)
-    pendingRef.current = null
-  }
-
-  function handlePointerDown(e: React.PointerEvent<HTMLButtonElement>, o: Occurrence) {
-    if (e.pointerType === 'mouse') {
-      if (e.button !== 0) return
-      onDragStart?.({ pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType }, o)
-      return
-    }
-    if (!onDragStart) return
-    const { pointerId, clientX, clientY, pointerType } = e
-    const scrollStart = scrollElRef.current?.scrollLeft ?? 0
-    const timer = setTimeout(() => {
-      const p = pendingRef.current
-      pendingRef.current = null
-      if (!p) return
-      if (navigator.vibrate) navigator.vibrate(30)
-      onDragStart({ pointerId, clientX, clientY, pointerType }, o)
-    }, 350)
-    pendingRef.current = { timer, pointerId, startX: clientX, startY: clientY, scrollStart, scrolling: false, occ: o, pointerType }
-  }
-
-  function handlePointerMove(e: React.PointerEvent) {
-    const p = pendingRef.current
-    if (!p || e.pointerId !== p.pointerId) return
-    const dx = e.clientX - p.startX
-    const dy = e.clientY - p.startY
-    if (p.scrolling) {
-      if (scrollElRef.current) scrollElRef.current.scrollLeft = p.scrollStart - dx
-      return
-    }
-    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      clearTimeout(p.timer)
-      p.scrolling = true
-      if (scrollElRef.current) scrollElRef.current.scrollLeft = p.scrollStart - dx
-    }
-  }
-
-  function handlePointerUp(e: React.PointerEvent) {
-    if (pendingRef.current?.pointerId === e.pointerId) cancelPending()
-  }
-
-  if (tasks.length === 0) return null
-
-  return (
-    <div
-      className="flex"
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={cancelPending}
-    >
-      <div className="w-12 shrink-0 flex items-center justify-end pr-2 py-1">
-        <span className="text-[9px] font-medium uppercase tracking-wide text-destructive">Due</span>
-      </div>
-      <div ref={scrollElRef} className="flex-1 overflow-x-auto border-l" style={{ scrollbarWidth: 'none', borderColor: 'var(--calendar-line)' }}>
-        <div className="flex gap-1 px-1 py-1">
-          {tasks.map((o) => {
-            const { className, style } = eventAllDayColors(o)
-            const dateLabel = new Date(dueRowRef(o)!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-            return (
-              <button
-                key={o.id}
-                onPointerDown={(e) => handlePointerDown(e, o)}
-                onClick={() => onTaskClick(o)}
-                className={`shrink-0 max-w-[180px] truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${movingEventId === o.id ? 'opacity-20' : pendingDragId === o.id ? 'opacity-50 scale-95' : ''} ${className}`}
-                style={{ touchAction: 'none', ...style }}
-              >
-                {o.effectiveTitle} · {dateLabel}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── UpcomingRow ───────────────────────────────────────────────────────────────
-
-function UpcomingRow({
-  tasks,
-  onTaskClick,
-  onDragStart,
-  movingEventId,
-  pendingDragId,
-}: {
-  tasks: Occurrence[]
-  onTaskClick: (o: Occurrence) => void
-  onDragStart?: (info: FloatingDragInfo, o: Occurrence) => void
-  movingEventId?: string | null
-  pendingDragId?: string | null
-}) {
-  const scrollElRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const el = scrollElRef.current
-    if (!el) return
-    function onWheel(e: WheelEvent) {
-      if (!el) return
-      const canScrollH = el.scrollWidth > el.clientWidth
-      if (!canScrollH) return
-      e.preventDefault()
-      e.stopPropagation()
-      el.scrollLeft += e.deltaY + e.deltaX
-    }
-    el.addEventListener('wheel', onWheel, { passive: false })
-    return () => el.removeEventListener('wheel', onWheel)
-  }, [])
-
-  const pendingRef = useRef<{
-    timer: ReturnType<typeof setTimeout>
-    pointerId: number
-    startX: number
-    startY: number
-    scrollStart: number
-    scrolling: boolean
-    occ: Occurrence
-    pointerType: string
-  } | null>(null)
-
-  function cancelPending() {
-    if (!pendingRef.current) return
-    clearTimeout(pendingRef.current.timer)
-    pendingRef.current = null
-  }
-
-  function handlePointerDown(e: React.PointerEvent<HTMLButtonElement>, o: Occurrence) {
-    if (e.pointerType === 'mouse') {
-      if (e.button !== 0) return
-      onDragStart?.({ pointerId: e.pointerId, clientX: e.clientX, clientY: e.clientY, pointerType: e.pointerType }, o)
-      return
-    }
-    if (!onDragStart) return
-    const { pointerId, clientX, clientY, pointerType } = e
-    const scrollStart = scrollElRef.current?.scrollLeft ?? 0
-    const timer = setTimeout(() => {
-      const p = pendingRef.current
-      pendingRef.current = null
-      if (!p) return
-      if (navigator.vibrate) navigator.vibrate(30)
-      onDragStart({ pointerId, clientX, clientY, pointerType }, o)
-    }, 350)
-    pendingRef.current = { timer, pointerId, startX: clientX, startY: clientY, scrollStart, scrolling: false, occ: o, pointerType }
-  }
-
-  function handlePointerMove(e: React.PointerEvent) {
-    const p = pendingRef.current
-    if (!p || e.pointerId !== p.pointerId) return
-    const dx = e.clientX - p.startX
-    const dy = e.clientY - p.startY
-    if (p.scrolling) {
-      if (scrollElRef.current) scrollElRef.current.scrollLeft = p.scrollStart - dx
-      return
-    }
-    if (Math.abs(dx) < 4 && Math.abs(dy) < 4) return
-    if (Math.abs(dx) >= Math.abs(dy)) {
-      clearTimeout(p.timer)
-      p.scrolling = true
-      if (scrollElRef.current) scrollElRef.current.scrollLeft = p.scrollStart - dx
-    }
-  }
-
-  function handlePointerUp(e: React.PointerEvent) {
-    if (pendingRef.current?.pointerId === e.pointerId) cancelPending()
-  }
-
-  if (tasks.length === 0) return null
-
-  return (
-    <div
-      className="flex"
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={cancelPending}
-    >
-      <div className="w-12 shrink-0 flex items-center justify-end pr-2 py-1">
-        <span className="text-[9px] font-medium uppercase text-muted-foreground">Soon</span>
-      </div>
-      <div ref={scrollElRef} className="flex-1 overflow-x-auto border-l" style={{ scrollbarWidth: 'none', borderColor: 'var(--calendar-line)' }}>
-        <div className="flex gap-1 px-1 py-1">
-          {tasks.map((o) => {
-            const { className, style } = eventAllDayColors(o)
-            const dateLabel = new Date(o.startAt!).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-            return (
-              <button
-                key={o.id}
-                onPointerDown={(e) => handlePointerDown(e, o)}
-                onClick={() => onTaskClick(o)}
-                className={`shrink-0 max-w-[180px] truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${movingEventId === o.id ? 'opacity-20' : pendingDragId === o.id ? 'opacity-50 scale-95' : ''} ${className}`}
-                style={{ touchAction: 'none', ...style }}
-              >
-                {o.effectiveTitle} · {dateLabel}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── CalendarPage ─────────────────────────────────────────────────────────────
-
-type ViewMode = 'day' | '3day' | 'week'
-
-const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
-  { value: 'day', label: 'Day' },
-  { value: '3day', label: '3 days' },
-  { value: 'week', label: 'Week' },
-]
-
-// Dial needle angle per range, for the mobile dial control - clockwise as the
-// range grows, so cycling forward always reads as "advancing" visually.
-const VIEW_ANGLE: Record<ViewMode, number> = { day: 0, '3day': 120, week: 240 }
 
 export function CalendarPage() {
   const [view, setView] = useState<ViewMode>(() => {
@@ -1123,18 +58,8 @@ export function CalendarPage() {
     if (isNaN(d.getTime())) d = new Date()
     return savedView === 'week' ? startOfWeek(d) : d
   })
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editingOccurrence, setEditingOccurrence] = useState<Occurrence | undefined>()
-  const [defaultStartAt, setDefaultStartAt] = useState<string | undefined>()
-  const [defaultEndAt, setDefaultEndAt] = useState<string | undefined>()
-  const [defaultActivity, setDefaultActivity] = useState<Activity | undefined>()
-  const [focusStartAt, setFocusStartAt] = useState(false)
-  const [scheduleMode, setScheduleMode] = useState(false)
-  const [detailOpen, setDetailOpen] = useState(false)
-  const [detailEvent, setDetailEvent] = useState<Occurrence | null>(null)
-  const [activityModalOpen, setActivityModalOpen] = useState(false)
-  const [editingActivity, setEditingActivity] = useState<Activity | undefined>()
-  const [duplicateFromOccurrence, setDuplicateFromOccurrence] = useState<Occurrence | undefined>()
+  const modals = useCalendarModals()
+  const { openCreate, openDetail, openEdit, openEditActivity, openDuplicate, openSchedule } = modals
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -1237,7 +162,6 @@ export function CalendarPage() {
   const anchorRef = useRef<{ dayIdx: number; min: number; viewportY: number; at: number } | null>(null)
   const dragSpacerRef = useRef<HTMLDivElement>(null)
 
-  const queryClient = useQueryClient()
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -1250,13 +174,13 @@ export function CalendarPage() {
   const { data: goals = [] } = useQuery({
     queryKey: ['goals'],
     queryFn: () => goalsApi.list(),
-    enabled: activityModalOpen,
+    enabled: modals.activityModal.open,
   })
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
     queryFn: () => categoriesApi.list(),
-    enabled: activityModalOpen,
+    enabled: modals.activityModal.open,
   })
 
   // Effective "today" respecting the day boundary
@@ -1278,6 +202,11 @@ export function CalendarPage() {
 
   const rangeStart = days[0]
   const rangeEnd = addDays(days[days.length - 1], 1)
+  const { rescheduleEvent, rescheduleFromAllDay, scheduleFloating, makeEventFloat, makeEventAllDay } = useOccurrenceMutations({
+    rangeStart,
+    rangeEnd,
+    setPendingMove,
+  })
 
   const { data: events = [], isLoading } = useQuery({
     queryKey: ['events', 'calendar', rangeStart.toISOString(), rangeEnd.toISOString()],
@@ -1538,64 +467,6 @@ export function CalendarPage() {
   function cycleView() {
     const idx = VIEW_OPTIONS.findIndex((o) => o.value === view)
     changeView(VIEW_OPTIONS[(idx + 1) % VIEW_OPTIONS.length].value)
-  }
-
-  function openCreate(startAt?: string, endAt?: string) {
-    setDuplicateFromOccurrence(undefined)
-    setDefaultActivity(undefined)
-    setEditingOccurrence(undefined)
-    setDefaultStartAt(startAt)
-    setDefaultEndAt(endAt)
-    setFocusStartAt(false)
-    setScheduleMode(false)
-    setModalOpen(true)
-  }
-
-  function openDuplicate(o: Occurrence) {
-    setDetailOpen(false)
-    setDetailEvent(null)
-    setEditingOccurrence(undefined)
-    setDefaultActivity(undefined)
-    setDefaultStartAt(undefined)
-    setDefaultEndAt(undefined)
-    setDuplicateFromOccurrence(o)
-    setFocusStartAt(false)
-    setScheduleMode(false)
-    setModalOpen(true)
-  }
-
-  function openDetail(o: Occurrence) {
-    setDetailEvent(o)
-    setDetailOpen(true)
-  }
-
-  function openEditActivity(a: Activity) {
-    setDetailOpen(false)
-    setDetailEvent(null)
-    setEditingActivity(a)
-    setActivityModalOpen(true)
-  }
-
-  function openEdit(o: Occurrence) {
-    setDuplicateFromOccurrence(undefined)
-    setDefaultActivity(undefined)
-    setEditingOccurrence(o)
-    setDefaultStartAt(undefined)
-    setDefaultEndAt(undefined)
-    setFocusStartAt(!o.startAt)
-    setScheduleMode(false)
-    setModalOpen(true)
-  }
-
-  function openSchedule(o: Occurrence) {
-    setDuplicateFromOccurrence(undefined)
-    setDefaultActivity(undefined)
-    setEditingOccurrence(o)
-    setDefaultStartAt(undefined)
-    setDefaultEndAt(undefined)
-    setFocusStartAt(true)
-    setScheduleMode(true)
-    setModalOpen(true)
   }
 
   // ── Event move drag ──────────────────────────────────────────────────────
@@ -1864,137 +735,6 @@ export function CalendarPage() {
     }
   }
 
-  // A drop that lands on a different date than the occurrence was on is ambiguous:
-  // it can mean "this moved" or "this didn't happen, do it later". Ask; a same-day
-  // drag is just a time change and commits straight away. Only pending occurrences
-  // can be skipped, so a done/skipped one always moves.
-  // Only a pending occurrence can be skipped, so a done/skipped one always just moves.
-  function movesToAnotherDay(ev: Occurrence, newStart: Date): boolean {
-    return ev.status === 'pending' && !!ev.startAt && !isSameDay(new Date(ev.startAt), newStart)
-  }
-
-  function duplicateOccurrence(ev: Occurrence, startAt: string | null, endAt: string | null, isAllDay: boolean) {
-    occurrencesApi.create({
-      activityId: ev.activity.id,
-      title: ev.title,
-      startAt,
-      endAt,
-      isAllDay,
-      isPlanned: ev.isPlanned,
-      deadlineOccurrenceId: ev.deadline?.status === 'pending' ? ev.deadline.id : null,
-    }).catch((err) => {
-      toastError(err, 'Could not duplicate the occurrence.')
-    }).finally(() => {
-      queryClient.invalidateQueries({ queryKey: ['events'] })
-    })
-  }
-
-  function rescheduleEvent(ev: Occurrence, newStart: Date, newEnd: Date, copy = false) {
-    if (copy) {
-      duplicateOccurrence(ev, newStart.toISOString(), ev.endAt ? newEnd.toISOString() : null, ev.isAllDay)
-      return
-    }
-    if (movesToAnotherDay(ev, newStart)) {
-      setPendingMove({
-        occurrence: ev,
-        startAt: newStart.toISOString(),
-        endAt: ev.endAt ? newEnd.toISOString() : null,
-        isAllDay: ev.isAllDay,
-        commit: () => commitReschedule(ev, newStart, newEnd),
-      })
-      return
-    }
-    commitReschedule(ev, newStart, newEnd)
-  }
-
-  function commitReschedule(ev: Occurrence, newStart: Date, newEnd: Date) {
-    const newEndAt = ev.endAt ? newEnd.toISOString() : null
-    // Cancel any in-flight refetch so it doesn't overwrite the optimistic update
-    // when the user drags multiple times quickly.
-    queryClient.cancelQueries({ queryKey: ['events'] })
-    queryClient.setQueryData<Occurrence[]>(
-      ['events', 'calendar', rangeStart.toISOString(), rangeEnd.toISOString()],
-      (old) => old?.map((o) => {
-        if (o.id !== ev.id) return o
-        return { ...o, startAt: newStart.toISOString(), endAt: newEndAt }
-      }),
-    )
-    occurrencesApi.update(ev.id, {
-      title: ev.title,
-      startAt: newStart.toISOString(),
-      endAt: newEndAt,
-      isAllDay: ev.isAllDay,
-      isPlanned: ev.isPlanned,
-    }).catch((err) => {
-      toastError(err, 'Could not reschedule the occurrence.')
-    }).finally(() => {
-      queryClient.invalidateQueries({ queryKey: ['events'] })
-    })
-  }
-
-  function rescheduleFromAllDay(ev: Occurrence, newStart: Date, newEnd: Date, copy = false) {
-    if (copy) {
-      duplicateOccurrence(ev, newStart.toISOString(), newEnd.toISOString(), false)
-      return
-    }
-    if (movesToAnotherDay(ev, newStart)) {
-      setPendingMove({
-        occurrence: ev,
-        startAt: newStart.toISOString(),
-        endAt: newEnd.toISOString(),
-        isAllDay: false,
-        commit: () => commitRescheduleFromAllDay(ev, newStart, newEnd),
-      })
-      return
-    }
-    commitRescheduleFromAllDay(ev, newStart, newEnd)
-  }
-
-  function commitRescheduleFromAllDay(ev: Occurrence, newStart: Date, newEnd: Date) {
-    queryClient.cancelQueries({ queryKey: ['events'] })
-    queryClient.setQueryData<Occurrence[]>(
-      ['events', 'calendar', rangeStart.toISOString(), rangeEnd.toISOString()],
-      (old) => old?.map((o) => {
-        if (o.id !== ev.id) return o
-        return { ...o, startAt: newStart.toISOString(), endAt: newEnd.toISOString(), isAllDay: false }
-      }),
-    )
-    occurrencesApi.update(ev.id, {
-      title: ev.title,
-      startAt: newStart.toISOString(),
-      endAt: newEnd.toISOString(),
-      isAllDay: false,
-      isPlanned: ev.isPlanned,
-    }).catch((err) => {
-      toastError(err, 'Could not reschedule the occurrence.')
-    }).finally(() => {
-      queryClient.invalidateQueries({ queryKey: ['events'] })
-    })
-  }
-
-  function scheduleFloating(ev: Occurrence, newStart: Date, newEnd: Date) {
-    queryClient.cancelQueries({ queryKey: ['events'] })
-    queryClient.setQueryData<Occurrence[]>(
-      ['events', 'floating'],
-      (old) => old?.filter((o) => o.id !== ev.id),
-    )
-    queryClient.setQueryData<Occurrence[]>(
-      ['events', 'calendar', rangeStart.toISOString(), rangeEnd.toISOString()],
-      (old) => [...(old ?? []), { ...ev, startAt: newStart.toISOString(), endAt: newEnd.toISOString() }],
-    )
-    occurrencesApi.update(ev.id, {
-      title: ev.title,
-      startAt: newStart.toISOString(),
-      endAt: newEnd.toISOString(),
-      isAllDay: false,
-      isPlanned: ev.isPlanned,
-    }).catch((err) => {
-      toastError(err, 'Could not schedule the task.')
-    }).finally(() => {
-      queryClient.invalidateQueries({ queryKey: ['events'] })
-    })
-  }
-
   function getDropTarget(clientY: number): 'float' | 'allday' | null {
     const floatRect = floatRowRef.current?.getBoundingClientRect()
     if (floatRect && clientY >= floatRect.top && clientY <= floatRect.bottom) return 'float'
@@ -2003,96 +743,9 @@ export function CalendarPage() {
     return null
   }
 
-  function makeEventFloat(ev: Occurrence, copy = false) {
-    if (copy) {
-      duplicateOccurrence(ev, null, null, false)
-      return
-    }
-    queryClient.cancelQueries({ queryKey: ['events'] })
-    queryClient.setQueryData<Occurrence[]>(
-      ['events', 'calendar', rangeStart.toISOString(), rangeEnd.toISOString()],
-      (old) => old?.filter((o) => o.id !== ev.id),
-    )
-    queryClient.setQueryData<Occurrence[]>(
-      ['events', 'floating'],
-      (old) => [...(old ?? []), { ...ev, startAt: null, endAt: null, isAllDay: false }],
-    )
-    occurrencesApi.update(ev.id, {
-      title: ev.title,
-      startAt: null,
-      endAt: null,
-      isAllDay: false,
-      isPlanned: ev.isPlanned,
-    }).catch((err) => {
-      toastError(err, 'Could not unschedule the event.')
-    }).finally(() => {
-      queryClient.invalidateQueries({ queryKey: ['events'] })
-    })
-  }
-
-  function makeEventAllDay(ev: Occurrence, day: Date, copy = false) {
-    if (copy) {
-      const newStart = sod(day)
-      duplicateOccurrence(ev, newStart.toISOString(), allDayEndAt(ev, newStart), true)
-      return
-    }
-    if (movesToAnotherDay(ev, sod(day))) {
-      const newStart = sod(day)
-      setPendingMove({
-        occurrence: ev,
-        startAt: newStart.toISOString(),
-        endAt: allDayEndAt(ev, newStart),
-        isAllDay: true,
-        commit: () => commitMakeEventAllDay(ev, day),
-      })
-      return
-    }
-    commitMakeEventAllDay(ev, day)
-  }
-
-  // Preserve span for multi-day all-day events
-  function allDayEndAt(ev: Occurrence, newStart: Date): string | null {
-    return ev.isAllDay && ev.startAt && ev.endAt
-      ? new Date(newStart.getTime() + (new Date(ev.endAt).getTime() - new Date(ev.startAt).getTime())).toISOString()
-      : null
-  }
-
-  function commitMakeEventAllDay(ev: Occurrence, day: Date) {
-    const newStart = sod(day)
-    const startAt = newStart.toISOString()
-    const endAt = allDayEndAt(ev, newStart)
-    queryClient.cancelQueries({ queryKey: ['events'] })
-    if (ev.startAt === null) {
-      queryClient.setQueryData<Occurrence[]>(
-        ['events', 'floating'],
-        (old) => old?.filter((o) => o.id !== ev.id),
-      )
-      queryClient.setQueryData<Occurrence[]>(
-        ['events', 'calendar', rangeStart.toISOString(), rangeEnd.toISOString()],
-        (old) => [...(old ?? []), { ...ev, startAt, endAt, isAllDay: true }],
-      )
-    } else {
-      queryClient.setQueryData<Occurrence[]>(
-        ['events', 'calendar', rangeStart.toISOString(), rangeEnd.toISOString()],
-        (old) => old?.map((o) => o.id === ev.id ? { ...o, startAt, endAt, isAllDay: true } : o),
-      )
-    }
-    occurrencesApi.update(ev.id, {
-      title: ev.title,
-      startAt,
-      endAt,
-      isAllDay: true,
-      isPlanned: ev.isPlanned,
-    }).catch((err) => {
-      toastError(err, 'Could not convert to all-day.')
-    }).finally(() => {
-      queryClient.invalidateQueries({ queryKey: ['events'] })
-    })
-  }
-
-  function handleAllDayPillMoveStart(e: React.PointerEvent, event: Occurrence, onDrop?: (ev: Occurrence, start: Date, end: Date, copy?: boolean) => void) {
-    if (e.pointerType === 'mouse' && e.button !== 0) return
-    e.stopPropagation()
+  function handleAllDayPillMoveStart(e: FloatingDragInfo & { button?: number; stopPropagation?: () => void }, event: Occurrence, onDrop?: (ev: Occurrence, start: Date, end: Date, copy?: boolean) => void) {
+    if (e.pointerType === 'mouse' && (e.button ?? 0) !== 0) return
+    e.stopPropagation?.()
     suppressClickRef.current = false
 
     // All-day events also have endAt null, so check isAllDay before treating as a due pin
@@ -2947,225 +1600,26 @@ export function CalendarPage() {
     <div className="flex flex-1 overflow-hidden">
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
       {/* Header */}
-      <header className="relative flex h-[57px] shrink-0 items-center gap-2 border-b border-border px-4 md:gap-3 md:px-6">
-        {/* Mobile: date popup trigger */}
-        <div className="sm:hidden relative flex-1 min-w-0" ref={datePopRef}>
-          <button
-            onClick={() => setDatePopOpen((o) => !o)}
-            className="flex items-center gap-1 text-sm font-semibold text-foreground hover:text-muted-foreground transition-colors"
-          >
-            <span className="truncate">{compactTitle(view, days)}</span>
-            <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${datePopOpen ? 'rotate-180' : ''}`} strokeWidth={2} />
-          </button>
-          {datePopOpen && (
-            <div className="absolute left-0 top-full z-50 mt-2 w-64 rounded-xl border border-border bg-card shadow-pop p-3 flex flex-col gap-2">
-              {/* Current selection */}
-              <p className="text-sm font-semibold text-foreground">{pageTitle(view, days)}</p>
-              {/* Nav row */}
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => { prev(); }}
-                  aria-label={view === 'day' ? 'Previous day' : view === '3day' ? 'Back 3 days' : 'Back 7 days'}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                >
-                  {view === 'day' ? <ChevronLeft className="h-4 w-4" strokeWidth={2} /> : <ChevronsLeft className="h-4 w-4" strokeWidth={2} />}
-                </button>
-                {view !== 'day' && (
-                  <button
-                    onClick={prevDay}
-                    aria-label="Back 1 day"
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                  >
-                    <ChevronLeft className="h-4 w-4" strokeWidth={2} />
-                  </button>
-                )}
-                <div className="flex-1" />
-                {view !== 'day' && (
-                  <button
-                    onClick={nextDay}
-                    aria-label="Forward 1 day"
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                  >
-                    <ChevronRight className="h-4 w-4" strokeWidth={2} />
-                  </button>
-                )}
-                <button
-                  onClick={() => { next(); }}
-                  aria-label={view === 'day' ? 'Next day' : view === '3day' ? 'Forward 3 days' : 'Forward 7 days'}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                >
-                  {view === 'day' ? <ChevronRight className="h-4 w-4" strokeWidth={2} /> : <ChevronsRight className="h-4 w-4" strokeWidth={2} />}
-                </button>
-              </div>
-              {/* Today + date picker row */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => { goToday(); setDatePopOpen(false) }}
-                  className="flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs text-foreground hover:bg-muted transition-colors"
-                >
-                  <CalendarCheck className="h-3.5 w-3.5" strokeWidth={2} />
-                  Today
-                </button>
-                <input
-                  type="date"
-                  value={formatDateInput(current)}
-                  onChange={(e) => {
-                    const d = new Date(e.target.value + 'T00:00:00')
-                    if (!isNaN(d.getTime())) { setCurrent(view === 'week' ? startOfWeek(d) : d); setDatePopOpen(false) }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault()
-                  }}
-                  className="flex-1 h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground transition-colors hover:bg-muted focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Desktop: nav + title */}
-        <div className="hidden sm:flex items-center gap-0.5">
-          <button
-            onClick={prev}
-            aria-label={view === 'day' ? 'Previous day' : view === '3day' ? 'Back 3 days' : 'Back 7 days'}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          >
-            {view === 'day' ? (
-              <ChevronLeft className="h-4 w-4" strokeWidth={2} />
-            ) : (
-              <ChevronsLeft className="h-4 w-4" strokeWidth={2} />
-            )}
-          </button>
-          {view !== 'day' && (
-            <>
-              <button
-                onClick={prevDay}
-                aria-label="Back 1 day"
-                className="hidden md:flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              >
-                <ChevronLeft className="h-4 w-4" strokeWidth={2} />
-              </button>
-              <button
-                onClick={nextDay}
-                aria-label="Forward 1 day"
-                className="hidden md:flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              >
-                <ChevronRight className="h-4 w-4" strokeWidth={2} />
-              </button>
-            </>
-          )}
-          <button
-            onClick={next}
-            aria-label={view === 'day' ? 'Next day' : view === '3day' ? 'Forward 3 days' : 'Forward 7 days'}
-            className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          >
-            {view === 'day' ? (
-              <ChevronRight className="h-4 w-4" strokeWidth={2} />
-            ) : (
-              <ChevronsRight className="h-4 w-4" strokeWidth={2} />
-            )}
-          </button>
-        </div>
-
-        <h1 className="hidden sm:block min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-          {pageTitle(view, days)}
-        </h1>
-
-        <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
-          <button
-            onClick={goToday}
-            className="hidden sm:flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground hover:bg-muted transition-colors"
-          >
-            <CalendarCheck className="h-3.5 w-3.5" strokeWidth={2} />
-          </button>
-
-          <input
-            ref={dateInputRef}
-            type="date"
-            value={formatDateInput(current)}
-            onChange={(e) => {
-              const d = new Date(e.target.value + 'T00:00:00')
-              if (!isNaN(d.getTime())) setCurrent(view === 'week' ? startOfWeek(d) : d)
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault()
-            }}
-            className="hidden sm:block h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground transition-colors hover:bg-muted focus:outline-none focus:ring-1 focus:ring-ring"
-          />
-
-          <button
-            onClick={toggleCompact}
-            aria-pressed={compact}
-            title={compact ? 'Show the full day' : 'Collapse empty hours'}
-            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border transition-colors ${
-              compact ? 'bg-muted text-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            }`}
-          >
-            {compact
-              ? <UnfoldVertical className="h-3.5 w-3.5" strokeWidth={2} />
-              : <FoldVertical className="h-3.5 w-3.5" strokeWidth={2} />}
-          </button>
-
-          {/* View switch, desktop: all three ranges visible, so the current one is readable at a glance.
-              Below sm there isn't room for three labelled segments next to the fold toggle and +,
-              so mobile gets a single dial button instead (below). */}
-          <div role="group" aria-label="Calendar range" className="hidden sm:flex h-8 shrink-0 items-center overflow-hidden rounded-md border border-border">
-            {VIEW_OPTIONS.map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => changeView(value)}
-                aria-pressed={view === value}
-                className={`h-full px-2.5 text-xs transition-colors ${
-                  view === value
-                    ? 'bg-muted text-foreground'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* View switch, mobile: one dial button steps forward through the ranges.
-              The needle rotates to the current position instead of listing three labels. */}
-          <button
-            onClick={cycleView}
-            aria-label={`Calendar range: ${VIEW_OPTIONS.find((o) => o.value === view)?.label}. Tap to change.`}
-            className="sm:hidden flex h-8 w-[86px] shrink-0 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-foreground hover:bg-muted transition-colors"
-          >
-            <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" fill="none">
-              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.2" className="text-muted-foreground/40" />
-              {(['day', '3day', 'week'] as ViewMode[]).map((v) => (
-                <line
-                  key={v}
-                  x1="8" y1="8" x2="8" y2="4"
-                  stroke="currentColor"
-                  strokeWidth="1"
-                  strokeLinecap="round"
-                  className="text-muted-foreground/40"
-                  style={{ transform: `rotate(${VIEW_ANGLE[v]}deg)`, transformOrigin: '8px 8px' }}
-                />
-              ))}
-              <line
-                x1="8" y1="8" x2="8" y2="3"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                style={{ transform: `rotate(${VIEW_ANGLE[view]}deg)`, transformOrigin: '8px 8px', transition: 'transform 200ms ease' }}
-              />
-            </svg>
-            {VIEW_OPTIONS.find((o) => o.value === view)?.label}
-          </button>
-
-          <button
-            onClick={() => openCreate()}
-            className="flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground hover:bg-muted transition-colors"
-          >
-            <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-          </button>
-
-        </div>
-      </header>
+      <CalendarHeader
+        view={view}
+        days={days}
+        current={current}
+        compact={compact}
+        datePopOpen={datePopOpen}
+        onDatePopOpenChange={setDatePopOpen}
+        datePopRef={datePopRef}
+        dateInputRef={dateInputRef}
+        onPrev={prev}
+        onNext={next}
+        onPrevDay={prevDay}
+        onNextDay={nextDay}
+        onToday={goToday}
+        onPickDate={(d) => setCurrent(view === 'week' ? startOfWeek(d) : d)}
+        onToggleCompact={toggleCompact}
+        onChangeView={changeView}
+        onCycleView={cycleView}
+        onCreate={() => openCreate()}
+      />
 
       {/* Time grid */}
       {isLoading ? (
@@ -3194,35 +1648,19 @@ export function CalendarPage() {
                 ))}
               </div>
               {showTray && (
-                <div className="calendar-tray">
-                {!trayDragActive && (
-                  <DueRow
-                    tasks={overduePastItems}
-                    onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                    onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
-                    movingEventId={movingEventId}
-                    pendingDragId={pendingAllDayDragId}
-                  />
-                )}
-                {!trayDragActive && (
-                  <UpcomingRow
-                    tasks={upcomingDueItems}
-                    onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                    onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
-                    movingEventId={movingEventId}
-                    pendingDragId={pendingAllDayDragId}
-                  />
-                )}
-                <FloatingTasksRow
-                  tasks={floatingTasks}
-                  onSchedule={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                  onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, scheduleFloating)}
-                  rowRef={floatRowRef}
-                  isHighlighted={dragDropTarget === 'float'}
-                  forceVisible={trayDragActive}
+                <CalendarTray
+                  trayDragActive={trayDragActive}
+                  overduePastItems={overduePastItems}
+                  upcomingDueItems={upcomingDueItems}
+                  floatingTasks={floatingTasks}
+                  floatRowRef={floatRowRef}
+                  floatHighlighted={dragDropTarget === 'float'}
                   movingEventId={movingEventId}
                   pendingDragId={pendingAllDayDragId}
-                />
+                  onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
+                  onRescheduleDragStart={(info, o) => handleAllDayPillMoveStart(info, o, rescheduleEvent)}
+                  onFloatDragStart={(info, o) => handleAllDayPillMoveStart(info, o, scheduleFloating)}
+                >
                 {(allDayEvents.length > 0 || isDraggingGridEvent || isDraggingPill) && (
                   <div ref={allDayRowRef} className="flex">
                     <div className="flex w-12 shrink-0 items-center justify-end pr-2 py-0.5">
@@ -3267,7 +1705,7 @@ export function CalendarPage() {
                     </div>
                   </div>
                 )}
-                </div>
+                </CalendarTray>
               )}
             </div>
           )}
@@ -3275,35 +1713,19 @@ export function CalendarPage() {
           {/* Day view all-day row */}
           {view === 'day' && showTray && (
             <div className="sticky top-0 z-40 bg-background">
-              <div className="calendar-tray">
-                {!trayDragActive && (
-                  <DueRow
-                    tasks={overduePastItems}
-                    onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                    onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
-                    movingEventId={movingEventId}
-                    pendingDragId={pendingAllDayDragId}
-                  />
-                )}
-                {!trayDragActive && (
-                  <UpcomingRow
-                    tasks={upcomingDueItems}
-                    onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                    onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, rescheduleEvent)}
-                    movingEventId={movingEventId}
-                    pendingDragId={pendingAllDayDragId}
-                  />
-                )}
-                <FloatingTasksRow
-                  tasks={floatingTasks}
-                  onSchedule={(o) => { if (!suppressClickRef.current) openDetail(o) }}
-                  onDragStart={(info, o) => handleAllDayPillMoveStart({ ...info, button: 0, stopPropagation: () => {} } as unknown as React.PointerEvent, o, scheduleFloating)}
-                  rowRef={floatRowRef}
-                  isHighlighted={dragDropTarget === 'float'}
-                  forceVisible={trayDragActive}
-                  movingEventId={movingEventId}
-                  pendingDragId={pendingAllDayDragId}
-                />
+              <CalendarTray
+                trayDragActive={trayDragActive}
+                overduePastItems={overduePastItems}
+                upcomingDueItems={upcomingDueItems}
+                floatingTasks={floatingTasks}
+                floatRowRef={floatRowRef}
+                floatHighlighted={dragDropTarget === 'float'}
+                movingEventId={movingEventId}
+                pendingDragId={pendingAllDayDragId}
+                onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
+                onRescheduleDragStart={(info, o) => handleAllDayPillMoveStart(info, o, rescheduleEvent)}
+                onFloatDragStart={(info, o) => handleAllDayPillMoveStart(info, o, scheduleFloating)}
+              >
                 {(dayAllDayEvents.length > 0 || isDraggingGridEvent) && (
                   <div ref={allDayRowRef} className={`flex transition-colors ${dragDropTarget === 'allday' ? 'bg-primary/10' : ''}`}>
                     <div className="w-12 shrink-0 flex items-center justify-end pr-2">
@@ -3318,7 +1740,7 @@ export function CalendarPage() {
                     </div>
                   </div>
                 )}
-              </div>
+              </CalendarTray>
             </div>
           )}
 
@@ -3436,11 +1858,11 @@ export function CalendarPage() {
       </div>
 
       <EventDetailModal
-        open={detailOpen}
-        onClose={() => setDetailOpen(false)}
-        event={detailEvent}
-        onEdit={(o) => { setDetailOpen(false); openEdit(o) }}
-        onSchedule={(o) => { setDetailOpen(false); openSchedule(o) }}
+        open={modals.detail.open}
+        onClose={modals.detail.close}
+        event={modals.detail.event}
+        onEdit={(o) => { modals.detail.close(); openEdit(o) }}
+        onSchedule={(o) => { modals.detail.close(); openSchedule(o) }}
         onDuplicate={openDuplicate}
         onEditActivity={openEditActivity}
       />
@@ -3452,25 +1874,24 @@ export function CalendarPage() {
       />
 
       <ActivityModal
-        key={editingActivity?.id ?? 'none'}
-        open={activityModalOpen}
-        onClose={() => setActivityModalOpen(false)}
-        activity={editingActivity}
+        key={modals.activityModal.activity?.id ?? 'none'}
+        open={modals.activityModal.open}
+        onClose={modals.activityModal.close}
+        activity={modals.activityModal.activity}
         goals={goals}
         categories={categories}
       />
 
       <EventModal
-        key={`${editingOccurrence?.id ?? duplicateFromOccurrence?.id ?? defaultStartAt ?? defaultActivity?.id ?? 'new'}-${defaultActivity?.id ?? ''}-${scheduleMode}-${editingOccurrence?.startAt ?? ''}`}
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        occurrence={editingOccurrence}
-        duplicateFrom={duplicateFromOccurrence}
-        focusStartAt={focusStartAt}
-        defaultStartAt={defaultStartAt}
-        defaultEndAt={defaultEndAt}
-        defaultActivity={defaultActivity}
-        scheduleOnly={scheduleMode}
+        key={`${modals.eventModal.occurrence?.id ?? modals.eventModal.duplicateFrom?.id ?? modals.eventModal.defaultStartAt ?? 'new'}-${modals.eventModal.scheduleOnly}-${modals.eventModal.occurrence?.startAt ?? ''}`}
+        open={modals.eventModal.open}
+        onClose={modals.eventModal.close}
+        occurrence={modals.eventModal.occurrence}
+        duplicateFrom={modals.eventModal.duplicateFrom}
+        focusStartAt={modals.eventModal.focusStartAt}
+        defaultStartAt={modals.eventModal.defaultStartAt}
+        defaultEndAt={modals.eventModal.defaultEndAt}
+        scheduleOnly={modals.eventModal.scheduleOnly}
       />
     </div>
   )

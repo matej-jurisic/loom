@@ -31,11 +31,16 @@ computes a wrong answer when they are missing. Before adding anything, apply the
 placement, availability inference, and "unaccounted time" all fail it. The calendar is a
 visualization and a fast way to add things, not a planner.
 
+**Recurrence is intentionally absent.** Do not add recurring occurrences, repeat rules or series.
+They decouple the user from the app state: occurrences would be created and changed automatically,
+without the user having done anything, and that does not fit the model, where every occurrence exists
+because the user put it there. Repeating things are added by hand (or by copying a past occurrence).
+
 ## Stack & layout
 
 - **Backend:** ASP.NET Core (.NET 10) minimal APIs, EF Core, SQLite. Solution: `Loom.slnx`.
 - **Frontend:** React 19 + Vite + TypeScript, Tailwind CSS v4, TanStack Query, React Router.
-- **Tests:** xUnit (unit + `WebApplicationFactory` integration).
+- **Tests:** xUnit (unit + `WebApplicationFactory` integration); vitest for client `lib/` helpers (`*.test.ts`, excluded from `tsc -b`).
 
 ```
 src/Loom.Core    Entities, EF DbContext, business services. No web dependencies.
@@ -52,6 +57,8 @@ dotnet test                                 # all tests (keep them green)
 dotnet run --project src/Loom.Api         # backend on :5200
 cd client && npm install && npm run dev     # frontend on :5173, proxies /api → :5200
 cd client && npm run build                  # tsc -b + production build
+cd client && npm test                       # vitest (pure lib helpers)
+cd client && npm run gen:brand              # regenerate favicon + native icon SVGs
 
 # EF migration:
 dotnet ef migrations add <Name> --project src/Loom.Core --startup-project src/Loom.Api --output-dir Migrations
@@ -83,7 +90,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `Common/TimeSplitMath.cs` — `Resolve(duration, minutes)`: auto rows share what pinned rows leave.
   The only place resolved minutes are computed server-side (`TimeSplitDto.FromOccurrence`, which the
   occurrence DTO, export and `InsightsService` all go through); `client/src/lib/timeSplit.ts` mirrors
-  it for live editing, so change both together.
+  it for live editing; both run the cases in `tests/fixtures/time-split-cases.json`, so a drift fails a test.
 - `Dtos/Dtos.cs` — request/response records with `FromEntity` static factory. Never leak entities.
   Key DTOs: `ActivityDto` (has `Kind` — internal activity/event split — and `RecentOccurrenceCount`,
   filled only by `ActivityService.ListAsync`, which orders the new-occurrence modal's picker), `OccurrenceDto` (has
@@ -100,8 +107,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `Occurrence.DeadlineOccurrenceId` — self-reference (set-null) to a pending event-kind occurrence.
   `OccurrenceService.ValidateDeadlineAsync` owns the rules (own user, event kind, pending unless
   unchanged, no self/loop); `WithLinksAsync` fills `OccurrenceDto.Deadline` and the target's
-  `LinkedDoneCount`/`LinkedDoneMinutes` on every list and single read. On `PUT`, a null id means
-  "unchanged" and `ClearDeadline` removes it, so the many full-replace callers need not resend it.
+  `LinkedDoneCount`/`LinkedDoneMinutes` on every list and single read. On `PATCH`, an absent id
+  leaves the link alone and an explicit null removes it.
 - `OccurrenceService.SetTimeSplitAsync` — full-set replace of an occurrence's split, keyed by work
   type. `ValidateTimeSplitFits` runs in both update paths so shortening an occurrence below its
   pinned total is rejected; re-pointing to another activity drops the rows.
@@ -130,9 +137,9 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 
 **Frontend (`client/src`)**
 - `App.tsx` — auth-gated routing; index → `/plan`.
-- `pages/` — `PlanPreviewPage` (**this is `/plan`**), `CalendarPage`, `CategoriesPage`,
-  `GoalsPreviewPage` (**this is `/goals`**), `ActivitiesPage`,
-  `InsightsPage`, `SettingsPage`. The `*PreviewPage` names are historical — they are the live pages.
+- `pages/` — `PlanPage` (**this is `/plan`**), `CalendarPage`, `CategoriesPage`,
+  `GoalsPage` (**this is `/goals`**), `ActivitiesPage`,
+  `InsightsPage`, `SettingsPage`.
 - `pages/CategoriesPage.tsx` — desktop always shows the filtered occurrence list (nav is the
   sidebar's category list). On mobile, bare `/categories` (no query params) renders a full-page
   category list instead — `isRoot` in the component — with the header's `+` creating a category;
@@ -143,6 +150,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `lib/api.ts` — `request<T>` (bearer + one-shot 401 refresh). Key namespaces: `activitiesApi`, `occurrencesApi`, `categoriesApi`, `goalsApi`, `checkpointsApi`, `insightsApi`.
 - `lib/types.ts` — mirrors backend DTOs. Key types: `Activity`, `Occurrence` (has `effectiveTitle`), `Goal`, `Category`, `Insights`.
 - `lib/goals.ts` — `recencyLabel`/`isStale` over the server's `daysSinceLastOccurrence` (Goals page and Plan chips); `lib/useMediaQuery.ts` — `matchMedia` as a hook.
+- `lib/invalidate.ts` — the query-invalidation helpers; every mutation goes through them.
 - `lib/theme.ts` — light/dark/system preference (localStorage `loom-theme`).
 - `store/auth.ts` — Zustand; access token in memory only.
 - `store/toasts.ts` — Zustand toast store; `toastError(err)` for mutation failures without inline error display.
@@ -176,8 +184,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   max width: cell size falls out of `weeks`, so each caller renders it twice (15 weeks on mobile, 37
   from `sm:`, except the narrower activity history modal) with counts picked to fill its container at
   a ~14px square. Both draw a suffix of the same payload, and the payload's day count must stay ≥ the
-  widest column count plus its part-week. Consumers: `GoalsPreviewPage` (one grid per goal with occurrences,
-  tier-coloured), `PlanPreviewPage`'s "Goal activity" section (`goalsApi.heatmap()`, one grid summed
+  widest column count plus its part-week. Consumers: `GoalsPage` (one grid per goal with occurrences,
+  tier-coloured), `PlanPage`'s "Goal activity" section (`goalsApi.heatmap()`, one grid summed
   across every goal-linked activity, `--color-primary`), `OccurrenceHistoryModal` (per-activity and per-goal,
   adds `pending`).
 - `components/ErrorBoundary.tsx` — class boundary with `resetKey` (cleared on navigation) and a
@@ -192,8 +200,9 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `components/layout/BottomNav.tsx` — mobile nav: 4 tabs (Plan, Activities, Calendar, Goals) + "More"
   bottom sheet (Categories, Insights, Settings). Max 5 slots; new pages go in the sheet.
 - `components/layout/LoomMark.tsx` — the brand mark (fill-based weave glyph, not a stroked lucide
-  icon), used in `Sidebar.tsx` and both auth pages. Mirrored by hand in `public/favicon.svg` and the
-  native icon/splash sources in `client/assets/*.svg` — edit all of them together if the mark changes.
+  icon), used in `Sidebar.tsx` and both auth pages. The geometry lives once in `lib/brandMark.json`;
+  `npm run gen:brand` (`client/scripts/gen-brand.mjs`) regenerates `public/favicon.svg` and
+  `client/assets/*.svg` from it, so change the mark there and rerun the script.
 - `components/events/OccurrenceHistoryModal.tsx` — read-only "have I been doing this", generic over a
   query key + fetcher. `activities/ActivityHistoryModal.tsx` (activity row menu; `['events', 'activity', id]`)
   and `goals/GoalHistoryModal.tsx` (goal card menu; `['events', 'goal', id]`) are thin wrappers. **Every
@@ -202,6 +211,13 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   section (`insights/TimeByActivityList.tsx`, shared with `InsightsPage`; `activitiesFromOccurrences` mirrors
   `InsightsService` over all fetched occurrences, no window). No figure needs a
   complete calendar to be right.
+- Calendar split: `pages/CalendarPage.tsx` keeps the page state, scroll anchoring and every pointer gesture
+  (they share refs, so they stay together). Around it: `lib/calendarDates.ts` (date/label helpers,
+  `ViewMode`), `lib/calendarLayout.ts` (column packing, `layoutDay`, snapping, `occursOnDay`, due helpers,
+  colours), `lib/useOccurrenceMutations.ts` (optimistic reschedule / float / all-day commits and the
+  Move-or-Skip hand-off), `lib/useCalendarModals.ts` (modal state and openers), and
+  `components/calendar/` (`EventBlock`, `DayColumn`, `CalendarHeader`, `CalendarTray` over `TrayPillRow`'s
+  Float / Due / Soon rows). The pure `lib/` parts have vitest tests.
 - `pages/CalendarPage.tsx` — ⚠️ **plain click / tap on empty grid creates** (`openCreateAt`,
   `CLICK_CREATE_MINUTES`), reached from the mouse no-drag path and the touch tap in
   `handleGridPointerUp`. Drag still sets an exact span; long press does it on touch.
@@ -286,10 +302,11 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   (`DayMath.IsOverdue` returns `false` for anything `IsPlanned`). It backs the calendar's DUE row
   (`dueRowRef`) and the Plan page's Unfinished section (`isBehind`), so a planned occurrence that
   slipped stays visible without being styled as late.
-- ⚠️ **`PUT /api/occurrences/{id}` is a full replace**: `UpdateAsync` assigns `Title`, `StartAt`,
-  `EndAt`, `IsAllDay` and `IsPlanned` unconditionally, so any field left out of the
-  body is cleared. Resend everything that isn't changing (see the Plan page sweep). `Subtasks` is the
-  sole exception — `ApplySubtasks` no-ops when the key is absent.
+- **`PATCH /api/occurrences/{id}` is a partial update**: `PatchOccurrenceRequest` fields are
+  `Optional<T>` (`Common/Optional.cs`), so a field absent from the JSON is kept and an explicit `null`
+  clears it (title, start, end, deadline). `ActivityId` re-points and cannot be cleared; `IsAllDay` and
+  `IsPlanned` reject null; `Subtasks` null leaves the subtasks alone (`ApplySubtasks`). Send only
+  what changes (`occurrencesApi.patch`). Event-kind edits still go through `PUT /{id}/event`, which is a full replace.
 - **Destructive actions confirm via `ConfirmDialog`** (never inline or immediate); mutations without
   inline error display report failures with `toastError` from `store/toasts.ts`. Row dropdowns use
   `components/ui/ActionMenu.tsx` (portal + flip), not hand-rolled absolute menus.
@@ -300,15 +317,12 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   After any occurrence write invalidate `['events']` (a time split write also `['insights']`). After any activity write invalidate `['activities']`
   **and `['events']`** (occurrences embed their activity: its title feeds `effectiveTitle` and its category
   feeds every row and calendar block's colour). After any goal write also invalidate `['goals']`.
+  Never call `invalidateQueries` for these directly: use the helpers in `lib/invalidate.ts`
+  (`invalidateOccurrences`, `invalidateActivities`, `invalidateWorkTypes`, `invalidateGoals`, `invalidateAll`).
 - **Design:** see `design.md`. Use semantic color tokens, not hardcoded values.
 
 ## Gotchas
 
-- ⚠️ **`border-*` colour utilities do nothing.** `index.css` sets `border-color: var(--border)` on
-  `*, *::before, *::after` **outside any layer**, and unlayered CSS outranks all of `@layer utilities`,
-  so `border-primary`, `border-transparent`, `border-border/40` etc. are silently dead app-wide. Set
-  border colours inline (`style={{ borderTopColor: ... }}`) until that rule moves into `@layer base` —
-  moving it activates ~68 dormant utilities at once, which is a deliberate visual change, not a no-op.
 - **SQLite migrations only.** No Postgres migration set exists.
 - ⚠️ **Guids are UPPER-case TEXT in SQLite.** Microsoft.Data.Sqlite binds a `Guid` parameter as
   upper-case text and SQLite compares text case-sensitively, so raw SQL in a migration that mints an

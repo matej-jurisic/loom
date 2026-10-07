@@ -10,6 +10,7 @@ import { CategoryModal } from '@/components/categories/CategoryModal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import type { Category } from '@/lib/types'
+import { invalidateOccurrences } from '@/lib/invalidate'
 
 function NavItem({
   to,
@@ -159,7 +160,7 @@ export function Sidebar() {
     onSuccess: () => {
       setDeletingCategory(null)
       qc.invalidateQueries({ queryKey: ['categories'] })
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
     },
     onError: (err) => toastError(err, 'Could not delete the category.'),
   })
@@ -171,7 +172,7 @@ export function Sidebar() {
       await categoriesApi.create({ name, color, icon })
     }
     qc.invalidateQueries({ queryKey: ['categories'] })
-    qc.invalidateQueries({ queryKey: ['events'] }) // refreshes occurrences cache (same key)
+    invalidateOccurrences(qc)
   }
 
   function openAdd() {

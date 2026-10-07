@@ -51,11 +51,11 @@ public static class OccurrenceEndpoints
                 : result.Error!.ToProblem();
         });
 
-        group.MapPut("/{id:guid}", async (Guid id, UpdateOccurrenceRequest req, ClaimsPrincipal principal, OccurrenceService svc) =>
+        group.MapPatch("/{id:guid}", async (Guid id, PatchOccurrenceRequest req, ClaimsPrincipal principal, OccurrenceService svc) =>
         {
             var userId = principal.GetUserId();
             if (userId is null) return Results.Unauthorized();
-            var result = await svc.UpdateAsync(id, userId.Value, req);
+            var result = await svc.PatchAsync(id, userId.Value, req);
             return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToProblem();
         });
 

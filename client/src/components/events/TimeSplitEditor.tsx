@@ -6,6 +6,7 @@ import { activityWorkTypesApi, occurrencesApi } from '@/lib/api'
 import { durationMinutes, formatMinutes, parseMinutes, resolveSplit } from '@/lib/timeSplit'
 import { toastError } from '@/store/toasts'
 import type { Occurrence } from '@/lib/types'
+import { invalidateOccurrences, invalidateWorkTypes } from '@/lib/invalidate'
 
 interface Row {
   workTypeId: string
@@ -69,8 +70,7 @@ export function TimeSplitEditor({ occurrence }: { occurrence: Occurrence }) {
       qc.setQueriesData<Occurrence[]>({ queryKey: ['events'] }, (old) =>
         Array.isArray(old) ? old.map((o) => (o.id === updated.id ? updated : o)) : old,
       )
-      qc.invalidateQueries({ queryKey: ['events'] })
-      qc.invalidateQueries({ queryKey: ['insights'] })
+      invalidateOccurrences(qc, { split: true })
     },
     onError: (err) => {
       setRows(savedRef.current)
@@ -86,7 +86,7 @@ export function TimeSplitEditor({ occurrence }: { occurrence: Occurrence }) {
       commit([...rows, { workTypeId: type.id, title: type.title, minutes: null }])
       setNewTitle('')
       setAdding(false)
-      qc.invalidateQueries({ queryKey: ['activities'] })
+      invalidateWorkTypes(qc)
     },
     onError: (err) => toastError(err, 'Could not add the work type.'),
   })

@@ -22,6 +22,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\fixtures\time-split-cases.json" Link="fixtures\time-split-cases.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\Loom.Core\Loom.Core.csproj" />
     <ProjectReference Include="..\..\src\Loom.Api\Loom.Api.csproj" />
   </ItemGroup>

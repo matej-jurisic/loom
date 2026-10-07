@@ -5,6 +5,7 @@ import { Modal } from '@/components/ui/Modal'
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Occurrence } from '@/lib/types'
+import { invalidateOccurrences } from '@/lib/invalidate'
 
 // A drop that landed on a different date than the occurrence was on. The page hands
 // the resolved target over instead of committing, because the two readings of that
@@ -50,7 +51,7 @@ export function MoveOrSkipModal({ open, onClose, move }: MoveOrSkipModalProps) {
         isPlanned: occurrence.isPlanned,
         deadlineOccurrenceId: occurrence.deadline?.status === 'pending' ? occurrence.deadline.id : null,
       })
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
       onClose()
     } catch (err) {
       toastError(err, 'Could not skip and reschedule the occurrence.')

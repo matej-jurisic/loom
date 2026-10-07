@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button'
 import { occurrencesApi, occurrenceSubtasksApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Occurrence, OccurrenceSubtask } from '@/lib/types'
+import { invalidateOccurrences } from '@/lib/invalidate'
 
 interface Props {
   open: boolean
@@ -29,7 +30,7 @@ export function OccurrenceSubtasksModal({ open, onClose, occurrence }: Props) {
     },
     onSuccess: (updated) => {
       setSubtasks(updated.subtasks)
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
     },
     onError: (err, subtaskId) => {
       setSubtasks((prev) => prev.map((s) => s.id === subtaskId ? { ...s, isDone: !s.isDone } : s))
@@ -42,7 +43,7 @@ export function OccurrenceSubtasksModal({ open, onClose, occurrence }: Props) {
     onSuccess: (updated) => {
       setSubtasks(updated.subtasks)
       setNewTitle('')
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
     },
     onError: (err) => toastError(err, 'Could not add subtask.'),
   })
@@ -54,7 +55,7 @@ export function OccurrenceSubtasksModal({ open, onClose, occurrence }: Props) {
     },
     onSuccess: (updated) => {
       setSubtasks(updated.subtasks)
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
     },
     onError: (err) => {
       setSubtasks(occurrence.subtasks)

@@ -4,6 +4,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { occurrencesApi } from '@/lib/api'
 import type { Occurrence } from '@/lib/types'
+import { invalidateOccurrences } from '@/lib/invalidate'
 
 function formatDateInput(d: Date): string {
   const z = (n: number) => String(n).padStart(2, '0')
@@ -56,7 +57,7 @@ export function SkipRescheduleModal({ open, onClose, occurrence, onDone }: SkipR
       }
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
       onDone()
     },
   })

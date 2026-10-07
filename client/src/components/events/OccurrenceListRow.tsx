@@ -11,6 +11,7 @@ import { CategoryIcon } from '@/components/categories/categoryIcons'
 import { OccurrenceSubtasksModal } from '@/components/events/OccurrenceSubtasksModal'
 import { SkipRescheduleModal } from '@/components/events/SkipRescheduleModal'
 import { ActivityHistoryModal } from '@/components/activities/ActivityHistoryModal'
+import { invalidateOccurrences } from '@/lib/invalidate'
 
 const GOAL_TONE: Record<string, 'focus' | 'active' | 'bench' | 'neutral'> = {
   focus: 'focus',
@@ -73,7 +74,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
       toastError(err, 'Could not update the status.')
     },
     onSettled: () => {
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
     },
   })
 
@@ -84,7 +85,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
       qc.setQueriesData<Occurrence[]>({ queryKey: ['events'] }, (old) =>
         old ? old.filter((o) => o.id !== occurrence.id) : old,
       )
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
     },
     onError: (err) => toastError(err, 'Could not delete the occurrence.'),
   })

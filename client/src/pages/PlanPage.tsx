@@ -9,6 +9,7 @@ import { OccurrenceBar } from '@/components/goals/OccurrenceBar'
 import { OccurrenceHeatmap } from '@/components/events/OccurrenceHeatmap'
 import { EventModal } from '@/components/events/EventModal'
 import { OccurrenceListRow } from '@/components/events/OccurrenceListRow'
+import { invalidateOccurrences } from '@/lib/invalidate'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -201,7 +202,7 @@ function TimelineRow({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export function PlanPreviewPage() {
+export function PlanPage() {
   const qc = useQueryClient()
   const [current, setCurrent] = useState<Date>(() => sod(new Date()))
   const [modalOpen, setModalOpen] = useState(false)
@@ -317,22 +318,15 @@ export function PlanPreviewPage() {
       const tomorrow = addDays(effectiveToday, 1)
       await Promise.all(
         overdueEvents.map((o) =>
-          // PUT /api/occurrences/{id} is a full replace, so every field that is not
-          // moving has to be resent - omitting isPlanned here would quietly demote a
-          // planned occurrence to a scheduled one on its way to tomorrow. Subtasks are
-          // the exception: the service leaves them alone when the key is absent.
-          occurrencesApi.update(o.id, {
-            title: o.title,
+          occurrencesApi.patch(o.id, {
             startAt: o.startAt ? shiftToDate(o.startAt, tomorrow) : null,
             endAt: o.endAt ? shiftToDate(o.endAt, tomorrow) : null,
-            isAllDay: o.isAllDay,
-            isPlanned: o.isPlanned,
           }),
         ),
       )
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
     },
     onError: (err) => toastError(err, 'Could not move overdue items.'),
   })

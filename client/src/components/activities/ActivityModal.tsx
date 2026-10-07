@@ -6,6 +6,7 @@ import type { Activity, Goal, Category } from '@/lib/types'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { WorkTypesSection } from '@/components/activities/WorkTypesSection'
+import { invalidateActivities } from '@/lib/invalidate'
 
 interface ActivityModalProps {
   open: boolean
@@ -36,10 +37,7 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
       return isEdit ? activitiesApi.update(activity!.id, body) : activitiesApi.create(body)
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['activities'] })
-      // Occurrences embed their activity: the title feeds `effectiveTitle` and the category feeds
-      // every list row's and calendar block's colour, so both go stale on an activity write.
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateActivities(qc)
       onClose()
     },
   })

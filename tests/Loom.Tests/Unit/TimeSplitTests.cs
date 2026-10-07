@@ -36,8 +36,8 @@ public class TimeSplitTests : IDisposable
         _ctx.OccurrenceService.SetTimeSplitAsync(occurrenceId, userId,
             new SetTimeSplitRequest(rows.Select(r => new TimeSplitInput(r.WorkTypeId, r.Minutes)).ToList()));
 
-    private static UpdateOccurrenceRequest Resend(OccurrenceDto o, DateTimeOffset? endAt, Guid? activityId = null) =>
-        new(o.Title, o.StartAt, endAt, o.IsAllDay, o.IsPlanned, null, activityId);
+    private static PatchOccurrenceRequest Patch(DateTimeOffset? endAt, Guid? activityId = null) =>
+        new(ActivityId: new(activityId is not null, activityId), EndAt: new(true, endAt));
 
     [Fact]
     public void Resolve_shares_the_remainder_between_auto_rows()
@@ -177,7 +177,7 @@ public class TimeSplitTests : IDisposable
         var session = await CreateSessionAsync(userId, activityId);
         await SplitAsync(userId, session.Id, (coding, 90), (meeting, null));
 
-        var result = await _ctx.OccurrenceService.UpdateAsync(session.Id, userId, Resend(session, Start.AddMinutes(120)));
+        var result = await _ctx.OccurrenceService.PatchAsync(session.Id, userId, Patch(Start.AddMinutes(120)));
 
         Assert.True(result.IsSuccess);
         Assert.Equal([90, 30], result.Value!.TimeSplit.Select(t => t.Minutes));
@@ -192,7 +192,7 @@ public class TimeSplitTests : IDisposable
         var session = await CreateSessionAsync(userId, activityId);
         await SplitAsync(userId, session.Id, (coding, 90));
 
-        var result = await _ctx.OccurrenceService.UpdateAsync(session.Id, userId, Resend(session, Start.AddMinutes(60)));
+        var result = await _ctx.OccurrenceService.PatchAsync(session.Id, userId, Patch(Start.AddMinutes(60)));
 
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorType.Validation, result.Error!.Type);
@@ -207,7 +207,7 @@ public class TimeSplitTests : IDisposable
         var session = await CreateSessionAsync(userId, activityId);
         await SplitAsync(userId, session.Id, (coding, 90));
 
-        var result = await _ctx.OccurrenceService.UpdateAsync(session.Id, userId, Resend(session, null));
+        var result = await _ctx.OccurrenceService.PatchAsync(session.Id, userId, Patch(null));
 
         Assert.True(result.IsSuccess);
         Assert.Equal(90, Assert.Single(result.Value!.TimeSplit).Minutes);
@@ -223,7 +223,7 @@ public class TimeSplitTests : IDisposable
         var session = await CreateSessionAsync(userId, activityId);
         await SplitAsync(userId, session.Id, (coding, 90));
 
-        var result = await _ctx.OccurrenceService.UpdateAsync(session.Id, userId, Resend(session, session.EndAt, otherId));
+        var result = await _ctx.OccurrenceService.PatchAsync(session.Id, userId, Patch(session.EndAt, otherId));
 
         Assert.True(result.IsSuccess);
         Assert.Empty(result.Value!.TimeSplit);

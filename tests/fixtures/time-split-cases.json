@@ -1,0 +1,20 @@
+{
+  "resolve": [
+    { "name": "auto rows share what the pinned row leaves", "duration": 180, "minutes": [90, null, null], "expected": [90, 45, 45] },
+    { "name": "leftover minutes go to the first auto rows", "duration": 100, "minutes": [null, null, null], "expected": [34, 33, 33] },
+    { "name": "no duration gives auto rows nothing", "duration": 0, "minutes": [30, null], "expected": [30, 0] },
+    { "name": "all pinned", "duration": 60, "minutes": [30, 30], "expected": [30, 30] },
+    { "name": "pinned over the duration leaves auto rows at zero", "duration": 60, "minutes": [45, 45, null], "expected": [45, 45, 0] },
+    { "name": "no rows", "duration": 60, "minutes": [], "expected": [] },
+    { "name": "single auto row takes the whole duration", "duration": 90, "minutes": [null], "expected": [90] },
+    { "name": "pinned row between auto rows", "duration": 10, "minutes": [null, 5, null, null], "expected": [2, 5, 2, 1] }
+  ],
+  "duration": [
+    { "name": "missing start", "startAt": null, "endAt": "2026-07-07T15:30:00+00:00", "expected": 0 },
+    { "name": "missing end", "startAt": "2026-07-07T14:00:00+00:00", "endAt": null, "expected": 0 },
+    { "name": "whole span", "startAt": "2026-07-07T14:00:00+00:00", "endAt": "2026-07-07T15:30:00+00:00", "expected": 90 },
+    { "name": "truncates partial minutes", "startAt": "2026-07-07T14:00:00+00:00", "endAt": "2026-07-07T14:00:59+00:00", "expected": 0 },
+    { "name": "truncates seconds after whole minutes", "startAt": "2026-07-07T14:00:00+00:00", "endAt": "2026-07-07T15:30:45+00:00", "expected": 90 },
+    { "name": "end before start clamps to zero", "startAt": "2026-07-07T15:30:00+00:00", "endAt": "2026-07-07T14:00:00+00:00", "expected": 0 }
+  ]
+}

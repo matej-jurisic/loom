@@ -132,10 +132,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         return await WithLinksAsync(dtos, userId);
     }
 
-    public async Task<Result<OccurrenceDto>> UpdateAsync(Guid id, Guid userId, UpdateOccurrenceRequest req)
+    public async Task<Result<OccurrenceDto>> PatchAsync(Guid id, Guid userId, PatchOccurrenceRequest req)
     {
-        var err = ValidateOptionalTitle(req.Title)
-            ?? Validators.ValidateDateRange(req.StartAt, req.EndAt)
+        var err = (req.Title.IsSet ? ValidateOptionalTitle(req.Title.Value) : null)
             ?? ValidateSubtaskInputs(req.Subtasks);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
@@ -143,11 +142,16 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             .FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId);
         if (o is null) return Result<OccurrenceDto>.Fail(new Error(ErrorType.NotFound, "Occurrence not found."));
 
+        var startAt = req.StartAt.IsSet ? req.StartAt.Value : o.StartAt;
+        var endAt = req.EndAt.IsSet ? req.EndAt.Value : o.EndAt;
+        var rangeErr = Validators.ValidateDateRange(startAt, endAt);
+        if (rangeErr is not null) return Result<OccurrenceDto>.Fail(rangeErr);
+
         // Re-pointing at a different activity. Both ends must be activity-kind: an event's activity
         // is a backing row this occurrence owns outright (DeleteAsync removes it, UpdateEventAsync
         // edits it in place), so moving either end of that pair would orphan a row on one side or
         // give a backing activity two occurrences on the other.
-        if (req.ActivityId is { } targetId && targetId != o.ActivityId)
+        if (req.ActivityId.Value is { } targetId && targetId != o.ActivityId)
         {
             if (o.Activity.Kind == ActivityKind.@event)
                 return Result<OccurrenceDto>.Fail(new Error(ErrorType.Validation,
@@ -167,16 +171,17 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             o.TimeSplits.Clear();
         }
 
-        o.Title = string.IsNullOrWhiteSpace(req.Title) ? null : req.Title.Trim();
-        o.StartAt = req.StartAt;
-        o.EndAt = req.EndAt;
-        o.IsAllDay = req.IsAllDay;
-        o.IsPlanned = req.IsPlanned;
+        if (req.Title.IsSet) o.Title = string.IsNullOrWhiteSpace(req.Title.Value) ? null : req.Title.Value.Trim();
+        o.StartAt = startAt;
+        o.EndAt = endAt;
+        if (req.IsAllDay.IsSet) o.IsAllDay = req.IsAllDay.Value;
+        if (req.IsPlanned.IsSet) o.IsPlanned = req.IsPlanned.Value;
 
         var splitErr = ValidateTimeSplitFits(o);
         if (splitErr is not null) return Result<OccurrenceDto>.Fail(splitErr);
 
-        var linkErr = await ApplyDeadlineAsync(o, userId, req.DeadlineOccurrenceId, req.ClearDeadline);
+        var linkErr = await ApplyDeadlineAsync(
+            o, userId, req.DeadlineOccurrenceId.Value, clear: req.DeadlineOccurrenceId is { IsSet: true, Value: null });
         if (linkErr is not null) return Result<OccurrenceDto>.Fail(linkErr);
 
         var subtaskErr = ApplySubtasks(o, req.Subtasks);

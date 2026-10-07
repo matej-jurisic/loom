@@ -6,6 +6,7 @@ import type { Activity, Category, Goal } from '@/lib/types'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
+import { invalidateActivities } from '@/lib/invalidate'
 
 /** Sentinel select values: empty = leave the field alone, CLEAR = set it to null. */
 const KEEP = ''
@@ -49,8 +50,7 @@ export function BulkAssignModal({
         ),
       ),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['activities'] })
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateActivities(qc)
       onApplied()
       onClose()
     },

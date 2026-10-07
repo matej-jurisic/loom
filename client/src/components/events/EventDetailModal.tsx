@@ -13,6 +13,7 @@ import { ActivityHistoryModal } from '@/components/activities/ActivityHistoryMod
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Activity, Occurrence, OccurrenceSubtask, EventStatus } from '@/lib/types'
+import { invalidateOccurrences } from '@/lib/invalidate'
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
@@ -127,7 +128,7 @@ export function EventDetailModal({ open, onClose, event: occurrence, onEdit, onS
     },
     onSuccess: (updated) => {
       setLocalSubtasks(updated.subtasks)
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
     },
     onError: (err, subtaskId) => {
       setLocalSubtasks((prev) => prev.map((s) => s.id === subtaskId ? { ...s, isDone: !s.isDone } : s))
@@ -138,7 +139,7 @@ export function EventDetailModal({ open, onClose, event: occurrence, onEdit, onS
 const statusMutation = useMutation({
     mutationFn: (status: EventStatus) => occurrencesApi.setStatus(occurrence!.id, status),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
       onClose()
     },
     onError: (err) => toastError(err, 'Could not update the status.'),
@@ -148,19 +149,19 @@ const statusMutation = useMutation({
     mutationFn: () => {
       const d = new Date(occurrence!.startAt!)
       d.setHours(0, 0, 0, 0)
-      return occurrencesApi.update(occurrence!.id, { title: occurrence!.title, startAt: d.toISOString(), endAt: null, isAllDay: true, isPlanned: true })
+      return occurrencesApi.patch(occurrence!.id, { startAt: d.toISOString(), endAt: null, isAllDay: true, isPlanned: true })
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
       onClose()
     },
     onError: (err) => toastError(err, 'Could not update the occurrence.'),
   })
 
   const floatMutation = useMutation({
-    mutationFn: () => occurrencesApi.update(occurrence!.id, { title: occurrence!.title, startAt: null, endAt: null, isAllDay: false, isPlanned: false }),
+    mutationFn: () => occurrencesApi.patch(occurrence!.id, { startAt: null, endAt: null, isAllDay: false, isPlanned: false }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
       onClose()
     },
     onError: (err) => toastError(err, 'Could not update the occurrence.'),
@@ -173,7 +174,7 @@ const statusMutation = useMutation({
       qc.setQueriesData<Occurrence[]>({ queryKey: ['events'] }, (old) =>
         old ? old.filter((o) => o.id !== occurrence!.id) : old,
       )
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
       onClose()
     },
     onError: (err) => toastError(err, 'Could not delete the occurrence.'),

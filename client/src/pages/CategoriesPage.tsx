@@ -13,6 +13,7 @@ import { CategoryModal } from '@/components/categories/CategoryModal'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { PageHeader } from '@/components/layout/PageHeader'
+import { invalidateOccurrences } from '@/lib/invalidate'
 
 // --- date helpers ---
 
@@ -116,7 +117,7 @@ export function CategoriesPage() {
     onSuccess: (_, id) => {
       setDeletingCategory(null)
       qc.invalidateQueries({ queryKey: ['categories'] })
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
       if (categoryId === id) navigate('/categories', { replace: true })
     },
     onError: (err) => toastError(err, 'Could not delete the category.'),
@@ -129,7 +130,7 @@ export function CategoriesPage() {
       await categoriesApi.create({ name, color, icon })
     }
     qc.invalidateQueries({ queryKey: ['categories'] })
-    qc.invalidateQueries({ queryKey: ['events'] })
+    invalidateOccurrences(qc)
   }
 
   function openAddCat() {

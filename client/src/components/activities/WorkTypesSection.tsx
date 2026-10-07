@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { activityWorkTypesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Activity, ActivityWorkType } from '@/lib/types'
+import { invalidateWorkTypes } from '@/lib/invalidate'
 
 export function WorkTypesSection({ activity, inModal = false }: { activity: Activity; inModal?: boolean }) {
   const qc = useQueryClient()
@@ -15,9 +16,7 @@ export function WorkTypesSection({ activity, inModal = false }: { activity: Acti
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null)
 
   function invalidate() {
-    qc.invalidateQueries({ queryKey: ['activities'] })
-    qc.invalidateQueries({ queryKey: ['events'] })
-    qc.invalidateQueries({ queryKey: ['insights'] })
+    invalidateWorkTypes(qc)
   }
 
   const addMutation = useMutation({

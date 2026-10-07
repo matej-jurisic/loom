@@ -188,21 +188,15 @@ public sealed record CreateOccurrenceRequest(
     int? WindowDurationMinutes,
     Guid? DeadlineOccurrenceId = null);
 
-/// <param name="ActivityId">
-/// Re-points the occurrence at a different activity. Null leaves it where it is, so a caller that
-/// does not care about the link can omit the field entirely. Only valid between activity-kind
-/// activities: an event's activity is a backing row owned 1:1 by the occurrence, not a choice.
-/// </param>
-public sealed record UpdateOccurrenceRequest(
-    string? Title,
-    DateTimeOffset? StartAt,
-    DateTimeOffset? EndAt,
-    bool IsAllDay,
-    bool IsPlanned,
-    List<OccurrenceSubtaskInput>? Subtasks = null,
-    Guid? ActivityId = null,
-    Guid? DeadlineOccurrenceId = null,
-    bool ClearDeadline = false);
+public sealed record PatchOccurrenceRequest(
+    Optional<Guid?> ActivityId = default,
+    Optional<string?> Title = default,
+    Optional<DateTimeOffset?> StartAt = default,
+    Optional<DateTimeOffset?> EndAt = default,
+    Optional<bool> IsAllDay = default,
+    Optional<bool> IsPlanned = default,
+    Optional<Guid?> DeadlineOccurrenceId = default,
+    List<OccurrenceSubtaskInput>? Subtasks = null);
 
 public sealed record SetOccurrenceStatusRequest(EventStatus Status);
 

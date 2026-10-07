@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
 import { goalsApi, ApiError } from '@/lib/api'
 import type { Goal } from '@/lib/types'
+import { invalidateGoals } from '@/lib/invalidate'
 
 interface FormState {
   title: string
@@ -59,8 +60,7 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
       return isEdit ? goalsApi.update(goal!.id, payload) : goalsApi.create(payload)
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['goals'] })
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateGoals(qc)
       onClose()
     },
     onError: (err) => {

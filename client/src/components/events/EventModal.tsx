@@ -9,6 +9,7 @@ import { DateTimePicker } from '@/components/ui/DateTimePicker'
 import { occurrencesApi, activitiesApi, categoriesApi, goalsApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Activity, ActivityKind, Occurrence } from '@/lib/types'
+import { invalidateOccurrences } from '@/lib/invalidate'
 
 // Draft subtask row: id present = existing subtask, absent = added in this edit session.
 interface DraftSubtask {
@@ -246,14 +247,14 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
         activityId: form.activityId,
         title: form.title.trim() || null,
         ...schedulePayload,
-        ...linkPayload,
+        ...(scheduleOnly ? {} : { deadlineOccurrenceId: form.deadlineId || null }),
       }
       return isEdit
-        ? occurrencesApi.update(occurrence!.id, occurrencePayload)
+        ? occurrencesApi.patch(occurrence!.id, occurrencePayload)
         : occurrencesApi.create(occurrencePayload)
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
       onClose()
     },
   })
@@ -262,7 +263,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     mutationFn: () => occurrencesApi.delete(occurrence!.id),
     onSuccess: () => {
       setConfirmDelete(false)
-      qc.invalidateQueries({ queryKey: ['events'] })
+      invalidateOccurrences(qc)
       onClose()
     },
     onError: (err) => toastError(err, 'Could not delete the occurrence.'),

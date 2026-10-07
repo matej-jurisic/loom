@@ -176,8 +176,8 @@ behaves exactly as before and a partly linked history is still correct.
 - The target must be the user's own, event-kind, and pending when the link is set. Self-links and
   loops (A to B to A) are rejected. A link set earlier survives its target later being completed.
 - Deleting the target clears the link on whatever pointed at it; nothing cascades either way.
-- On update, a null `DeadlineOccurrenceId` leaves the link alone (callers that resend the rest of the
-  body don't need to know about it); `ClearDeadline: true` removes it. Create takes the id directly.
+- On a partial update, an absent `DeadlineOccurrenceId` leaves the link alone and an explicit null
+  removes it. Create takes the id directly.
 - The DTO carries `deadline` (title, dates, status of the target) on the session, and on the target
   `linkedDoneCount` / `linkedDoneMinutes`: completed linked sessions and their summed time (elapsed
   between start and end when both are set, else nothing). Skipped and pending sessions

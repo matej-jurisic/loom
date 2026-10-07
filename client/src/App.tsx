@@ -7,8 +7,8 @@ import { ConnectionLost } from '@/components/ConnectionLost'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
-import { PlanPreviewPage } from '@/pages/PlanPreviewPage'
-import { GoalsPreviewPage } from '@/pages/GoalsPreviewPage'
+import { PlanPage } from '@/pages/PlanPage'
+import { GoalsPage } from '@/pages/GoalsPage'
 import { CategoriesPage } from '@/pages/CategoriesPage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -56,11 +56,11 @@ function AppRoutes() {
       {/* Inside the shell so a crashing page leaves the navigation usable; resets on navigation. */}
       <ErrorBoundary resetKey={location.pathname}>
         <Routes>
-          <Route path="/plan"     element={<PlanPreviewPage />} />
+          <Route path="/plan"     element={<PlanPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/inbox"    element={<Navigate to="/categories" replace />} />
           <Route path="/calendar" element={<CalendarPage />} />
-          <Route path="/goals"         element={<GoalsPreviewPage />} />
+          <Route path="/goals"         element={<GoalsPage />} />
           <Route path="/activities"     element={<ActivitiesPage />} />
           <Route path="/insights"   element={<InsightsPage />} />
           <Route path="/settings"   element={<SettingsPage />} />

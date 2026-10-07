@@ -1,6 +1,7 @@
 export function durationMinutes(startAt: string | null, endAt: string | null): number {
   if (!startAt || !endAt) return 0
-  return Math.max(0, Math.floor((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60000))
+  const ms = new Date(endAt).getTime() - new Date(startAt).getTime()
+  return Number.isFinite(ms) ? Math.max(0, Math.floor(ms / 60000)) : 0
 }
 
 export function resolveSplit(duration: number, minutes: (number | null)[]): number[] {
