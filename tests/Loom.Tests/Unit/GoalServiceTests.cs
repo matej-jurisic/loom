@@ -20,7 +20,7 @@ public class GoalServiceTests : IDisposable
     {
         var user = new User { Username = "u" + Guid.NewGuid().ToString("N")[..8], PasswordHash = "x", Timezone = timezone };
         var goal = new Goal { UserId = user.Id, Title = "Practice" };
-        var activity = new Activity { UserId = user.Id, Title = "Scales", GoalId = goal.Id };
+        var activity = new Activity { UserId = user.Id, Title = "Scales", Goals = [goal] };
         _ctx.Db.Users.Add(user);
         _ctx.Db.Goals.Add(goal);
         _ctx.Db.Activities.Add(activity);
@@ -148,7 +148,7 @@ public class GoalServiceTests : IDisposable
     {
         var (userId, _, activity) = await SetupGoalAsync();
         var milestoneGoal = new Goal { UserId = userId, Title = "Ship it" };
-        var milestoneActivity = new Activity { UserId = userId, Title = "Draft", GoalId = milestoneGoal.Id };
+        var milestoneActivity = new Activity { UserId = userId, Title = "Draft", Goals = [milestoneGoal] };
         _ctx.Db.Goals.Add(milestoneGoal);
         _ctx.Db.Activities.Add(milestoneActivity);
         await _ctx.Db.SaveChangesAsync();
@@ -183,7 +183,7 @@ public class GoalServiceTests : IDisposable
     public async Task GetAggregateHeatmapAsync_ignores_occurrences_on_activities_with_no_goal()
     {
         var user = new User { Username = "u" + Guid.NewGuid().ToString("N")[..8], PasswordHash = "x", Timezone = "UTC" };
-        var activity = new Activity { UserId = user.Id, Title = "Chores" }; // no GoalId
+        var activity = new Activity { UserId = user.Id, Title = "Chores" };
         _ctx.Db.Users.Add(user);
         _ctx.Db.Activities.Add(activity);
         await _ctx.Db.SaveChangesAsync();
@@ -236,9 +236,8 @@ public class GoalServiceTests : IDisposable
     {
         var (userId, _, activity) = await SetupGoalAsync();
         var quiet = new Goal { UserId = userId, Title = "Quiet" };
-        var busyActivity = new Activity { UserId = userId, Title = "Busy", GoalId = null };
         var busy = new Goal { UserId = userId, Title = "Busy" };
-        busyActivity.GoalId = busy.Id;
+        var busyActivity = new Activity { UserId = userId, Title = "Busy", Goals = [busy] };
         _ctx.Db.Goals.AddRange(quiet, busy);
         _ctx.Db.Activities.Add(busyActivity);
         await _ctx.Db.SaveChangesAsync();

@@ -10,6 +10,8 @@ import { occurrencesApi, activitiesApi, categoriesApi, goalsApi } from '@/lib/ap
 import { toastError } from '@/store/toasts'
 import type { Activity, ActivityKind, Occurrence } from '@/lib/types'
 import { invalidateOccurrences } from '@/lib/invalidate'
+import { GoalPicker } from '@/components/goals/GoalPicker'
+import { pickableGoals } from '@/lib/goals'
 
 // Draft subtask row: id present = existing subtask, absent = added in this edit session.
 interface DraftSubtask {
@@ -21,7 +23,7 @@ interface FormState {
   activityId: string
   title: string
   categoryId: string
-  goalId: string
+  goalIds: string[]
   startAt: string
   endAt: string
   deadlineId: string
@@ -118,7 +120,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     activityId: source?.activityId ?? defaultActivity?.id ?? '',
     title: isEventKind ? (source?.activity.title ?? '') : (occurrence?.title ?? duplicateFrom?.title ?? ''),
     categoryId: source?.activity.categoryId ?? '',
-    goalId: source?.activity.goalId ?? '',
+    goalIds: source?.activity.goals.map((g) => g.id) ?? [],
     startAt: occurrence ? (toInputValue(occurrence.startAt) || (scheduleOnly ? todayLocal() : '')) : (duplicateFrom ? toInputValue(duplicateFrom.startAt) : (defaultStartAt ?? todayLocal())),
     endAt: source?.isAllDay && source?.endAt
       ? toAllDayEndInput(source.endAt)
@@ -146,7 +148,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     if (isEdit || scheduleOnly) return true
     if (!source) return false
     if (source.title) return true
-    if (source.activity?.categoryId || source.activity?.goalId) return true
+    if (source.activity?.categoryId || source.activity?.goals.length) return true
     if (source.deadlineOccurrenceId) return true
     return false
   })
@@ -234,7 +236,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
         const eventPayload = {
           title: form.title.trim(),
           categoryId: form.categoryId || null,
-          goalId: form.goalId || null,
+          goalIds: form.goalIds,
           ...schedulePayload,
           ...linkPayload,
         }
@@ -334,9 +336,11 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   const activityOptions = useMemo(
     () => [...activities]
       .sort((a, b) => (b.recentOccurrenceCount - a.recentOccurrenceCount) || a.title.localeCompare(b.title))
-      .map((a) => ({ value: a.id, label: a.title, sublabel: a.goal?.title })),
+      .map((a) => ({ value: a.id, label: a.title, sublabel: a.goals.map((g) => g.title).join(', ') || undefined })),
     [activities],
   )
+
+  const goalOptions = pickableGoals(goals, source?.activity.goals.map((g) => g.id) ?? [])
 
   const deadlineOptions = useMemo(() => {
     const dateLabel = (iso: string | null) =>
@@ -516,10 +520,12 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
             </div>
           )}
 
-          {kind === 'activity' && selectedActivity && (selectedActivity.goal || selectedActivity.category) && (
+          {kind === 'activity' && selectedActivity && (selectedActivity.goals.length > 0 || selectedActivity.category) && (
             <div className="flex flex-wrap gap-2 px-1">
-              {selectedActivity.goal && (
-                <span className="text-xs text-muted-foreground">Goal: {selectedActivity.goal.title}</span>
+              {selectedActivity.goals.length > 0 && (
+                <span className="text-xs text-muted-foreground">
+                  {selectedActivity.goals.length === 1 ? 'Goal' : 'Goals'}: {selectedActivity.goals.map((g) => g.title).join(', ')}
+                </span>
               )}
               {selectedActivity.category && (
                 <span className="text-xs text-muted-foreground">Category: {selectedActivity.category.name}</span>
@@ -708,9 +714,9 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
             </div>
           )}
 
-          {/* Event: category + goal */}
+          {/* Event: category + goals */}
           {kind === 'event' && (
-            <div className="grid grid-cols-2 gap-3">
+            <>
               <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium text-foreground">Category</label>
                 <Select
@@ -722,20 +728,19 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
                   ]}
                 />
               </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-foreground">
-                  Goal <span className="font-normal text-muted-foreground">(optional)</span>
-                </label>
-                <Select
-                  value={form.goalId}
-                  onChange={(v) => setForm((f) => ({ ...f, goalId: v }))}
-                  options={[
-                    { value: '', label: 'No goal' },
-                    ...goals.map((g) => ({ value: g.id, label: g.title })),
-                  ]}
-                />
-              </div>
-            </div>
+              {goalOptions.length > 0 && (
+                <div className="flex flex-col gap-1.5">
+                  <span className="text-sm font-medium text-foreground">
+                    Goals <span className="font-normal text-muted-foreground">(optional)</span>
+                  </span>
+                  <GoalPicker
+                    goals={goalOptions}
+                    value={form.goalIds}
+                    onChange={(ids) => setForm((f) => ({ ...f, goalIds: ids }))}
+                  />
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

@@ -29,12 +29,12 @@ public class ActivityTests : IDisposable
         _client.UseBearer(token);
         var goalId = await CreateGoalAsync();
 
-        var res = await _client.PostAsJsonAsync("/api/activities", new { title = "Morning run", goalId });
+        var res = await _client.PostAsJsonAsync("/api/activities", new { title = "Morning run", goalIds = new[] { goalId } });
         Assert.Equal(HttpStatusCode.Created, res.StatusCode);
 
         var activity = await res.ReadAsync<ActivityDto>();
         Assert.Equal("Morning run", activity.Title);
-        Assert.Equal(goalId, activity.GoalId);
+        Assert.Equal(goalId, Assert.Single(activity.Goals).Id);
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public class ActivityTests : IDisposable
         var token = await _client.SetupUserAsync();
         _client.UseBearer(token);
 
-        var res = await _client.PostAsJsonAsync("/api/activities", new { title = "Task", goalId = Guid.NewGuid() });
+        var res = await _client.PostAsJsonAsync("/api/activities", new { title = "Task", goalIds = new[] { Guid.NewGuid() } });
         Assert.Equal(HttpStatusCode.NotFound, res.StatusCode);
     }
 
@@ -54,7 +54,7 @@ public class ActivityTests : IDisposable
         _client.UseBearer(token);
         var goalId = await CreateGoalAsync();
 
-        var createRes = await _client.PostAsJsonAsync("/api/activities", new { title = "Old title", goalId });
+        var createRes = await _client.PostAsJsonAsync("/api/activities", new { title = "Old title", goalIds = new[] { goalId } });
         var created = await createRes.ReadAsync<ActivityDto>();
 
         var updateRes = await _client.PutAsJsonAsync($"/api/activities/{created.Id}", new { title = "New title" });
@@ -71,7 +71,7 @@ public class ActivityTests : IDisposable
         _client.UseBearer(token);
         var goalId = await CreateGoalAsync();
 
-        var createRes = await _client.PostAsJsonAsync("/api/activities", new { title = "To delete", goalId });
+        var createRes = await _client.PostAsJsonAsync("/api/activities", new { title = "To delete", goalIds = new[] { goalId } });
         var created = await createRes.ReadAsync<ActivityDto>();
 
         var deleteRes = await _client.DeleteAsync($"/api/activities/{created.Id}");
@@ -86,20 +86,21 @@ public class ActivityTests : IDisposable
         var goal1Id = await CreateGoalAsync("Goal 1");
         var goal2Id = await CreateGoalAsync("Goal 2");
 
-        await _client.PostAsJsonAsync("/api/activities", new { title = "Template A", goalId = goal1Id });
-        await _client.PostAsJsonAsync("/api/activities", new { title = "Template B", goalId = goal1Id });
-        await _client.PostAsJsonAsync("/api/activities", new { title = "Template C", goalId = goal2Id });
+        await _client.PostAsJsonAsync("/api/activities", new { title = "Template A", goalIds = new[] { goal1Id } });
+        await _client.PostAsJsonAsync("/api/activities", new { title = "Template B", goalIds = new[] { goal1Id } });
+        await _client.PostAsJsonAsync("/api/activities", new { title = "Template C", goalIds = new[] { goal2Id } });
 
         var res = await _client.GetAsync($"/api/activities?goalId={goal1Id}");
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
 
         var list = await res.ReadAsync<List<ActivityDto>>();
         Assert.Equal(2, list.Count);
-        Assert.All(list, a => Assert.Equal(goal1Id, a.GoalId));
+        Assert.All(list, a => Assert.Equal(goal1Id, Assert.Single(a.Goals).Id));
     }
 
     public void Dispose() => _factory.Dispose();
 
-    private sealed record ActivityDto(Guid Id, Guid UserId, string Title, Guid? CategoryId, Guid? GoalId, DateTimeOffset CreatedAt);
+    private sealed record GoalRef(Guid Id);
+    private sealed record ActivityDto(Guid Id, Guid UserId, string Title, Guid? CategoryId, List<GoalRef> Goals, DateTimeOffset CreatedAt);
     private sealed record GoalDto(Guid Id, string Title, string Status);
 }

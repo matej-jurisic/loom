@@ -58,14 +58,20 @@ time. Activities are managed at `/activities`.
 | Field | Notes |
 |---|---|
 | Title | Required, max 255 characters |
-| Goal | Optional, one goal |
+| Goals | Optional, any number. An occurrence of the activity counts toward every one of them. |
 | Category | Optional |
 | Kind | `activity` or `event`. Internal, never shown. |
 | Subtasks | Ordered checklist template, copied onto every new occurrence. |
 | Work types | Labels for the kinds of work a session can be split into. Not copied anywhere. |
 
-Deleting an activity cascades to its occurrences. Deleting a goal or category set-nulls the link and
-leaves the activity alive.
+Deleting an activity cascades to its occurrences. Deleting a category set-nulls the link and deleting
+a goal removes only that goal's link; either way the activity stays alive, with its other goals.
+
+The goal link is many-to-many (`ActivityGoals`). Create and update take the full set as `goalIds`
+(absent or empty means none), and responses carry `goals`, ordered by status then title. Per-goal
+figures therefore overlap: an occurrence on an activity with two goals is in both goals' counts,
+heatmaps and history, so they are never presented as parts of a total. Anything summed *across*
+goals counts the occurrence once.
 
 `GET /api/activities` also returns a derived `recentOccurrenceCount` per activity: its occurrences in
 the last 365 days, each counted from its start, falling back to its deadline and then to when it was
@@ -184,7 +190,8 @@ The calendar's FLOAT row shows both, planned first, and either can be dragged in
 it a time. The Daily Plan lists unplanned floating occurrences in its "Floating" group on every day,
 since they have no day of their own. On the Categories page a planned floating occurrence groups
 under "Planned" and an unplanned one under "Floating". Floating occurrences are never overdue. The
-`floating=true` list filter also drops occurrences whose activity is on a benched goal.
+`floating=true` list filter also drops occurrences whose activity has goals and every one of them is
+benched; one goal that is not benched keeps it in.
 
 **All-day planned** is the other holding state: a date with no time, for something that belongs to a
 day without belonging to an hour of it.
@@ -266,8 +273,8 @@ A sustained intention with measurable progress.
 
 The number of simultaneous Focus goals is a user setting and a **hard boundary**: promoting a goal
 past the limit returns 409 with a message naming it. Goals are listed grouped Focus → Active → Bench
-→ Closed, most recently active first within a group (latest completion across its activities; goals with none fall back to creation order, after the active ones). Deleting a goal removes its checkpoints and set-nulls its
-activities.
+→ Closed, most recently active first within a group (latest completion across its activities; goals with none fall back to creation order, after the active ones). Deleting a goal removes its checkpoints and its links to
+activities; the activities stay, with whatever other goals they have.
 
 ### Checkpoints
 
@@ -359,7 +366,7 @@ the goal sections, which are standing context rather than something to clear bef
   percentage when it has checkpoints, and its occurrence bar when it has linked occurrences.
 - **Goal activity** — a heatmap below the focus chips, same shape and shading as a goal's
   own grid, but summed across every occurrence on an activity linked to *any* goal, regardless of
-  that goal's status: "did I work toward something today", not one goal's own record. Only
+  that goal's status, each occurrence counted once however many goals its activity has: "did I work toward something today", not one goal's own record. Only
   completed occurrences count here - a skipped one isn't progress, so it puts no day on this grid
   even though it would on a single goal's own heatmap. Hidden when nothing has ever been logged
   toward a goal.
@@ -433,13 +440,16 @@ Floating → Completed/Skipped, with overdue winning over the day grouping.
 ### Activities
 
 One flat list: title search and a grouping toggle over **Goal / Category / None** (persisted in
-`localStorage`). Sections collapse and carry counts; rows sort by title within a section.
+`localStorage`). Sections collapse and carry counts; rows sort by title within a section. Grouped by
+goal, an activity with several goals is listed under each of them, and its row still shows the other
+goals.
 
 Each row leads with a tile in its **category's colour and icon** - the same colour that draws its
 occurrences everywhere else - then title and a meta line dropping whatever the section header already
 says, then an action menu (history, edit, delete). **Multi-select mode** turns the tiles into
 checkboxes and the row actions into a bottom bar: assign, delete, with per-section select-all. Bulk
-assign sets goal and category across the selection, each field defaulting to "keep current"; it fans
+assign changes goals and category across the selection, each defaulting to "keep current". Goals can
+be added to, removed from, or replaced on every selected activity; it fans
 out over the single-item PUT, resending unchanged fields.
 
 **Activity history** opens read-only from a row's action menu: last done, cadence, usual time, usual

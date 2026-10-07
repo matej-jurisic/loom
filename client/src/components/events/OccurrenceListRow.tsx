@@ -48,7 +48,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
   const hasSubtasks = occurrence.subtasks.length > 0
   const completedCount = occurrence.subtasks.filter((s) => s.isDone).length
   const cat = occurrence.activity.category
-  const goal = occurrence.activity.goal
+  const goals = occurrence.activity.goals
   const deadline = occurrence.deadline
   const linkedLabel = occurrence.linkedDoneCount > 0
     ? `${occurrence.linkedDoneCount} ${occurrence.linkedDoneCount === 1 ? 'session' : 'sessions'}${occurrence.linkedDoneMinutes > 0 ? `, ${formatMinutes(occurrence.linkedDoneMinutes)}` : ''}`
@@ -129,7 +129,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
           <span className={`text-sm ${!isPending ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
             {occurrence.effectiveTitle}
           </span>
-          {goal && <Badge tone={GOAL_TONE[goal.status] ?? 'neutral'}>{goal.title}</Badge>}
+          {goals.map((g) => <Badge key={g.id} tone={GOAL_TONE[g.status] ?? 'neutral'}>{g.title}</Badge>)}
         </div>
         {(timeText || cat || hasSubtasks || deadline || linkedLabel) && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">

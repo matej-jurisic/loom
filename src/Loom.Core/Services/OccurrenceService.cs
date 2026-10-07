@@ -83,8 +83,8 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
 
         if (status.HasValue) query = query.Where(o => o.Status == status.Value);
         if (floatingOnly) query = query.Where(o => o.StartAt == null && o.EndAt == null && o.WindowStart == null && !o.IsAllDay
-            && (o.Activity.GoalId == null || o.Activity.Goal!.Status != GoalStatus.bench));
-        if (goalId.HasValue) query = query.Where(o => o.Activity.GoalId == goalId.Value);
+            && (!o.Activity.Goals.Any() || o.Activity.Goals.Any(g => g.Status != GoalStatus.bench)));
+        if (goalId.HasValue) query = query.Where(o => o.Activity.Goals.Any(g => g.Id == goalId.Value));
         if (activityId.HasValue) query = query.Where(o => o.ActivityId == activityId.Value);
 
         // A ranged query never returns fully-floating (all-null anchor) occurrences: the exact
@@ -266,13 +266,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             a.Category = cat;
         }
 
-        if (req.GoalId.HasValue)
-        {
-            var goal = await db.Goals.FirstOrDefaultAsync(g => g.Id == req.GoalId.Value && g.UserId == userId);
-            if (goal is null) return Result<OccurrenceDto>.Fail(new Error(ErrorType.NotFound, "Goal not found."));
-            a.GoalId = req.GoalId.Value;
-            a.Goal = goal;
-        }
+        var goals = await ActivityService.ResolveGoalsAsync(db, userId, req.GoalIds);
+        if (!goals.IsSuccess) return Result<OccurrenceDto>.Fail(goals.Error!);
+        a.Goals = goals.Value!;
 
         if (req.DeadlineOccurrenceId is { } deadlineId)
         {
@@ -326,18 +322,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             o.Activity.Category = null;
         }
 
-        if (req.GoalId.HasValue)
-        {
-            var goal = await db.Goals.FirstOrDefaultAsync(g => g.Id == req.GoalId.Value && g.UserId == userId);
-            if (goal is null) return Result<OccurrenceDto>.Fail(new Error(ErrorType.NotFound, "Goal not found."));
-            o.Activity.GoalId = req.GoalId.Value;
-            o.Activity.Goal = goal;
-        }
-        else
-        {
-            o.Activity.GoalId = null;
-            o.Activity.Goal = null;
-        }
+        var goals = await ActivityService.ResolveGoalsAsync(db, userId, req.GoalIds);
+        if (!goals.IsSuccess) return Result<OccurrenceDto>.Fail(goals.Error!);
+        ActivityService.SetGoals(o.Activity, goals.Value!);
 
         o.StartAt = req.StartAt;
         o.EndAt = req.EndAt;
@@ -593,7 +580,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     private Task<Activity?> FindActivityAsync(Guid activityId, Guid userId) =>
         db.Activities
             .Include(a => a.Category)
-            .Include(a => a.Goal)
+            .Include(a => a.Goals)
             .Include(a => a.Subtasks)
             .Include(a => a.WorkTypes)
             .FirstOrDefaultAsync(a => a.Id == activityId && a.UserId == userId);
@@ -601,7 +588,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     private IQueryable<Occurrence> WithFullIncludes() =>
         db.Occurrences
             .Include(o => o.Activity).ThenInclude(a => a.Category)
-            .Include(o => o.Activity).ThenInclude(a => a.Goal)
+            .Include(o => o.Activity).ThenInclude(a => a.Goals)
             .Include(o => o.Activity).ThenInclude(a => a.Subtasks)
             .Include(o => o.Activity).ThenInclude(a => a.WorkTypes)
             .Include(o => o.Subtasks)

@@ -34,9 +34,9 @@ export function ActivityHistoryModal({
               {activity.category.name}
             </span>
           )}
-          {activity.goal && (
-            <Badge tone={GOAL_TONE[activity.goal.status] ?? 'neutral'}>{activity.goal.title}</Badge>
-          )}
+          {activity.goals.map((g) => (
+            <Badge key={g.id} tone={GOAL_TONE[g.status] ?? 'neutral'}>{g.title}</Badge>
+          ))}
         </div>
       }
     />

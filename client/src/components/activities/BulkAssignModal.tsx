@@ -7,10 +7,21 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { invalidateActivities } from '@/lib/invalidate'
+import { GoalPicker } from '@/components/goals/GoalPicker'
+import { pickableGoals } from '@/lib/goals'
 
 /** Sentinel select values: empty = leave the field alone, CLEAR = set it to null. */
 const KEEP = ''
 const CLEAR = '__clear__'
+
+type GoalMode = typeof KEEP | 'add' | 'remove' | 'set'
+
+function nextGoalIds(current: string[], mode: GoalMode, picked: string[]): string[] {
+  if (mode === 'add') return [...new Set([...current, ...picked])]
+  if (mode === 'remove') return current.filter((id) => !picked.includes(id))
+  if (mode === 'set') return picked
+  return current
+}
 
 interface BulkAssignModalProps {
   open: boolean
@@ -30,10 +41,12 @@ export function BulkAssignModal({
   onApplied,
 }: BulkAssignModalProps) {
   const qc = useQueryClient()
-  const [goalId, setGoalId] = useState(KEEP)
+  const [goalMode, setGoalMode] = useState<GoalMode>(KEEP)
+  const [pickedGoalIds, setPickedGoalIds] = useState<string[]>([])
   const [categoryId, setCategoryId] = useState(KEEP)
 
-  const dirty = goalId !== KEEP || categoryId !== KEEP
+  const goalsDirty = goalMode === 'set' || (goalMode !== KEEP && pickedGoalIds.length > 0)
+  const dirty = goalsDirty || categoryId !== KEEP
 
   // No bulk endpoint exists; the PUT is a full replace, so unchanged fields are
   // resent from the activity itself.
@@ -43,7 +56,7 @@ export function BulkAssignModal({
         activities.map((a) =>
           activitiesApi.update(a.id, {
             title: a.title,
-            goalId: goalId === KEEP ? a.goalId : goalId === CLEAR ? null : goalId,
+            goalIds: nextGoalIds(a.goals.map((g) => g.id), goalMode, pickedGoalIds),
             categoryId:
               categoryId === KEEP ? a.categoryId : categoryId === CLEAR ? null : categoryId,
           }),
@@ -57,7 +70,7 @@ export function BulkAssignModal({
     onError: (err) => toastError(err, 'Could not update the selected activities.'),
   })
 
-  const activeGoals = goals.filter((g) => g.status !== 'closed')
+  const goalOptions = pickableGoals(goals, activities.flatMap((a) => a.goals.map((g) => g.id)))
 
   return (
     <Modal
@@ -76,16 +89,23 @@ export function BulkAssignModal({
       }
     >
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-foreground">Goal</label>
+        <label className="text-sm font-medium text-foreground">Goals</label>
         <Select
-          value={goalId}
-          onChange={setGoalId}
+          value={goalMode}
+          onChange={(v) => setGoalMode(v as GoalMode)}
           options={[
             { value: KEEP, label: 'Keep current' },
-            { value: CLEAR, label: 'No goal' },
-            ...activeGoals.map((g) => ({ value: g.id, label: g.title })),
+            { value: 'add', label: 'Add' },
+            { value: 'remove', label: 'Remove' },
+            { value: 'set', label: 'Replace with' },
           ]}
         />
+        {goalMode !== KEEP && (
+          <GoalPicker goals={goalOptions} value={pickedGoalIds} onChange={setPickedGoalIds} />
+        )}
+        {goalMode === 'set' && pickedGoalIds.length === 0 && (
+          <p className="text-xs text-muted-foreground">Nothing selected: every goal is removed.</p>
+        )}
       </div>
 
       <div className="flex flex-col gap-1.5">

@@ -31,11 +31,11 @@ public class ActivityServiceTests : IDisposable
     {
         var (userId, goalId) = await CreateUserWithGoalAsync();
 
-        var result = await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Morning run", null, goalId));
+        var result = await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Morning run", null, [goalId]));
 
         Assert.True(result.IsSuccess);
         Assert.Equal("Morning run", result.Value!.Title);
-        Assert.Equal(goalId, result.Value.GoalId);
+        Assert.Equal(goalId, Assert.Single(result.Value.Goals).Id);
     }
 
     [Fact]
@@ -43,7 +43,7 @@ public class ActivityServiceTests : IDisposable
     {
         var (userId, _) = await CreateUserWithGoalAsync();
 
-        var result = await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Task", null, Guid.NewGuid()));
+        var result = await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Task", null, [Guid.NewGuid()]));
 
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorType.NotFound, result.Error!.Type);
@@ -54,7 +54,7 @@ public class ActivityServiceTests : IDisposable
     {
         var (userId, goalId) = await CreateUserWithGoalAsync();
 
-        var result = await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("  ", null, goalId));
+        var result = await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("  ", null, [goalId]));
 
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorType.Validation, result.Error!.Type);
@@ -64,9 +64,9 @@ public class ActivityServiceTests : IDisposable
     public async Task UpdateAsync_changes_title()
     {
         var (userId, goalId) = await CreateUserWithGoalAsync();
-        var created = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Old title", null, goalId))).Value!;
+        var created = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Old title", null, [goalId]))).Value!;
 
-        var result = await _ctx.ActivityService.UpdateAsync(created.Id, userId, new UpdateActivityRequest("New title", null, goalId));
+        var result = await _ctx.ActivityService.UpdateAsync(created.Id, userId, new UpdateActivityRequest("New title", null, [goalId]));
 
         Assert.True(result.IsSuccess);
         Assert.Equal("New title", result.Value!.Title);
@@ -77,7 +77,7 @@ public class ActivityServiceTests : IDisposable
     {
         var (userId, goalId) = await CreateUserWithGoalAsync();
 
-        var result = await _ctx.ActivityService.UpdateAsync(Guid.NewGuid(), userId, new UpdateActivityRequest("X", null, goalId));
+        var result = await _ctx.ActivityService.UpdateAsync(Guid.NewGuid(), userId, new UpdateActivityRequest("X", null, [goalId]));
 
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorType.NotFound, result.Error!.Type);
@@ -87,7 +87,7 @@ public class ActivityServiceTests : IDisposable
     public async Task DeleteAsync_removes_activity()
     {
         var (userId, goalId) = await CreateUserWithGoalAsync();
-        var created = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("To delete", null, goalId))).Value!;
+        var created = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("To delete", null, [goalId]))).Value!;
 
         var deleteResult = await _ctx.ActivityService.DeleteAsync(created.Id, userId);
         var remaining = await _ctx.ActivityService.ListAsync(userId, goalId);
@@ -115,14 +115,14 @@ public class ActivityServiceTests : IDisposable
         _ctx.Db.Goals.Add(goal2);
         await _ctx.Db.SaveChangesAsync();
 
-        await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Activity A", null, goal1Id));
-        await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Activity B", null, goal1Id));
-        await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Activity C", null, goal2.Id));
+        await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Activity A", null, [goal1Id]));
+        await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Activity B", null, [goal1Id]));
+        await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Activity C", null, [goal2.Id]));
 
         var list = await _ctx.ActivityService.ListAsync(userId, goal1Id);
 
         Assert.Equal(2, list.Count);
-        Assert.All(list, a => Assert.Equal(goal1Id, a.GoalId));
+        Assert.All(list, a => Assert.Equal(goal1Id, Assert.Single(a.Goals).Id));
     }
 
     private async Task AddOccurrenceAsync(Guid userId, Guid activityId, DateTimeOffset? startAt)
@@ -136,8 +136,8 @@ public class ActivityServiceTests : IDisposable
     {
         var (userId, goalId) = await CreateUserWithGoalAsync();
         var now = DateTimeOffset.UtcNow;
-        var recent = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Recent", null, goalId))).Value!;
-        var stale = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Stale", null, goalId))).Value!;
+        var recent = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Recent", null, [goalId]))).Value!;
+        var stale = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Stale", null, [goalId]))).Value!;
 
         await AddOccurrenceAsync(userId, recent.Id, now.AddDays(-10));
         await AddOccurrenceAsync(userId, recent.Id, now.AddDays(-200));
@@ -153,7 +153,7 @@ public class ActivityServiceTests : IDisposable
     public async Task ListAsync_counts_floating_occurrences_by_creation_time()
     {
         var (userId, goalId) = await CreateUserWithGoalAsync();
-        var activity = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Floating", null, goalId))).Value!;
+        var activity = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Floating", null, [goalId]))).Value!;
 
         await AddOccurrenceAsync(userId, activity.Id, null);
 
@@ -167,8 +167,8 @@ public class ActivityServiceTests : IDisposable
     {
         var (userId, goalId) = await CreateUserWithGoalAsync();
         var (otherId, otherGoalId) = await CreateUserWithGoalAsync();
-        await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Mine", null, goalId));
-        var theirs = (await _ctx.ActivityService.CreateAsync(otherId, new CreateActivityRequest("Theirs", null, otherGoalId))).Value!;
+        await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Mine", null, [goalId]));
+        var theirs = (await _ctx.ActivityService.CreateAsync(otherId, new CreateActivityRequest("Theirs", null, [otherGoalId]))).Value!;
 
         await AddOccurrenceAsync(otherId, theirs.Id, DateTimeOffset.UtcNow.AddDays(-1));
 

@@ -35,7 +35,7 @@ public class ExportTests : IDisposable
         var goal = await goalRes.ReadAsync<IdDto>();
         await _client.PostAsJsonAsync($"/api/goals/{goal.Id}/checkpoints", new { title = "First spoon", size = "normal" });
 
-        var actRes = await _client.PostAsJsonAsync("/api/activities", new { title = "Practice", categoryId = cat.Id, goalId = goal.Id });
+        var actRes = await _client.PostAsJsonAsync("/api/activities", new { title = "Practice", categoryId = cat.Id, goalIds = new[] { goal.Id } });
         var act = await actRes.ReadAsync<IdDto>();
         await _client.PostAsJsonAsync("/api/occurrences", new { activityId = act.Id });
 
@@ -51,6 +51,22 @@ public class ExportTests : IDisposable
         Assert.Single(doc.GetProperty("activities").EnumerateArray());
         var occ = Assert.Single(doc.GetProperty("occurrences").EnumerateArray());
         Assert.Equal("Practice", occ.GetProperty("title").GetString());
+    }
+
+    [Fact]
+    public async Task Export_LeavesRecentOccurrenceCountUnfilled()
+    {
+        var token = await _client.SetupUserAsync();
+        _client.UseBearer(token);
+        await _client.PostAsJsonAsync("/api/activities", new { title = "First" });
+        await _client.PostAsJsonAsync("/api/activities", new { title = "Second" });
+        await _client.PostAsJsonAsync("/api/activities", new { title = "Third" });
+
+        var doc = await (await _client.GetAsync("/api/export")).ReadAsync<JsonElement>();
+
+        Assert.All(
+            doc.GetProperty("activities").EnumerateArray(),
+            a => Assert.Equal(0, a.GetProperty("recentOccurrenceCount").GetInt32()));
     }
 
     public void Dispose() => _factory.Dispose();

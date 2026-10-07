@@ -23,7 +23,7 @@ interface ActivityListRowProps {
   onHistory: () => void
   /** Hidden when the section already says it (grouping by that attribute). */
   hideCategory?: boolean
-  hideGoal?: boolean
+  hiddenGoalId?: string
 }
 
 export function ActivityListRow({
@@ -35,13 +35,13 @@ export function ActivityListRow({
   onDelete,
   onHistory,
   hideCategory,
-  hideGoal,
+  hiddenGoalId,
 }: ActivityListRowProps) {
   const category = activity.category
 
   const showCategory = !hideCategory && category
-  const showGoal = !hideGoal && activity.goal
-  const hasMeta = showCategory || showGoal || activity.subtasks.length > 0
+  const goals = activity.goals.filter((g) => g.id !== hiddenGoalId)
+  const hasMeta = showCategory || goals.length > 0 || activity.subtasks.length > 0
 
   return (
     <li
@@ -107,11 +107,11 @@ export function ActivityListRow({
                 {activity.subtasks.length === 1 ? 'subtask' : 'subtasks'}
               </span>
             )}
-            {showGoal && (
-              <Badge tone={GOAL_TONE[activity.goal!.status] ?? 'neutral'}>
-                {activity.goal!.title}
+            {goals.map((g) => (
+              <Badge key={g.id} tone={GOAL_TONE[g.status] ?? 'neutral'}>
+                {g.title}
               </Badge>
-            )}
+            ))}
           </span>
         )}
       </button>

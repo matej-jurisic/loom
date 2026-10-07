@@ -32,11 +32,10 @@ public sealed record ActivityDto(
     Guid UserId,
     string Title,
     Guid? CategoryId,
-    Guid? GoalId,
     string Kind,
     DateTimeOffset CreatedAt,
     CategorySummaryDto? Category,
-    GoalSummaryDto? Goal,
+    List<GoalSummaryDto> Goals,
     List<ActivitySubtaskDto> Subtasks,
     List<ActivityWorkTypeDto> WorkTypes,
     // How many occurrences this activity has in the recent window (see ActivityService.RecentWindowDays).
@@ -44,16 +43,16 @@ public sealed record ActivityDto(
     int RecentOccurrenceCount = 0)
 {
     public static ActivityDto FromEntity(Activity a, int recentOccurrenceCount = 0) => new(
-        a.Id, a.UserId, a.Title, a.CategoryId, a.GoalId, a.Kind.ToString(), a.CreatedAt,
+        a.Id, a.UserId, a.Title, a.CategoryId, a.Kind.ToString(), a.CreatedAt,
         a.Category is not null ? CategorySummaryDto.FromEntity(a.Category) : null,
-        a.Goal is not null ? GoalSummaryDto.FromEntity(a.Goal) : null,
+        a.Goals.OrderBy(g => g.Status).ThenBy(g => g.Title).Select(GoalSummaryDto.FromEntity).ToList(),
         a.Subtasks.OrderBy(s => s.CreatedAt).Select(ActivitySubtaskDto.FromEntity).ToList(),
         a.WorkTypes.Where(w => !w.IsArchived).OrderBy(w => w.CreatedAt).Select(ActivityWorkTypeDto.FromEntity).ToList(),
         recentOccurrenceCount);
 }
 
-public sealed record CreateActivityRequest(string Title, Guid? CategoryId, Guid? GoalId);
-public sealed record UpdateActivityRequest(string Title, Guid? CategoryId, Guid? GoalId);
+public sealed record CreateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null);
+public sealed record UpdateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null);
 
 // Activity subtasks (template)
 public sealed record ActivitySubtaskDto(Guid Id, Guid ActivityId, string Title, DateTimeOffset CreatedAt)
@@ -105,7 +104,7 @@ public sealed record OccurrenceSubtaskInput(Guid? Id, string Title);
 public sealed record CreateEventRequest(
     string Title,
     Guid? CategoryId,
-    Guid? GoalId,
+    List<Guid>? GoalIds,
     DateTimeOffset? StartAt,
     DateTimeOffset? EndAt,
     bool IsAllDay,
@@ -115,7 +114,7 @@ public sealed record CreateEventRequest(
 public sealed record UpdateEventRequest(
     string Title,
     Guid? CategoryId,
-    Guid? GoalId,
+    List<Guid>? GoalIds,
     DateTimeOffset? StartAt,
     DateTimeOffset? EndAt,
     bool IsAllDay,

@@ -117,11 +117,10 @@ export interface Activity {
   userId: string
   title: string
   categoryId: string | null
-  goalId: string | null
   kind: ActivityKind
   createdAt: string
   category: CategorySummary | null
-  goal: GoalSummary | null
+  goals: GoalSummary[]
   subtasks: ActivitySubtask[]
   workTypes: ActivityWorkType[]
   /** Occurrences in the last year. Only the list endpoint fills it; single-activity responses send 0. */

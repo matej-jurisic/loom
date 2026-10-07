@@ -6,6 +6,8 @@ import type { Activity, Goal, Category } from '@/lib/types'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { WorkTypesSection } from '@/components/activities/WorkTypesSection'
+import { GoalPicker } from '@/components/goals/GoalPicker'
+import { pickableGoals } from '@/lib/goals'
 import { invalidateActivities } from '@/lib/invalidate'
 
 interface ActivityModalProps {
@@ -20,7 +22,7 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
   const qc = useQueryClient()
   const isEdit = Boolean(activity)
   const [title, setTitle] = useState(activity?.title ?? '')
-  const [goalId, setGoalId] = useState(activity?.goalId ?? '')
+  const [goalIds, setGoalIds] = useState(() => activity?.goals.map((g) => g.id) ?? [])
   const [categoryId, setCategoryId] = useState(activity?.categoryId ?? '')
   const [titleError, setTitleError] = useState('')
   const [subtasks, setSubtasks] = useState(activity?.subtasks ?? [])
@@ -31,7 +33,7 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
     mutationFn: () => {
       const body = {
         title: title.trim(),
-        goalId: goalId || null,
+        goalIds,
         categoryId: categoryId || null,
       }
       return isEdit ? activitiesApi.update(activity!.id, body) : activitiesApi.create(body)
@@ -65,7 +67,7 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
     addSubtaskMutation.mutate(t)
   }
 
-  const activeGoals = goals.filter((g) => g.status !== 'closed')
+  const goalOptions = pickableGoals(goals, activity?.goals.map((g) => g.id) ?? [])
 
   return (
     <Modal
@@ -95,19 +97,12 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
         {titleError && <p className="text-xs text-destructive">{titleError}</p>}
       </div>
 
-      {activeGoals.length > 0 && (
+      {goalOptions.length > 0 && (
         <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-foreground">
-            Goal <span className="font-normal text-muted-foreground">(optional)</span>
-          </label>
-          <select
-            value={goalId}
-            onChange={(e) => setGoalId(e.target.value)}
-            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-          >
-            <option value="">No goal</option>
-            {activeGoals.map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}
-          </select>
+          <span className="text-sm font-medium text-foreground">
+            Goals <span className="font-normal text-muted-foreground">(optional)</span>
+          </span>
+          <GoalPicker goals={goalOptions} value={goalIds} onChange={setGoalIds} />
         </div>
       )}
 

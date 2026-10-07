@@ -1,5 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Loom.Core.Data;
 using Xunit;
 
@@ -61,5 +63,41 @@ public class MigrationTests : IDisposable
         Assert.NotNull(db.Users.AsNoTracking().FirstOrDefault(u => u.Id == user.Id));
         foreach (var id in db.Activities.AsNoTracking().Select(a => a.Id).ToList())
             Assert.NotNull(db.Activities.AsNoTracking().FirstOrDefault(a => a.Id == id));
+    }
+
+    [Fact]
+    public void Migrate_carries_a_single_goal_link_into_the_join_table()
+    {
+        var userId = Guid.NewGuid();
+        var goalId = Guid.NewGuid();
+        var linkedId = Guid.NewGuid();
+        var unlinkedId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+
+        using (var before = NewContext())
+        {
+            before.GetService<IMigrator>().Migrate("RemoveGoalKind");
+            before.Database.ExecuteSqlRaw(
+                "INSERT INTO Users (Id, Username, PasswordHash, Timezone, CreatedAt) VALUES ({0}, 'u', 'x', 'UTC', {1})",
+                userId, now);
+            before.Database.ExecuteSqlRaw(
+                "INSERT INTO Goals (Id, UserId, Title, Status, CreatedAt) VALUES ({0}, {1}, 'Practice', 'active', {2})",
+                goalId, userId, now);
+            before.Database.ExecuteSqlRaw(
+                "INSERT INTO Activities (Id, UserId, Title, Kind, GoalId, CreatedAt) VALUES ({0}, {1}, 'Scales', 'activity', {2}, {3})",
+                linkedId, userId, goalId, now);
+            before.Database.ExecuteSqlRaw(
+                "INSERT INTO Activities (Id, UserId, Title, Kind, CreatedAt) VALUES ({0}, {1}, 'Chores', 'activity', {2})",
+                unlinkedId, userId, now);
+        }
+
+        using var db = NewContext();
+        db.Database.Migrate();
+
+        var linked = db.Activities.AsNoTracking().Include(a => a.Goals).Single(a => a.Id == linkedId);
+        var unlinked = db.Activities.AsNoTracking().Include(a => a.Goals).Single(a => a.Id == unlinkedId);
+        Assert.Equal(goalId, Assert.Single(linked.Goals).Id);
+        Assert.Empty(unlinked.Goals);
+        Assert.Single(db.Activities.AsNoTracking().Where(a => a.Goals.Any(g => g.Id == goalId)));
     }
 }

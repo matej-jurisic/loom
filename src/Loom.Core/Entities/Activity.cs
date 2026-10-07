@@ -8,13 +8,12 @@ public class Activity
     public Guid UserId { get; set; }
     public required string Title { get; set; }
     public Guid? CategoryId { get; set; }
-    public Guid? GoalId { get; set; }
     public ActivityKind Kind { get; set; } = ActivityKind.activity;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public User User { get; set; } = null!;
     public Category? Category { get; set; }
-    public Goal? Goal { get; set; }
+    public List<Goal> Goals { get; set; } = [];
     public List<ActivitySubtask> Subtasks { get; set; } = [];
     public List<ActivityWorkType> WorkTypes { get; set; } = [];
 }

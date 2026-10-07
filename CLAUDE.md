@@ -81,7 +81,12 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   label list on the activity, and an `OccurrenceTimeSplit` row references one, with `Minutes` null
   meaning "auto").
 - `Enums/` — stored as strings (`HasConversion<string>`).
-- `Data/LoomDbContext.cs` — DbSets + `OnModelCreating`. `Occurrence → Activity` cascade delete; `Activity → Category/Goal` set-null.
+- `Data/LoomDbContext.cs` — DbSets + `OnModelCreating`. `Occurrence → Activity` cascade delete; `Activity → Category` set-null.
+  `Activity.Goals` is many-to-many through the `ActivityGoals` join table (no entity class, cascade on
+  both sides). `ActivityService.ResolveGoalsAsync` / `SetGoals` are the only writers, shared with the
+  event paths in `OccurrenceService`. Query it with `a.Goals.Any(...)`; a filtered `SelectMany` over it
+  needs SQL APPLY, which SQLite lacks (see `GoalService` for the join form that translates).
+  **Per-goal figures count an occurrence once per goal; anything summed across goals counts it once.**
 - `Common/Result.cs` — `Result`/`Result<T>` + `Error(ErrorType, msg)`. **Expected failures = Results, not exceptions.**
 - `Common/Validators.cs` — shared static validation rules.
 - `Common/DayMath.cs` — all "which day / is this overdue?" logic goes through here, in the user's IANA
@@ -160,9 +165,13 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `components/activities/ActivityListRow.tsx` — activity list row: leading tile in the **category's**
   colour and icon (via `CategoryIcon`), meta line, action menu (history / edit / delete).
   In multi-select mode the tile becomes a checkbox and the row selects instead of navigating.
-  `hideCategory`/`hideGoal` drop whatever the current grouping already says in the section header.
-- `components/activities/BulkAssignModal.tsx` — sets goal / category on a multi-select. No bulk endpoint exists:
+  `hideCategory`/`hiddenGoalId` drop whatever the current grouping already says in the section header
+  (an activity's other goals still show).
+- `components/activities/BulkAssignModal.tsx` — adds / removes / replaces goals and sets category on a multi-select. No bulk endpoint exists:
   it fans out over `PUT /api/activities/{id}`, resending unchanged fields from each activity (the PUT is a full replace).
+- `components/goals/GoalPicker.tsx` — toggle chips for an activity's goal set, used by `ActivityModal`,
+  `BulkAssignModal` and `EventModal`. Options come from `pickableGoals` (`lib/goals.ts`): closed goals are
+  offered only when already linked, so an edit never drops one silently.
 - `components/events/TimeSplitEditor.tsx` — the time split section of `EventDetailModal` (chips,
   proportional bar with draggable edges, per-row time field). Keyed by occurrence id and owns its rows
   after mount: every change saves through `occurrencesApi.setTimeSplit` and a failure restores the

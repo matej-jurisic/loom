@@ -9,6 +9,10 @@ export function recencyLabel(days: number | null): string {
   return `${Math.floor(days / 30)}mo since last`
 }
 
+export function pickableGoals<T extends { id: string; status: string }>(goals: T[], linkedIds: string[]): T[] {
+  return goals.filter((g) => g.status !== 'closed' || linkedIds.includes(g.id))
+}
+
 export function isStale(days: number | null): boolean {
   return days !== null && days >= STALE_DAYS
 }

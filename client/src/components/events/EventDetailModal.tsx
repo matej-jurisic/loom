@@ -204,7 +204,7 @@ const statusMutation = useMutation({
   const busy = statusMutation.isPending || deleteMutation.isPending || planMutation.isPending || floatMutation.isPending
   const timeLabel = formatOccurrenceTime(occurrence)
   const category = occurrence.activity.category
-  const goal = occurrence.activity.goal
+  const goals = occurrence.activity.goals
 
   return (
     <Modal
@@ -380,9 +380,9 @@ const statusMutation = useMutation({
           </div>
         )}
 
-        {goal && (
+        {goals.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            <Badge tone={GOAL_TONE[goal.status] ?? 'neutral'}>{goal.title}</Badge>
+            {goals.map((g) => <Badge key={g.id} tone={GOAL_TONE[g.status] ?? 'neutral'}>{g.title}</Badge>)}
           </div>
         )}
 

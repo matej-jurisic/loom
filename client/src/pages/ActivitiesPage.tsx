@@ -141,7 +141,7 @@ export function ActivitiesPage() {
   const visible = useMemo(() => {
     if (!query) return activities;
     return activities.filter((a) =>
-      [a.title, a.category?.name, a.goal?.title].some((field) =>
+      [a.title, a.category?.name, ...a.goals.map((g) => g.title)].some((field) =>
         field?.toLowerCase().includes(query),
       ),
     );
@@ -150,8 +150,6 @@ export function ActivitiesPage() {
   // Grouping is keyed by attribute so a new grouping dimension is one entry, not a new branch.
   // Buckets are seeded in canonical order so sections do not reshuffle as the filter changes,
   // then empty ones are dropped and the catch-all bucket is pushed to the end.
-  const goalMap = useMemo(() => new Map(goals.map((g) => [g.id, g])), [goals]);
-
   const sections = useMemo<Section[]>(() => {
     if (group === "none") {
       const items = [...visible].sort((a, b) => a.title.localeCompare(b.title));
@@ -170,14 +168,22 @@ export function ActivitiesPage() {
     buckets.set(NONE_BUCKET, { label: noneLabel, items: [] });
 
     for (const a of visible) {
-      const key =
-        group === "goal" ? (a.goalId ?? NONE_BUCKET) : (a.categoryId ?? NONE_BUCKET);
-      if (!buckets.has(key)) {
-        const label =
-          group === "goal" ? (goalMap.get(key)?.title ?? noneLabel) : noneLabel;
-        buckets.set(key, { label, items: [] });
+      const keys =
+        group === "goal"
+          ? a.goals.length
+            ? a.goals.map((g) => g.id)
+            : [NONE_BUCKET]
+          : [a.categoryId ?? NONE_BUCKET];
+      for (const key of keys) {
+        if (!buckets.has(key)) {
+          const label =
+            group === "goal"
+              ? (a.goals.find((g) => g.id === key)?.title ?? noneLabel)
+              : noneLabel;
+          buckets.set(key, { label, items: [] });
+        }
+        buckets.get(key)!.items.push(a);
       }
-      buckets.get(key)!.items.push(a);
     }
 
     const filled = Array.from(buckets.entries())
@@ -190,7 +196,7 @@ export function ActivitiesPage() {
 
     const catchAll = filled.filter((s) => s.key === NONE_BUCKET);
     return [...filled.filter((s) => s.key !== NONE_BUCKET), ...catchAll];
-  }, [group, visible, goals, categories, goalMap]);
+  }, [group, visible, goals, categories]);
 
   const selectedActivities = activities.filter((a) => selected.has(a.id));
   const allVisibleSelected =
@@ -377,7 +383,7 @@ export function ActivitiesPage() {
                               onEdit={() => openEdit(a)}
                               onDelete={() => setDeleting(a)}
                               onHistory={() => setHistoryFor(a)}
-                              hideGoal={group === "goal"}
+                              hiddenGoalId={group === "goal" ? section.key : undefined}
                               hideCategory={group === "category"}
                             />
                           ))}

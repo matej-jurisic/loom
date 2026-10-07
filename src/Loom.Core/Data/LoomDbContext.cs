@@ -60,10 +60,12 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
             .OnDelete(DeleteBehavior.SetNull);
 
         modelBuilder.Entity<Activity>()
-            .HasOne(a => a.Goal)
+            .HasMany(a => a.Goals)
             .WithMany()
-            .HasForeignKey(a => a.GoalId)
-            .OnDelete(DeleteBehavior.SetNull);
+            .UsingEntity<Dictionary<string, object>>(
+                "ActivityGoals",
+                r => r.HasOne<Goal>().WithMany().HasForeignKey("GoalId").OnDelete(DeleteBehavior.Cascade),
+                l => l.HasOne<Activity>().WithMany().HasForeignKey("ActivityId").OnDelete(DeleteBehavior.Cascade));
 
         modelBuilder.Entity<Goal>()
             .HasIndex(g => g.UserId);

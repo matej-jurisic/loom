@@ -29,7 +29,7 @@ public class ClearHistoryTests : IDisposable
         var goal = new Goal { UserId = userId, Title = "G" };
         _ctx.Db.Goals.Add(goal);
         await _ctx.Db.SaveChangesAsync();
-        var activity = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Run", null, goal.Id))).Value!;
+        var activity = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Run", null, [goal.Id]))).Value!;
         Assert.True((await AddOccurrenceAsync(userId, activity.Id)).IsSuccess);
         Assert.True((await AddOccurrenceAsync(userId, activity.Id)).IsSuccess);
         var ev = await _ctx.OccurrenceService.CreateEventAsync(userId,

@@ -85,27 +85,28 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
     private async Task<Dictionary<Guid, DateTimeOffset>> GetLastOccurrenceAtAsync(List<Guid> goalIds, Guid userId)
     {
         var activityGoalMap = await db.Activities
-            .Where(a => a.UserId == userId && a.GoalId != null && goalIds.Contains(a.GoalId.Value))
-            .Select(a => new { a.Id, GoalId = a.GoalId!.Value })
+            .Where(a => a.UserId == userId)
+            .SelectMany(a => a.Goals, (a, g) => new { a.Id, GoalId = g.Id })
+            .Where(x => goalIds.Contains(x.GoalId))
             .ToListAsync();
 
         if (activityGoalMap.Count == 0) return [];
 
-        var activityIds = activityGoalMap.Select(a => a.Id).ToList();
+        var activityIds = activityGoalMap.Select(a => a.Id).Distinct().ToList();
         var doneOccs = await db.Occurrences
             .Where(o => activityIds.Contains(o.ActivityId) && o.Status == EventStatus.done)
             .Select(o => new { o.ActivityId, o.StartAt, o.CreatedAt })
             .ToListAsync();
 
-        var lookup = activityGoalMap.ToDictionary(a => a.Id, a => a.GoalId);
+        var lookup = activityGoalMap.ToLookup(a => a.Id, a => a.GoalId);
         var result = new Dictionary<Guid, DateTimeOffset>();
 
         foreach (var occ in doneOccs)
         {
-            var goalId = lookup[occ.ActivityId];
             var at = occ.StartAt ?? occ.CreatedAt;
-            if (!result.TryGetValue(goalId, out var current) || at > current)
-                result[goalId] = at;
+            foreach (var goalId in lookup[occ.ActivityId])
+                if (!result.TryGetValue(goalId, out var current) || at > current)
+                    result[goalId] = at;
         }
 
         return result;
@@ -127,13 +128,14 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         List<Guid> goalIds, Guid userId, DateTimeOffset nowUtc)
     {
         var activityGoalMap = await db.Activities
-            .Where(a => a.UserId == userId && a.GoalId != null && goalIds.Contains(a.GoalId.Value))
-            .Select(a => new { a.Id, GoalId = a.GoalId!.Value })
+            .Where(a => a.UserId == userId)
+            .SelectMany(a => a.Goals, (a, g) => new { a.Id, GoalId = g.Id })
+            .Where(x => goalIds.Contains(x.GoalId))
             .ToListAsync();
 
         if (activityGoalMap.Count == 0) return [];
 
-        var activityIds = activityGoalMap.Select(a => a.Id).ToList();
+        var activityIds = activityGoalMap.Select(a => a.Id).Distinct().ToList();
         var rows = await db.Occurrences
             .AsNoTracking()
             .Where(o => activityIds.Contains(o.ActivityId))
@@ -144,13 +146,13 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         var today = DayMath.Today(ctx, nowUtc);
         var windowStart = today.AddDays(-(HeatmapDays - 1));
 
-        var lookup = activityGoalMap.ToDictionary(a => a.Id, a => a.GoalId);
+        var lookup = activityGoalMap.ToLookup(a => a.Id, a => a.GoalId);
         var totals = new Dictionary<Guid, (int Done, int Skipped, int Pending)>();
         var byDay = new Dictionary<Guid, Dictionary<DateOnly, (int Done, int Skipped)>>();
 
         foreach (var row in rows)
+        foreach (var goalId in lookup[row.ActivityId])
         {
-            var goalId = lookup[row.ActivityId];
             totals.TryAdd(goalId, (0, 0, 0));
             var cur = totals[goalId];
             totals[goalId] = row.Status switch
@@ -196,7 +198,7 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         var windowStart = today.AddDays(-(HeatmapDays - 1));
 
         var activityIds = await db.Activities
-            .Where(a => a.UserId == userId && a.GoalId != null)
+            .Where(a => a.UserId == userId && a.Goals.Any())
             .Select(a => a.Id)
             .ToListAsync();
         if (activityIds.Count == 0) return new GoalHeatmap(windowStart, today, []);

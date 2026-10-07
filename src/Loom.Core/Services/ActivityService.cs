@@ -16,7 +16,7 @@ public class ActivityService(LoomDbContext db)
     {
         var a = await db.Activities
             .Include(a => a.Category)
-            .Include(a => a.Goal)
+            .Include(a => a.Goals)
             .Include(a => a.Subtasks)
             .Include(a => a.WorkTypes)
             .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
@@ -29,13 +29,13 @@ public class ActivityService(LoomDbContext db)
     {
         var query = db.Activities
             .Include(a => a.Category)
-            .Include(a => a.Goal)
+            .Include(a => a.Goals)
             .Include(a => a.Subtasks)
             .Include(a => a.WorkTypes)
             .Where(a => a.UserId == userId && a.Kind == ActivityKind.activity);
 
         if (goalId.HasValue)
-            query = query.Where(a => a.GoalId == goalId.Value);
+            query = query.Where(a => a.Goals.Any(g => g.Id == goalId.Value));
 
         var all = await query.OrderBy(a => a.Title).ToListAsync();
         var counts = await RecentOccurrenceCountsAsync(userId);
@@ -78,13 +78,9 @@ public class ActivityService(LoomDbContext db)
             a.Category = cat;
         }
 
-        if (req.GoalId.HasValue)
-        {
-            var goal = await db.Goals.FirstOrDefaultAsync(g => g.Id == req.GoalId.Value && g.UserId == userId);
-            if (goal is null) return Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Goal not found."));
-            a.GoalId = req.GoalId.Value;
-            a.Goal = goal;
-        }
+        var goals = await ResolveGoalsAsync(db, userId, req.GoalIds);
+        if (!goals.IsSuccess) return Result<ActivityDto>.Fail(goals.Error!);
+        a.Goals = goals.Value!;
 
         db.Activities.Add(a);
         await db.SaveChangesAsync();
@@ -98,7 +94,7 @@ public class ActivityService(LoomDbContext db)
 
         var a = await db.Activities
             .Include(a => a.Category)
-            .Include(a => a.Goal)
+            .Include(a => a.Goals)
             .Include(a => a.Subtasks)
             .Include(a => a.WorkTypes)
             .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
@@ -119,21 +115,31 @@ public class ActivityService(LoomDbContext db)
             a.Category = null;
         }
 
-        if (req.GoalId.HasValue)
-        {
-            var goal = await db.Goals.FirstOrDefaultAsync(g => g.Id == req.GoalId.Value && g.UserId == userId);
-            if (goal is null) return Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Goal not found."));
-            a.GoalId = req.GoalId.Value;
-            a.Goal = goal;
-        }
-        else
-        {
-            a.GoalId = null;
-            a.Goal = null;
-        }
+        var goals = await ResolveGoalsAsync(db, userId, req.GoalIds);
+        if (!goals.IsSuccess) return Result<ActivityDto>.Fail(goals.Error!);
+        SetGoals(a, goals.Value!);
 
         await db.SaveChangesAsync();
         return Result<ActivityDto>.Success(ActivityDto.FromEntity(a));
+    }
+
+    internal static async Task<Result<List<Goal>>> ResolveGoalsAsync(LoomDbContext db, Guid userId, List<Guid>? goalIds)
+    {
+        var ids = (goalIds ?? []).Distinct().ToList();
+        if (ids.Count == 0) return Result<List<Goal>>.Success([]);
+
+        var goals = await db.Goals.Where(g => g.UserId == userId && ids.Contains(g.Id)).ToListAsync();
+        return goals.Count == ids.Count
+            ? Result<List<Goal>>.Success(goals)
+            : Result<List<Goal>>.Fail(new Error(ErrorType.NotFound, "Goal not found."));
+    }
+
+    internal static void SetGoals(Activity a, List<Goal> goals)
+    {
+        a.Goals.RemoveAll(g => goals.All(n => n.Id != g.Id));
+        foreach (var goal in goals)
+            if (a.Goals.All(g => g.Id != goal.Id))
+                a.Goals.Add(goal);
     }
 
     public async Task<Result> DeleteAsync(Guid id, Guid userId)
