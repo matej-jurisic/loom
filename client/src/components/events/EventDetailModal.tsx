@@ -9,6 +9,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
 import { SkipRescheduleModal } from '@/components/events/SkipRescheduleModal'
 import { TimeSplitEditor } from '@/components/events/TimeSplitEditor'
+import { OccurrenceNotes } from '@/components/events/OccurrenceNotes'
 import { ActivityHistoryModal } from '@/components/activities/ActivityHistoryModal'
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
@@ -420,6 +421,8 @@ const statusMutation = useMutation({
             </ul>
           </div>
         )}
+
+        <OccurrenceNotes key={`notes-${occurrence.id}`} occurrence={occurrence} />
 
         {occurrence.activity.kind === 'activity' && (
           <TimeSplitEditor key={occurrence.id} occurrence={occurrence} />

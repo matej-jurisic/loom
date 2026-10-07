@@ -136,6 +136,15 @@ Quiet metadata, never a badge or progress bar. On a list row's meta line a linke
 "3 sessions, 4h 30m" in the same tone. The detail modal repeats both as icon + text lines. The edit
 modal's "Deadline (optional)" select sits first in "More options", for both kinds.
 
+### Occurrence notes
+
+A `Notes` section in the occurrence detail modal, after the subtasks and before the time split, for
+both kinds and every status. Same section heading as Subtasks (`text-xs font-semibold uppercase
+tracking-wide text-muted-foreground`) over a three-row, non-resizable textarea in the standard input
+treatment. There is no save button: the text saves when the field loses focus or the modal closes, and
+a failed save keeps what was typed and raises a toast. Notes show nowhere else - no icon on list rows
+or calendar blocks.
+
 ### Time split
 
 A section at the bottom of the occurrence detail modal, for activity-kind occurrences that have a

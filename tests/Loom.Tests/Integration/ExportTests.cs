@@ -37,7 +37,9 @@ public class ExportTests : IDisposable
 
         var actRes = await _client.PostAsJsonAsync("/api/activities", new { title = "Practice", categoryId = cat.Id, goalIds = new[] { goal.Id } });
         var act = await actRes.ReadAsync<IdDto>();
-        await _client.PostAsJsonAsync("/api/occurrences", new { activityId = act.Id });
+        var occRes = await _client.PostAsJsonAsync("/api/occurrences", new { activityId = act.Id });
+        var created = await occRes.ReadAsync<IdDto>();
+        await _client.PatchAsJsonAsync($"/api/occurrences/{created.Id}", new { notes = "Blade needs honing" });
 
         var res = await _client.GetAsync("/api/export");
         Assert.Equal(HttpStatusCode.OK, res.StatusCode);
@@ -51,6 +53,7 @@ public class ExportTests : IDisposable
         Assert.Single(doc.GetProperty("activities").EnumerateArray());
         var occ = Assert.Single(doc.GetProperty("occurrences").EnumerateArray());
         Assert.Equal("Practice", occ.GetProperty("title").GetString());
+        Assert.Equal("Blade needs honing", occ.GetProperty("notes").GetString());
     }
 
     [Fact]

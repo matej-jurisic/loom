@@ -79,6 +79,36 @@ public class OccurrencePatchTests : IDisposable
     }
 
     [Fact]
+    public async Task PatchAsync_sets_trims_and_clears_notes()
+    {
+        var (userId, occ) = await CreatePlannedAsync();
+
+        var set = await _ctx.OccurrenceService.PatchAsync(occ.Id, userId,
+            new PatchOccurrenceRequest(Notes: new(true, "  Got stuck on 4.3  ")));
+        var kept = await _ctx.OccurrenceService.PatchAsync(occ.Id, userId,
+            new PatchOccurrenceRequest(Title: new(true, "Chapter 5")));
+        var cleared = await _ctx.OccurrenceService.PatchAsync(occ.Id, userId,
+            new PatchOccurrenceRequest(Notes: new(true, " ")));
+
+        Assert.Equal("Got stuck on 4.3", set.Value!.Notes);
+        Assert.Equal("Chapter 4", set.Value.Title);
+        Assert.Equal("Got stuck on 4.3", kept.Value!.Notes);
+        Assert.Null(cleared.Value!.Notes);
+    }
+
+    [Fact]
+    public async Task PatchAsync_rejects_notes_over_the_limit()
+    {
+        var (userId, occ) = await CreatePlannedAsync();
+
+        var result = await _ctx.OccurrenceService.PatchAsync(occ.Id, userId,
+            new PatchOccurrenceRequest(Notes: new(true, new string('x', Validators.MaxNotesLength + 1))));
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
+    }
+
+    [Fact]
     public async Task PatchAsync_rejects_an_end_before_the_existing_start()
     {
         var (userId, occ) = await CreatePlannedAsync();

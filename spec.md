@@ -120,6 +120,7 @@ onto an occurrence, and an occurrence only references the ones it actually used.
 |---|---|
 | Activity | Required. Which activity this is an instance of. |
 | Title | Optional, overrides the activity title for this instance. Max 255. |
+| Notes | Optional free text about this instance. Max 4000. Written from the occurrence detail modal. |
 | Start datetime | Absent for floating; window start when `IsPlanned`. |
 | End datetime | Window end when `IsPlanned`; deadline or span end otherwise. Must be after start. |
 | Is all day | Marks a date-only occurrence. |
@@ -161,6 +162,11 @@ per kind, the occurrence carries optional rows, each naming one of its activity'
 - A work type appears at most once per occurrence and must belong to the occurrence's activity.
   Re-pointing the occurrence at another activity drops its rows.
 - Copies (skip-and-reschedule, duplicate) start with no split: it records what happened, not a plan.
+
+**Notes.** Free text on one occurrence, for either kind: how it went, what to pick up next time.
+Set through `PATCH /api/occurrences/{id}` (`notes`; absent keeps them, null or blank clears them,
+surrounding whitespace is trimmed). Create does not take notes, so copies (skip-and-reschedule,
+duplicate) start without them, and editing an event through its full-replace `PUT` leaves them alone.
 
 `effectiveTitle` on the DTO is `title ?? activity.title`. The DTO also carries the full activity
 (with its category and goal), which is why occurrence lists are invalidated after an activity write. Legacy `windowStart`/`windowEnd`/`windowDurationMinutes` columns remain on the row
@@ -495,5 +501,5 @@ averaged over days.
 Settings holds preferences only.
 
 **Data export** (`GET /api/export`) is a single JSON document: user, settings, categories, goals with
-checkpoints, activities with subtasks and work types, and flat occurrences (effective title, time split, no nested activity). Good enough to hand to a person or an LLM for analysis; not a
+checkpoints, activities with subtasks and work types, and flat occurrences (effective title, notes, time split, no nested activity). Good enough to hand to a person or an LLM for analysis; not a
 backup format, since there is no import path and the shape may change freely.

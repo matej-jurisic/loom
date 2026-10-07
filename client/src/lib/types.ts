@@ -132,6 +132,7 @@ export interface Occurrence {
   userId: string
   activityId: string
   title: string | null
+  notes: string | null
   effectiveTitle: string
   startAt: string | null
   endAt: string | null

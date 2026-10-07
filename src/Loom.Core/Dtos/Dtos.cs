@@ -129,6 +129,7 @@ public sealed record OccurrenceDto(
     Guid UserId,
     Guid ActivityId,
     string? Title,
+    string? Notes,
     string EffectiveTitle,
     DateTimeOffset? StartAt,
     DateTimeOffset? EndAt,
@@ -149,7 +150,7 @@ public sealed record OccurrenceDto(
     int LinkedDoneMinutes = 0)
 {
     public static OccurrenceDto FromEntity(Occurrence o, DayContext ctx, DateTimeOffset nowUtc) => new(
-        o.Id, o.UserId, o.ActivityId, o.Title,
+        o.Id, o.UserId, o.ActivityId, o.Title, o.Notes,
         o.Title ?? o.Activity.Title,
         o.StartAt, o.EndAt,
         o.Status.ToString(), o.CreatedAt,
@@ -195,7 +196,8 @@ public sealed record PatchOccurrenceRequest(
     Optional<bool> IsAllDay = default,
     Optional<bool> IsPlanned = default,
     Optional<Guid?> DeadlineOccurrenceId = default,
-    List<OccurrenceSubtaskInput>? Subtasks = null);
+    List<OccurrenceSubtaskInput>? Subtasks = null,
+    Optional<string?> Notes = default);
 
 public sealed record SetOccurrenceStatusRequest(EventStatus Status);
 
@@ -292,6 +294,7 @@ public sealed record ExportOccurrenceDto(
     Guid Id,
     Guid ActivityId,
     string Title,
+    string? Notes,
     string Status,
     DateTimeOffset? StartAt,
     DateTimeOffset? EndAt,
@@ -306,7 +309,7 @@ public sealed record ExportOccurrenceDto(
     Guid? DeadlineOccurrenceId)
 {
     public static ExportOccurrenceDto FromEntity(Occurrence o) => new(
-        o.Id, o.ActivityId, o.Title ?? o.Activity.Title, o.Status.ToString(),
+        o.Id, o.ActivityId, o.Title ?? o.Activity.Title, o.Notes, o.Status.ToString(),
         o.StartAt, o.EndAt, o.IsAllDay, o.IsPlanned,
         o.WindowStart, o.WindowEnd, o.WindowDurationMinutes, o.CreatedAt,
         o.Subtasks.OrderBy(s => s.CreatedAt).Select(OccurrenceSubtaskDto.FromEntity).ToList(),

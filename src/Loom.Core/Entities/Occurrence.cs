@@ -8,6 +8,7 @@ public class Occurrence
     public Guid UserId { get; set; }
     public Guid ActivityId { get; set; }
     public string? Title { get; set; }
+    public string? Notes { get; set; }
     public DateTimeOffset? StartAt { get; set; }
     public DateTimeOffset? EndAt { get; set; }
     public EventStatus Status { get; set; } = EventStatus.pending;

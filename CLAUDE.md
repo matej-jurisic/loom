@@ -177,6 +177,9 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   after mount: every change saves through `occurrencesApi.setTimeSplit` and a failure restores the
   last saved set. Renders nothing for all-day occurrences or ones without a start and end.
   `components/activities/WorkTypesSection.tsx` is the editable list of the same types, used by `ActivityModal` (edit mode).
+- `components/events/OccurrenceNotes.tsx` — the notes field of `EventDetailModal`. Keyed by occurrence id
+  and owns its text after mount; saves through `occurrencesApi.patch` on blur and on unmount (closing
+  the modal with Escape never blurs the field).
 - `components/events/SkipRescheduleModal.tsx` — opened after skipping; lets user pick a date and creates a new pending copy on that date.
 - `components/events/MoveOrSkipModal.tsx` — asks Move vs Skip & reschedule when a calendar
   drag lands a **pending** occurrence on another date. The page passes a `PendingMove` carrying the
@@ -312,7 +315,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   slipped stays visible without being styled as late.
 - **`PATCH /api/occurrences/{id}` is a partial update**: `PatchOccurrenceRequest` fields are
   `Optional<T>` (`Common/Optional.cs`), so a field absent from the JSON is kept and an explicit `null`
-  clears it (title, start, end, deadline). `ActivityId` re-points and cannot be cleared; `IsAllDay` and
+  clears it (title, notes, start, end, deadline). `ActivityId` re-points and cannot be cleared; `IsAllDay` and
   `IsPlanned` reject null; `Subtasks` null leaves the subtasks alone (`ApplySubtasks`). Send only
   what changes (`occurrencesApi.patch`). Event-kind edits still go through `PUT /{id}/event`, which is a full replace.
 - **Destructive actions confirm via `ConfirmDialog`** (never inline or immediate); mutations without

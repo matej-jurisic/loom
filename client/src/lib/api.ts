@@ -163,7 +163,7 @@ export const occurrencesApi = {
   create: (body: { activityId: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; deadlineOccurrenceId?: string | null }) =>
     request<Occurrence>('/api/occurrences', { method: 'POST', body: JSON.stringify(body) }),
 
-  patch: (id: string, body: { activityId?: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null }) =>
+  patch: (id: string, body: { activityId?: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; notes?: string | null }) =>
     request<Occurrence>(`/api/occurrences/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   delete: (id: string) => request<void>(`/api/occurrences/${id}`, { method: 'DELETE' }),

@@ -11,6 +11,13 @@ public static class Validators
         return null;
     }
 
+    public const int MaxNotesLength = 4000;
+
+    public static Error? ValidateNotes(string? notes) =>
+        notes is { Length: > MaxNotesLength }
+            ? new Error(ErrorType.Validation, $"Notes cannot exceed {MaxNotesLength} characters.")
+            : null;
+
     public static Error? ValidateColor(string? color)
     {
         if (string.IsNullOrWhiteSpace(color))

@@ -135,6 +135,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     public async Task<Result<OccurrenceDto>> PatchAsync(Guid id, Guid userId, PatchOccurrenceRequest req)
     {
         var err = (req.Title.IsSet ? ValidateOptionalTitle(req.Title.Value) : null)
+            ?? (req.Notes.IsSet ? Validators.ValidateNotes(req.Notes.Value) : null)
             ?? ValidateSubtaskInputs(req.Subtasks);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
@@ -172,6 +173,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         }
 
         if (req.Title.IsSet) o.Title = string.IsNullOrWhiteSpace(req.Title.Value) ? null : req.Title.Value.Trim();
+        if (req.Notes.IsSet) o.Notes = string.IsNullOrWhiteSpace(req.Notes.Value) ? null : req.Notes.Value.Trim();
         o.StartAt = startAt;
         o.EndAt = endAt;
         if (req.IsAllDay.IsSet) o.IsAllDay = req.IsAllDay.Value;
