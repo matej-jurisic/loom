@@ -12,6 +12,7 @@ import { OccurrenceSubtasksModal } from '@/components/events/OccurrenceSubtasksM
 import { SkipRescheduleModal } from '@/components/events/SkipRescheduleModal'
 import { ActivityHistoryModal } from '@/components/activities/ActivityHistoryModal'
 import { invalidateOccurrences } from '@/lib/invalidate'
+import { addNextOccurrence } from '@/lib/repeat'
 
 const GOAL_TONE: Record<string, 'focus' | 'active' | 'bench' | 'neutral'> = {
   focus: 'focus',
@@ -67,11 +68,14 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
             : o,
         ),
       )
-      return { snapshots }
+      return { snapshots, source: occurrence }
     },
     onError: (err, _status, ctx) => {
       ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data))
       toastError(err, 'Could not update the status.')
+    },
+    onSuccess: (_updated, status, ctx) => {
+      if (status === 'done') addNextOccurrence(qc, ctx.source)
     },
     onSettled: () => {
       invalidateOccurrences(qc)

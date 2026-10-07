@@ -92,10 +92,10 @@ export const activitiesApi = {
     return request<Activity[]>(`/api/activities${q.size ? `?${q}` : ''}`)
   },
 
-  create: (body: { title: string; categoryId?: string | null; goalIds?: string[] }) =>
+  create: (body: { title: string; categoryId?: string | null; goalIds?: string[]; repeatAfterDays?: number | null }) =>
     request<Activity>('/api/activities', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[] }) =>
+  update: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; repeatAfterDays: number | null }) =>
     request<Activity>(`/api/activities/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 
   delete: (id: string) => request<void>(`/api/activities/${id}`, { method: 'DELETE' }),
@@ -174,6 +174,9 @@ export const occurrencesApi = {
 
   setStatus: (id: string, status: import('./types').EventStatus) =>
     request<Occurrence>(`/api/occurrences/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+
+  repeat: (id: string, isPlanned: boolean) =>
+    request<Occurrence>(`/api/occurrences/${id}/repeat`, { method: 'POST', body: JSON.stringify({ isPlanned }) }),
 
   toggleSubtask: (id: string, subtaskId: string) =>
     request<Occurrence>(`/api/occurrences/${id}/subtasks/${subtaskId}/toggle`, { method: 'POST' }),

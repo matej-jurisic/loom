@@ -417,6 +417,59 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         return Result<OccurrenceDto>.Success(await ToDtoAsync(o, userId));
     }
 
+    public async Task<Result<OccurrenceDto>> RepeatAsync(Guid id, Guid userId, RepeatOccurrenceRequest req)
+    {
+        var source = await db.Occurrences
+            .AsNoTracking()
+            .Include(o => o.Activity)
+            .FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId);
+        if (source is null) return Result<OccurrenceDto>.Fail(new Error(ErrorType.NotFound, "Occurrence not found."));
+        if (source.Activity.Kind == ActivityKind.@event || source.Activity.RepeatAfterDays is not { } days)
+            return Result<OccurrenceDto>.Fail(new Error(ErrorType.Validation, "This activity has no repeat interval."));
+        if (source.Status != EventStatus.done)
+            return Result<OccurrenceDto>.Fail(new Error(ErrorType.Validation, "Only a completed occurrence can be repeated."));
+
+        var ctx = await settings.GetDayContextAsync(userId);
+        var today = DayMath.Today(ctx, DateTimeOffset.UtcNow);
+
+        DateTimeOffset? startAt = DayMath.Midnight(today.AddDays(days), ctx);
+        DateTimeOffset? endAt = null;
+        var isAllDay = true;
+        var isPlanned = true;
+
+        if ((source.StartAt ?? source.EndAt) is { } anchor)
+        {
+            var from = AnchorDay(anchor, source.IsAllDay, ctx);
+            var shift = Math.Max(1, (today.DayNumber - from.DayNumber) / days + 1) * days;
+            startAt = source.StartAt.HasValue ? DayMath.AddLocalDays(source.StartAt.Value, shift, ctx) : null;
+            endAt = source.EndAt.HasValue ? DayMath.AddLocalDays(source.EndAt.Value, shift, ctx) : null;
+            if (!source.IsAllDay && startAt.HasValue && endAt.HasValue)
+                endAt = startAt + (source.EndAt!.Value - source.StartAt!.Value);
+            isAllDay = source.IsAllDay;
+            isPlanned = req.IsPlanned;
+        }
+
+        var copyDay = AnchorDay((startAt ?? endAt)!.Value, isAllDay, ctx);
+        var pending = await db.Occurrences
+            .AsNoTracking()
+            .Where(o => o.UserId == userId && o.ActivityId == source.ActivityId && o.Status == EventStatus.pending)
+            .Select(o => new { o.StartAt, o.EndAt, o.IsAllDay })
+            .ToListAsync();
+        if (pending.Any(o => (o.StartAt ?? o.EndAt) is { } at && AnchorDay(at, o.IsAllDay, ctx) == copyDay))
+            return Result<OccurrenceDto>.Fail(new Error(ErrorType.Conflict, "The next occurrence is already there."));
+
+        var deadlineId = source.DeadlineOccurrenceId;
+        if (deadlineId.HasValue && !await db.Occurrences.AnyAsync(o =>
+                o.Id == deadlineId.Value && o.UserId == userId && o.Status == EventStatus.pending))
+            deadlineId = null;
+
+        return await CreateAsync(userId, new CreateOccurrenceRequest(
+            source.ActivityId, source.Title, startAt, endAt, isAllDay, isPlanned, null, null, null, deadlineId));
+    }
+
+    private static DateOnly AnchorDay(DateTimeOffset at, bool isAllDay, DayContext ctx) =>
+        isAllDay ? DayMath.LocalDate(at, ctx) : DayMath.DayOf(at, ctx);
+
     public async Task<Result<OccurrenceDto>> ToggleSubtaskAsync(Guid id, Guid subtaskId, Guid userId)
     {
         var o = await WithFullIncludes()

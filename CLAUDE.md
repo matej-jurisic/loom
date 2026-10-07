@@ -31,10 +31,14 @@ computes a wrong answer when they are missing. Before adding anything, apply the
 placement, availability inference, and "unaccounted time" all fail it. The calendar is a
 visualization and a fast way to add things, not a planner.
 
-**Recurrence is intentionally absent.** Do not add recurring occurrences, repeat rules or series.
-They decouple the user from the app state: occurrences would be created and changed automatically,
-without the user having done anything, and that does not fit the model, where every occurrence exists
-because the user put it there. Repeating things are added by hand (or by copying a past occurrence).
+**No occurrence is created without a user action.** Do not add recurring occurrences, repeat rules,
+series or anything that fills the calendar ahead of time. They decouple the user from the app state:
+occurrences would be created and changed automatically, without the user having done anything, and
+that does not fit the model, where every occurrence exists because the user put it there. The one
+form of repetition is `Activity.RepeatAfterDays`: an optional gap in days that only ever produces an
+pending copy at the moment the user completes an occurrence (a default-on checkbox beside Done, or the
+one-tap row checkbox, undoable from the toast), and the skip modal's default date. Nothing is generated when the user does nothing,
+so there is no backlog. Calendar-anchored rules (weekdays, day of month) stay out.
 
 ## Stack & layout
 
@@ -114,6 +118,16 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   unchanged, no self/loop); `WithLinksAsync` fills `OccurrenceDto.Deadline` and the target's
   `LinkedDoneCount`/`LinkedDoneMinutes` on every list and single read. On `PATCH`, an absent id
   leaves the link alone and an explicit null removes it.
+- `OccurrenceService.RepeatAsync` (`POST /api/occurrences/{id}/repeat`) — the "do again" copy made on
+  completion: a pending copy of a **done** occurrence of an activity with `RepeatAfterDays`, placed
+  on the first day after today reached by stepping N days from the source's own day (so a weekly task
+  stays on its weekday however late it is done; a floating source has no day and gets today + N as
+  all-day planned). `DayMath.AddLocalDays` keeps the clock time; all-day moves by calendar date.
+  `nextRepeatDate` in `client/src/lib/repeat.ts` mirrors the stepping for the checkbox label and the skip
+  modal's default, which are presentational: the server decides the real date. Goes through `CreateAsync`, so subtasks come from the
+  activity template. The request carries `IsPlanned` because marking done clears the flag on the source. A pending
+  occurrence of the same activity already on the target day makes it a 409, so toggling done, pending,
+  done adds only one; the client swallows that status.
 - `OccurrenceService.SetTimeSplitAsync` — full-set replace of an occurrence's split, keyed by work
   type. `ValidateTimeSplitFits` runs in both update paths so shortening an occurrence below its
   pinned total is rejected; re-pointing to another activity drops the rows.
@@ -156,9 +170,15 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `lib/types.ts` — mirrors backend DTOs. Key types: `Activity`, `Occurrence` (has `effectiveTitle`), `Goal`, `Category`, `Insights`.
 - `lib/goals.ts` — `recencyLabel`/`isStale` over the server's `daysSinceLastOccurrence` (Goals page and Plan chips); `lib/useMediaQuery.ts` — `matchMedia` as a hook.
 - `lib/invalidate.ts` — the query-invalidation helpers; every mutation goes through them.
+- `lib/repeat.ts` — `addNextOccurrence(qc, source)`: after a status change to `done`, calls
+  `occurrencesApi.repeat` and confirms with a toast carrying `Undo` (deletes the copy). Both completion
+  paths call it with the occurrence captured in `onMutate`, before `isPlanned` is cleared:
+  `OccurrenceListRow` always, `EventDetailModal` only while its "Again <date>" checkbox is ticked.
+  Also `parseRepeatAfterDays` / `daysLabel` for the `ActivityModal` field and the activity row.
 - `lib/theme.ts` — light/dark/system preference (localStorage `loom-theme`).
 - `store/auth.ts` — Zustand; access token in memory only.
 - `store/toasts.ts` — Zustand toast store; `toastError(err)` for mutation failures without inline error display.
+  `push` takes an optional `action` (one button, dismisses the toast when pressed) and `durationMs`.
 - `components/ui/` — `Button, Badge, Card(+Header/Title/Content), Modal, Field, ConfirmDialog, ActionMenu, Toasts`,
   plus `input.ts` (`inputCls`, the bare input/select treatment; `SettingSection` re-exports it).
 - `components/events/OccurrenceListRow.tsx` — shared occurrence list row (Plan + Categories): optimistic status toggle, action menu, confirmed delete.
@@ -168,7 +188,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   `hideCategory`/`hiddenGoalId` drop whatever the current grouping already says in the section header
   (an activity's other goals still show).
 - `components/activities/BulkAssignModal.tsx` — adds / removes / replaces goals and sets category on a multi-select. No bulk endpoint exists:
-  it fans out over `PUT /api/activities/{id}`, resending unchanged fields from each activity (the PUT is a full replace).
+  it fans out over `PUT /api/activities/{id}`, resending unchanged fields from each activity (the PUT is a full replace,
+  `repeatAfterDays` included, which is why `activitiesApi.update` requires it).
 - `components/goals/GoalPicker.tsx` — toggle chips for an activity's goal set, used by `ActivityModal`,
   `BulkAssignModal` and `EventModal`. Options come from `pickableGoals` (`lib/goals.ts`): closed goals are
   offered only when already linked, so an edit never drops one silently.

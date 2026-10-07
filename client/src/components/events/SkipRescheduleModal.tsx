@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { occurrencesApi } from '@/lib/api'
 import type { Occurrence } from '@/lib/types'
 import { invalidateOccurrences } from '@/lib/invalidate'
+import { nextRepeatDate } from '@/lib/repeat'
 
 function formatDateInput(d: Date): string {
   const z = (n: number) => String(n).padStart(2, '0')
@@ -13,6 +14,10 @@ function formatDateInput(d: Date): string {
 
 function defaultDate(occurrence: Occurrence): string {
   const ref = occurrence.startAt ?? occurrence.endAt
+  const repeatAfterDays = occurrence.activity.repeatAfterDays
+  if (repeatAfterDays) {
+    return formatDateInput(nextRepeatDate(ref ? new Date(ref) : null, repeatAfterDays, new Date()))
+  }
   const base = ref ? new Date(ref) : new Date()
   base.setDate(base.getDate() + 1)
   return formatDateInput(base)

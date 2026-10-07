@@ -63,6 +63,7 @@ time. Activities are managed at `/activities`.
 | Kind | `activity` or `event`. Internal, never shown. |
 | Subtasks | Ordered checklist template, copied onto every new occurrence. |
 | Work types | Labels for the kinds of work a session can be split into. Not copied anywhere. |
+| Repeat after days | Optional, 1 to 365. The gap offered for the next occurrence when one is completed or skipped. Activity kind only. |
 
 Deleting an activity cascades to its occurrences. Deleting a category set-nulls the link and deleting
 a goal removes only that goal's link; either way the activity stays alive, with its other goals.
@@ -224,6 +225,31 @@ into the grid, and resized.
 **Skip with reschedule.** Marking an occurrence skipped opens a modal offering a new date, defaulting
 to the day after the occurrence's own. Confirming skips the original and creates a pending copy with
 the start/end shifted to the chosen date.
+
+**Do again.** An activity may carry a gap in days (`repeatAfterDays`). It never creates anything by
+itself: nothing is scheduled ahead, and an occurrence that is left alone produces no follow-up, so
+there is no series and no backlog to catch up on.
+
+- **On completion**, marking an occurrence of such an activity done also adds the next one: the
+  client follows the status change with `POST /api/occurrences/{id}/repeat`, which creates one pending
+  copy. The detail modal shows an "Again <date>" checkbox beside Done, ticked by default, and unticking
+  it completes without a copy. The one-tap checkbox on a list row always adds it. Either way a toast
+  names the date and offers Undo, which deletes the copy.
+- A pending occurrence of the same activity already on that day makes the endpoint a 409 and nothing
+  is added, so completing, re-opening and completing again leaves one copy, not two.
+- **The date** steps N days at a time from the occurrence's own day and stops at the first day after
+  today. A weekly occurrence due Monday therefore lands on next Monday whether it is done on Monday,
+  on Thursday, or three weeks late, and one done ahead of its date lands N days after that date. The
+  copy is never on today or in the past.
+- The copy keeps the title, the clock time and length, all-day, the planned flag the occurrence had
+  before it was completed, and the deadline link while its target is still pending. An all-day
+  occurrence moves by calendar date. One with no date at all has nothing to step from, so it becomes
+  an all-day planned occurrence on today + N. Subtasks come fresh from the activity's template; notes and the time split are not
+  copied.
+- The endpoint rejects an occurrence that is not done, an activity with no gap set, and events.
+  Re-opening the completed occurrence afterwards leaves the copy in place.
+- **On skip**, the skip modal's default date becomes that same date in place of the day after the
+  occurrence's own.
 
 **Duplicate.** The occurrence detail modal duplicates into a pre-filled create modal. No backend
 support is needed: it is a create with copied fields.

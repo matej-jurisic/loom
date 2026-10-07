@@ -65,10 +65,11 @@ public class ActivityService(LoomDbContext db)
 
     public async Task<Result<ActivityDto>> CreateAsync(Guid userId, CreateActivityRequest req)
     {
-        var err = Validators.ValidateTitle(req.Title, "Title");
+        var err = Validators.ValidateTitle(req.Title, "Title")
+            ?? Validators.ValidateRepeatAfterDays(req.RepeatAfterDays);
         if (err is not null) return Result<ActivityDto>.Fail(err);
 
-        var a = new Activity { UserId = userId, Title = req.Title.Trim() };
+        var a = new Activity { UserId = userId, Title = req.Title.Trim(), RepeatAfterDays = req.RepeatAfterDays };
 
         if (req.CategoryId.HasValue)
         {
@@ -89,7 +90,8 @@ public class ActivityService(LoomDbContext db)
 
     public async Task<Result<ActivityDto>> UpdateAsync(Guid id, Guid userId, UpdateActivityRequest req)
     {
-        var err = Validators.ValidateTitle(req.Title, "Title");
+        var err = Validators.ValidateTitle(req.Title, "Title")
+            ?? Validators.ValidateRepeatAfterDays(req.RepeatAfterDays);
         if (err is not null) return Result<ActivityDto>.Fail(err);
 
         var a = await db.Activities
@@ -101,6 +103,7 @@ public class ActivityService(LoomDbContext db)
         if (a is null) return Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."));
 
         a.Title = req.Title.Trim();
+        a.RepeatAfterDays = req.RepeatAfterDays;
 
         if (req.CategoryId.HasValue)
         {

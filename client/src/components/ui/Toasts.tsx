@@ -22,6 +22,14 @@ export function Toasts() {
             <CircleCheck className="h-4 w-4 shrink-0 text-primary" strokeWidth={2} />
           )}
           <p className="min-w-0 flex-1 text-sm text-foreground">{t.message}</p>
+          {t.action && (
+            <button
+              onClick={() => { dismiss(t.id); t.action!.onClick() }}
+              className="h-7 shrink-0 rounded-md px-2.5 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+            >
+              {t.action.label}
+            </button>
+          )}
           <button
             onClick={() => dismiss(t.id)}
             aria-label="Dismiss"

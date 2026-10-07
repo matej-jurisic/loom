@@ -38,6 +38,7 @@ public sealed record ActivityDto(
     List<GoalSummaryDto> Goals,
     List<ActivitySubtaskDto> Subtasks,
     List<ActivityWorkTypeDto> WorkTypes,
+    int? RepeatAfterDays,
     // How many occurrences this activity has in the recent window (see ActivityService.RecentWindowDays).
     // Only the list endpoint fills it; single-activity responses leave it at 0.
     int RecentOccurrenceCount = 0)
@@ -48,11 +49,12 @@ public sealed record ActivityDto(
         a.Goals.OrderBy(g => g.Status).ThenBy(g => g.Title).Select(GoalSummaryDto.FromEntity).ToList(),
         a.Subtasks.OrderBy(s => s.CreatedAt).Select(ActivitySubtaskDto.FromEntity).ToList(),
         a.WorkTypes.Where(w => !w.IsArchived).OrderBy(w => w.CreatedAt).Select(ActivityWorkTypeDto.FromEntity).ToList(),
+        a.RepeatAfterDays,
         recentOccurrenceCount);
 }
 
-public sealed record CreateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null);
-public sealed record UpdateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null);
+public sealed record CreateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null);
+public sealed record UpdateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null);
 
 // Activity subtasks (template)
 public sealed record ActivitySubtaskDto(Guid Id, Guid ActivityId, string Title, DateTimeOffset CreatedAt)
@@ -200,6 +202,7 @@ public sealed record PatchOccurrenceRequest(
     Optional<string?> Notes = default);
 
 public sealed record SetOccurrenceStatusRequest(EventStatus Status);
+public sealed record RepeatOccurrenceRequest(bool IsPlanned = false);
 
 // Goals
 public sealed record GoalOccurrenceStats(int Done, int Skipped, int Pending);

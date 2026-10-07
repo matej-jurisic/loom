@@ -9,6 +9,7 @@ import { WorkTypesSection } from '@/components/activities/WorkTypesSection'
 import { GoalPicker } from '@/components/goals/GoalPicker'
 import { pickableGoals } from '@/lib/goals'
 import { invalidateActivities } from '@/lib/invalidate'
+import { MAX_REPEAT_AFTER_DAYS, parseRepeatAfterDays } from '@/lib/repeat'
 
 interface ActivityModalProps {
   open: boolean
@@ -25,6 +26,8 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
   const [goalIds, setGoalIds] = useState(() => activity?.goals.map((g) => g.id) ?? [])
   const [categoryId, setCategoryId] = useState(activity?.categoryId ?? '')
   const [titleError, setTitleError] = useState('')
+  const [repeatDays, setRepeatDays] = useState(activity?.repeatAfterDays?.toString() ?? '')
+  const [repeatError, setRepeatError] = useState('')
   const [subtasks, setSubtasks] = useState(activity?.subtasks ?? [])
   const [newSubtask, setNewSubtask] = useState('')
   const newSubtaskRef = useRef<HTMLInputElement>(null)
@@ -35,6 +38,7 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
         title: title.trim(),
         goalIds,
         categoryId: categoryId || null,
+        repeatAfterDays: parseRepeatAfterDays(repeatDays) ?? null,
       }
       return isEdit ? activitiesApi.update(activity!.id, body) : activitiesApi.create(body)
     },
@@ -58,6 +62,11 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
     if (!title.trim()) { setTitleError('Title is required.'); return }
     if (title.length > 255) { setTitleError('Title cannot exceed 255 characters.'); return }
     setTitleError('')
+    if (parseRepeatAfterDays(repeatDays) === undefined) {
+      setRepeatError(`Enter a whole number of days from 1 to ${MAX_REPEAT_AFTER_DAYS}, or leave it empty.`)
+      return
+    }
+    setRepeatError('')
     mutation.mutate()
   }
 
@@ -121,6 +130,28 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
           </select>
         </div>
       )}
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="activity-repeat-days" className="text-sm font-medium text-foreground">
+          Do again after <span className="font-normal text-muted-foreground">(optional)</span>
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            id="activity-repeat-days"
+            type="text"
+            inputMode="numeric"
+            placeholder="Off"
+            value={repeatDays}
+            onChange={(e) => setRepeatDays(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
+            className={`h-10 w-20 rounded-lg border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
+              repeatError ? 'border-destructive' : 'border-input'
+            }`}
+          />
+          <span className="text-sm text-muted-foreground">days</span>
+        </div>
+        {repeatError && <p className="text-xs text-destructive">{repeatError}</p>}
+      </div>
 
       {isEdit && (
         <div className="flex flex-col gap-2">

@@ -39,6 +39,31 @@ public class OccurrenceTests : IDisposable
     }
 
     [Fact]
+    public async Task RepeatOccurrence_CreatesPendingCopyOnlyOnceDone()
+    {
+        var token = await _client.SetupUserAsync();
+        _client.UseBearer(token);
+        var activityRes = await _client.PostAsJsonAsync("/api/activities", new { title = "Water plants", repeatAfterDays = 7 });
+        var activityId = (await activityRes.ReadAsync<ActivityDto>()).Id;
+        var start = DateTimeOffset.UtcNow.AddHours(-1);
+        var created = await (await _client.PostAsJsonAsync("/api/occurrences", new { activityId, startAt = start }))
+            .ReadAsync<OccurrenceDto>();
+
+        var early = await _client.PostAsJsonAsync($"/api/occurrences/{created.Id}/repeat", new { isPlanned = false });
+        Assert.Equal(HttpStatusCode.BadRequest, early.StatusCode);
+
+        await _client.PostAsJsonAsync($"/api/occurrences/{created.Id}/status", new { status = "done" });
+        var res = await _client.PostAsJsonAsync($"/api/occurrences/{created.Id}/repeat", new { isPlanned = false });
+
+        Assert.Equal(HttpStatusCode.Created, res.StatusCode);
+        var copy = await res.ReadAsync<OccurrenceDto>();
+        Assert.NotEqual(created.Id, copy.Id);
+        Assert.Equal(activityId, copy.ActivityId);
+        Assert.Equal("pending", copy.Status);
+        Assert.True(copy.StartAt > start.AddDays(5));
+    }
+
+    [Fact]
     public async Task CreateFloatingOccurrence_AppearsInFloatingFilter()
     {
         var token = await _client.SetupUserAsync();

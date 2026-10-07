@@ -48,6 +48,15 @@ public static class DayMath
     public static DateTimeOffset EndOfDay(DateOnly day, DayContext ctx) =>
         LocalToInstant(day.AddDays(1).ToDateTime(ctx.DayBoundary), ctx.TimeZone);
 
+    public static DateOnly LocalDate(DateTimeOffset instant, DayContext ctx) =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, ctx.TimeZone).DateTime);
+
+    public static DateTimeOffset Midnight(DateOnly date, DayContext ctx) =>
+        LocalToInstant(date.ToDateTime(TimeOnly.MinValue), ctx.TimeZone);
+
+    public static DateTimeOffset AddLocalDays(DateTimeOffset instant, int days, DayContext ctx) =>
+        LocalToInstant(TimeZoneInfo.ConvertTime(instant, ctx.TimeZone).DateTime.AddDays(days), ctx.TimeZone);
+
     /// <summary>
     /// A wall-clock time that a spring-forward transition skips never happens, so the boundary is the
     /// first instant that does: the end of the gap. (Using the pre-gap offset instead would land the

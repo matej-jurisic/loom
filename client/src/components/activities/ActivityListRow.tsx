@@ -1,8 +1,9 @@
-import { Check, History, Pencil, Trash2 } from 'lucide-react'
+import { Check, History, Pencil, Repeat, Trash2 } from 'lucide-react'
 import type { Activity } from '@/lib/types'
 import { Badge } from '@/components/ui/Badge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
+import { daysLabel } from '@/lib/repeat'
 
 const GOAL_TONE: Record<string, 'focus' | 'active' | 'bench' | 'neutral'> = {
   focus: 'focus',
@@ -41,7 +42,7 @@ export function ActivityListRow({
 
   const showCategory = !hideCategory && category
   const goals = activity.goals.filter((g) => g.id !== hiddenGoalId)
-  const hasMeta = showCategory || goals.length > 0 || activity.subtasks.length > 0
+  const hasMeta = showCategory || goals.length > 0 || activity.subtasks.length > 0 || activity.repeatAfterDays
 
   return (
     <li
@@ -105,6 +106,12 @@ export function ActivityListRow({
               <span className="text-xs text-muted-foreground">
                 {activity.subtasks.length}{' '}
                 {activity.subtasks.length === 1 ? 'subtask' : 'subtasks'}
+              </span>
+            )}
+            {activity.repeatAfterDays && (
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Repeat className="h-3 w-3 shrink-0" strokeWidth={2} />
+                again after {daysLabel(activity.repeatAfterDays)}
               </span>
             )}
             {goals.map((g) => (

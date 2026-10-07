@@ -123,6 +123,7 @@ export interface Activity {
   goals: GoalSummary[]
   subtasks: ActivitySubtask[]
   workTypes: ActivityWorkType[]
+  repeatAfterDays: number | null
   /** Occurrences in the last year. Only the list endpoint fills it; single-activity responses send 0. */
   recentOccurrenceCount: number
 }

@@ -15,6 +15,7 @@ import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Activity, Occurrence, OccurrenceSubtask, EventStatus } from '@/lib/types'
 import { invalidateOccurrences } from '@/lib/invalidate'
+import { addNextOccurrence, formatDay, nextRepeatFor } from '@/lib/repeat'
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
@@ -98,9 +99,15 @@ export function EventDetailModal({ open, onClose, event: occurrence, onEdit, onS
   const moreMenuRef = useRef<HTMLDivElement>(null)
   const [localSubtasks, setLocalSubtasks] = useState<OccurrenceSubtask[]>(() => occurrence?.subtasks ?? [])
 
+  const [addNext, setAddNext] = useState(true)
+
   useEffect(() => {
     setLocalSubtasks(occurrence?.subtasks ?? [])
   }, [occurrence?.subtasks])
+
+  useEffect(() => {
+    setAddNext(true)
+  }, [occurrence?.id])
 
   useEffect(() => {
     if (!moreOpen) return
@@ -139,8 +146,10 @@ export function EventDetailModal({ open, onClose, event: occurrence, onEdit, onS
 
 const statusMutation = useMutation({
     mutationFn: (status: EventStatus) => occurrencesApi.setStatus(occurrence!.id, status),
-    onSuccess: () => {
+    onMutate: () => ({ source: occurrence! }),
+    onSuccess: (_updated, status, ctx) => {
       invalidateOccurrences(qc)
+      if (status === 'done' && addNext) addNextOccurrence(qc, ctx.source)
       onClose()
     },
     onError: (err) => toastError(err, 'Could not update the status.'),
@@ -206,6 +215,7 @@ const statusMutation = useMutation({
   const timeLabel = formatOccurrenceTime(occurrence)
   const category = occurrence.activity.category
   const goals = occurrence.activity.goals
+  const nextRepeat = isPending ? nextRepeatFor(occurrence) : null
 
   return (
     <Modal
@@ -322,6 +332,26 @@ const statusMutation = useMutation({
 
           {isPending ? (
             <>
+              {nextRepeat && (
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={addNext}
+                  onClick={() => setAddNext((v) => !v)}
+                  disabled={busy}
+                  title="Add the next occurrence when this one is done"
+                  className="flex h-9 min-w-0 items-center gap-1.5 rounded-lg px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                >
+                  <span
+                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors ${
+                      addNext ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background'
+                    }`}
+                  >
+                    {addNext && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                  </span>
+                  <span className="truncate">Again {formatDay(nextRepeat)}</span>
+                </button>
+              )}
               <Button
                 onClick={() => statusMutation.mutate('done')}
                 loading={statusMutation.isPending && statusMutation.variables === 'done'}

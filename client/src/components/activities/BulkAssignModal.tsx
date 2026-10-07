@@ -59,6 +59,7 @@ export function BulkAssignModal({
             goalIds: nextGoalIds(a.goals.map((g) => g.id), goalMode, pickedGoalIds),
             categoryId:
               categoryId === KEEP ? a.categoryId : categoryId === CLEAR ? null : categoryId,
+            repeatAfterDays: a.repeatAfterDays,
           }),
         ),
       ),

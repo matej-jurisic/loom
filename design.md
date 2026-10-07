@@ -198,6 +198,13 @@ The same list is editable in the Edit Activity dialog (below Subtasks, existing 
 - `Toasts` viewport (bottom-center, above the mobile bottom nav) + `useToastStore` / `toastError` in `store/toasts.ts`.
 - Card-style pill: `border border-border bg-card shadow-pop`, tone icon (destructive alert / primary check), auto-dismiss after 5s, manual dismiss X.
 - Used for mutation failures that have no inline error display (status toggles, deletes, calendar drag reschedules).
+- A toast may carry **one action**: a text button in `text-primary` (`h-7 px-2.5 rounded-md`, hover `bg-primary/10`) between the message and the X. Pressing it dismisses the toast. The only user is the confirmation after completing an occurrence of a repeating activity ("Next one added for Wed, Oct 14." with `Undo`). The app never asks whether to add it: the question was answered when the interval was set.
+
+### Repeat interval
+
+- **Edit / New Activity dialog:** "Do again after (optional)" under Category: a `w-20` numeric input with a muted `days` suffix and placeholder `Off`. Empty means off; an invalid value turns the border destructive and shows the error below in `text-xs text-destructive`.
+- **Occurrence detail modal:** while the occurrence is pending and its activity has an interval, a checkbox sits directly left of `Done` in the footer: the standard `h-4 w-4 rounded-[4px]` box (primary fill and check when on) with "Again Wed, Oct 14" in `text-xs text-muted-foreground`. Ticked by default every time the modal opens on an occurrence.
+- **Activity row:** a `Repeat` icon and "again after 7 days" in the meta line, `text-xs text-muted-foreground`, before the goal badges.
 
 ### Failure states
 

@@ -18,6 +18,13 @@ public static class Validators
             ? new Error(ErrorType.Validation, $"Notes cannot exceed {MaxNotesLength} characters.")
             : null;
 
+    public const int MaxRepeatAfterDays = 365;
+
+    public static Error? ValidateRepeatAfterDays(int? days) =>
+        days is < 1 or > MaxRepeatAfterDays
+            ? new Error(ErrorType.Validation, $"Repeat interval must be between 1 and {MaxRepeatAfterDays} days.")
+            : null;
+
     public static Error? ValidateColor(string? color)
     {
         if (string.IsNullOrWhiteSpace(color))
