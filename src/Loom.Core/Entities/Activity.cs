@@ -15,6 +15,7 @@ public class Activity
     public User User { get; set; } = null!;
     public Category? Category { get; set; }
     public List<Goal> Goals { get; set; } = [];
+    public List<Tag> Tags { get; set; } = [];
     public List<ActivitySubtask> Subtasks { get; set; } = [];
     public List<ActivityWorkType> WorkTypes { get; set; } = [];
 }

@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/store/auth'
 import { getServerUrl, isNative, getNativeRefreshToken, setNativeRefreshToken } from './server-config'
-import type { AuthResponse, User, Goal, GoalStatus, GoalHeatmap, Checkpoint, CheckpointStatus, UserSettings, Category, Activity, ActivitySubtask, ActivityWorkType, Occurrence, Insights } from './types'
+import type { AuthResponse, User, Goal, GoalStatus, GoalHeatmap, Checkpoint, CheckpointStatus, UserSettings, Category, Tag, Activity, ActivitySubtask, ActivityWorkType, Occurrence, Insights } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -86,16 +86,17 @@ export async function request<T>(path: string, init: RequestInit = {}, retry = t
 export const activitiesApi = {
   get: (id: string) => request<Activity>(`/api/activities/${id}`),
 
-  list: (params?: { goalId?: string }) => {
+  list: (params?: { goalId?: string; tagId?: string }) => {
     const q = new URLSearchParams()
     if (params?.goalId) q.set('goalId', params.goalId)
+    if (params?.tagId) q.set('tagId', params.tagId)
     return request<Activity[]>(`/api/activities${q.size ? `?${q}` : ''}`)
   },
 
-  create: (body: { title: string; categoryId?: string | null; goalIds?: string[]; repeatAfterDays?: number | null }) =>
+  create: (body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds?: string[]; repeatAfterDays?: number | null }) =>
     request<Activity>('/api/activities', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; repeatAfterDays: number | null }) =>
+  update: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds: string[]; repeatAfterDays: number | null }) =>
     request<Activity>(`/api/activities/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 
   delete: (id: string) => request<void>(`/api/activities/${id}`, { method: 'DELETE' }),
@@ -242,6 +243,15 @@ export const categoriesApi = {
   update: (id: string, body: { name: string; color: string; icon?: string | null }) =>
     request<Category>(`/api/categories/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   delete: (id: string) => request<void>(`/api/categories/${id}`, { method: 'DELETE' }),
+}
+
+export const tagsApi = {
+  list: () => request<Tag[]>('/api/tags'),
+  create: (body: { name: string }) =>
+    request<Tag>('/api/tags', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: { name: string }) =>
+    request<Tag>(`/api/tags/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  delete: (id: string) => request<void>(`/api/tags/${id}`, { method: 'DELETE' }),
 }
 
 export const insightsApi = {

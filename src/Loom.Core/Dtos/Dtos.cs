@@ -26,6 +26,14 @@ public sealed record GoalSummaryDto(Guid Id, string Title, string Status)
     public static GoalSummaryDto FromEntity(Goal g) => new(g.Id, g.Title, g.Status.ToString());
 }
 
+public sealed record TagDto(Guid Id, string Name)
+{
+    public static TagDto FromEntity(Tag t) => new(t.Id, t.Name);
+}
+
+public sealed record CreateTagRequest(string Name);
+public sealed record UpdateTagRequest(string Name);
+
 // Activities
 public sealed record ActivityDto(
     Guid Id,
@@ -36,6 +44,7 @@ public sealed record ActivityDto(
     DateTimeOffset CreatedAt,
     CategorySummaryDto? Category,
     List<GoalSummaryDto> Goals,
+    List<TagDto> Tags,
     List<ActivitySubtaskDto> Subtasks,
     List<ActivityWorkTypeDto> WorkTypes,
     int? RepeatAfterDays,
@@ -47,14 +56,15 @@ public sealed record ActivityDto(
         a.Id, a.UserId, a.Title, a.CategoryId, a.Kind.ToString(), a.CreatedAt,
         a.Category is not null ? CategorySummaryDto.FromEntity(a.Category) : null,
         a.Goals.OrderBy(g => g.Status).ThenBy(g => g.Title).Select(GoalSummaryDto.FromEntity).ToList(),
+        a.Tags.OrderBy(t => t.Name).Select(TagDto.FromEntity).ToList(),
         a.Subtasks.OrderBy(s => s.CreatedAt).Select(ActivitySubtaskDto.FromEntity).ToList(),
         a.WorkTypes.Where(w => !w.IsArchived).OrderBy(w => w.CreatedAt).Select(ActivityWorkTypeDto.FromEntity).ToList(),
         a.RepeatAfterDays,
         recentOccurrenceCount);
 }
 
-public sealed record CreateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null);
-public sealed record UpdateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null);
+public sealed record CreateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null, List<Guid>? TagIds = null);
+public sealed record UpdateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null, List<Guid>? TagIds = null);
 
 // Activity subtasks (template)
 public sealed record ActivitySubtaskDto(Guid Id, Guid ActivityId, string Title, DateTimeOffset CreatedAt)
@@ -149,7 +159,8 @@ public sealed record OccurrenceDto(
     Guid? DeadlineOccurrenceId = null,
     DeadlineRefDto? Deadline = null,
     int LinkedDoneCount = 0,
-    int LinkedDoneMinutes = 0)
+    int LinkedDoneMinutes = 0,
+    bool IsBehind = false)
 {
     public static OccurrenceDto FromEntity(Occurrence o, DayContext ctx, DateTimeOffset nowUtc) => new(
         o.Id, o.UserId, o.ActivityId, o.Title, o.Notes,
@@ -163,7 +174,8 @@ public sealed record OccurrenceDto(
         o.Subtasks.OrderBy(s => s.CreatedAt).Select(OccurrenceSubtaskDto.FromEntity).ToList(),
         TimeSplitDto.FromOccurrence(o),
         ActivityDto.FromEntity(o.Activity),
-        o.DeadlineOccurrenceId);
+        o.DeadlineOccurrenceId,
+        IsBehind: DayMath.IsBehind(o, ctx, nowUtc));
 }
 
 public sealed record DeadlineRefDto(
@@ -325,6 +337,7 @@ public sealed record ExportDto(
     UserDto User,
     UserSettingsDto Settings,
     List<CategoryDto> Categories,
+    List<TagDto> Tags,
     List<GoalDto> Goals,
     List<ActivityDto> Activities,
     List<ExportOccurrenceDto> Occurrences);

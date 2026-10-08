@@ -20,7 +20,13 @@ export function invalidateGoals(qc: QueryClient) {
   qc.invalidateQueries({ queryKey: ['events'] })
 }
 
+export function invalidateTags(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: ['tags'] })
+  invalidateActivities(qc)
+}
+
 export function invalidateAll(qc: QueryClient) {
   invalidateWorkTypes(qc)
   qc.invalidateQueries({ queryKey: ['goals'] })
+  qc.invalidateQueries({ queryKey: ['tags'] })
 }

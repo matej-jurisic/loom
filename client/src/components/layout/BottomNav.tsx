@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { ClipboardList, CalendarDays, Tags, Target, Layers, Settings, ChartColumn, Ellipsis } from 'lucide-react'
+import { ClipboardList, CalendarDays, Hash, ListTodo, Shapes, Target, Layers, Settings, ChartColumn, Ellipsis } from 'lucide-react'
 
 const tabs = [
   { to: '/plan',       label: 'Plan',       Icon: ClipboardList },
   { to: '/activities', label: 'Activities', Icon: Layers },
   { to: '/calendar',   label: 'Calendar',   Icon: CalendarDays },
-  { to: '/goals',      label: 'Goals',      Icon: Target },
+  { to: '/occurrences', label: 'Occurrences', Icon: ListTodo },
 ]
 
 const moreItems = [
-  { to: '/categories', label: 'Categories', Icon: Tags },
+  { to: '/goals',      label: 'Goals',      Icon: Target },
+  { to: '/categories', label: 'Categories', Icon: Shapes },
+  { to: '/tags',       label: 'Tags',       Icon: Hash },
   { to: '/insights',   label: 'Insights',   Icon: ChartColumn },
   { to: '/settings',   label: 'Settings',   Icon: Settings },
 ]

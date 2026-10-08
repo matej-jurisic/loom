@@ -2,11 +2,12 @@ import { useState, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { activitiesApi, activitySubtasksApi } from '@/lib/api'
-import type { Activity, Goal, Category } from '@/lib/types'
+import type { Activity, Goal, Category, Tag } from '@/lib/types'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { WorkTypesSection } from '@/components/activities/WorkTypesSection'
 import { GoalPicker } from '@/components/goals/GoalPicker'
+import { TagPicker } from '@/components/tags/TagPicker'
 import { pickableGoals } from '@/lib/goals'
 import { invalidateActivities } from '@/lib/invalidate'
 import { MAX_REPEAT_AFTER_DAYS, parseRepeatAfterDays } from '@/lib/repeat'
@@ -17,13 +18,15 @@ interface ActivityModalProps {
   activity?: Activity
   goals: Goal[]
   categories: Category[]
+  tags: Tag[]
 }
 
-export function ActivityModal({ open, onClose, activity, goals, categories }: ActivityModalProps) {
+export function ActivityModal({ open, onClose, activity, goals, categories, tags }: ActivityModalProps) {
   const qc = useQueryClient()
   const isEdit = Boolean(activity)
   const [title, setTitle] = useState(activity?.title ?? '')
   const [goalIds, setGoalIds] = useState(() => activity?.goals.map((g) => g.id) ?? [])
+  const [tagIds, setTagIds] = useState(() => activity?.tags.map((t) => t.id) ?? [])
   const [categoryId, setCategoryId] = useState(activity?.categoryId ?? '')
   const [titleError, setTitleError] = useState('')
   const [repeatDays, setRepeatDays] = useState(activity?.repeatAfterDays?.toString() ?? '')
@@ -37,6 +40,7 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
       const body = {
         title: title.trim(),
         goalIds,
+        tagIds,
         categoryId: categoryId || null,
         repeatAfterDays: parseRepeatAfterDays(repeatDays) ?? null,
       }
@@ -130,6 +134,13 @@ export function ActivityModal({ open, onClose, activity, goals, categories }: Ac
           </select>
         </div>
       )}
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-foreground">
+          Tags <span className="font-normal text-muted-foreground">(optional)</span>
+        </span>
+        <TagPicker tags={tags} value={tagIds} onChange={setTagIds} />
+      </div>
 
       <div className="flex flex-col gap-1.5">
         <label htmlFor="activity-repeat-days" className="text-sm font-medium text-foreground">

@@ -112,6 +112,11 @@ export interface TimeSplitRow {
   isPinned: boolean
 }
 
+export interface Tag {
+  id: string
+  name: string
+}
+
 export interface Activity {
   id: string
   userId: string
@@ -121,6 +126,7 @@ export interface Activity {
   createdAt: string
   category: CategorySummary | null
   goals: GoalSummary[]
+  tags: Tag[]
   subtasks: ActivitySubtask[]
   workTypes: ActivityWorkType[]
   repeatAfterDays: number | null
@@ -142,6 +148,7 @@ export interface Occurrence {
   isPlanned: boolean
   createdAt: string
   isOverdue: boolean
+  isBehind: boolean
   subtasks: OccurrenceSubtask[]
   timeSplit: TimeSplitRow[]
   activity: Activity

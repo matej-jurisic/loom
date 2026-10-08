@@ -91,4 +91,13 @@ public static class DayMath
         }
         return EndOfDay(DayOf(o.StartAt.Value, ctx), ctx) <= nowUtc;
     }
+
+    public static bool IsBehind(Occurrence o, DayContext ctx, DateTimeOffset nowUtc)
+    {
+        if (o.Status != EventStatus.pending) return false;
+        var reference = o.StartAt ?? o.EndAt;
+        if (reference is null) return false;
+        if (DayOf(reference.Value, ctx) < Today(ctx, nowUtc)) return true;
+        return o.StartAt is null && o.EndAt!.Value < nowUtc;
+    }
 }

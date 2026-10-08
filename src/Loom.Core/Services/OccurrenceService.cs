@@ -636,6 +636,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         db.Activities
             .Include(a => a.Category)
             .Include(a => a.Goals)
+            .Include(a => a.Tags)
             .Include(a => a.Subtasks)
             .Include(a => a.WorkTypes)
             .FirstOrDefaultAsync(a => a.Id == activityId && a.UserId == userId);
@@ -644,6 +645,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         db.Occurrences
             .Include(o => o.Activity).ThenInclude(a => a.Category)
             .Include(o => o.Activity).ThenInclude(a => a.Goals)
+            .Include(o => o.Activity).ThenInclude(a => a.Tags)
             .Include(o => o.Activity).ThenInclude(a => a.Subtasks)
             .Include(o => o.Activity).ThenInclude(a => a.WorkTypes)
             .Include(o => o.Subtasks)

@@ -78,7 +78,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 
 **Backend (`Loom.Core`)**
 - `Entities/` — POCOs; `Guid Id = Guid.NewGuid()` + `DateTimeOffset CreatedAt`, no base class.
-  Entities: `User, Activity, Occurrence, Goal, Checkpoint, Category, UserSettings, ActivitySubtask,
+  Entities: `User, Activity, Occurrence, Goal, Checkpoint, Category, Tag, UserSettings, ActivitySubtask,
   OccurrenceSubtask, ActivityWorkType, OccurrenceTimeSplit` (subtasks are two levels:
   `ActivitySubtask` is the title-only template, copied into `OccurrenceSubtask` rows — which carry
   `IsDone` — when an occurrence is created. Work types are **not** copied: `ActivityWorkType` is a
@@ -91,6 +91,9 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   event paths in `OccurrenceService`. Query it with `a.Goals.Any(...)`; a filtered `SelectMany` over it
   needs SQL APPLY, which SQLite lacks (see `GoalService` for the join form that translates).
   **Per-goal figures count an occurrence once per goal; anything summed across goals counts it once.**
+  `Activity.Tags` is the same shape through `ActivityTags`, written only by `ActivityService`
+  (`ResolveTagsAsync`); every query that builds an `ActivityDto` must `.Include(a => a.Tags)`.
+  The activity PUT is a full replace, so a caller that omits `tagIds` clears the tags.
 - `Common/Result.cs` — `Result`/`Result<T>` + `Error(ErrorType, msg)`. **Expected failures = Results, not exceptions.**
 - `Common/Validators.cs` — shared static validation rules.
 - `Common/DayMath.cs` — all "which day / is this overdue?" logic goes through here, in the user's IANA
@@ -156,16 +159,15 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 
 **Frontend (`client/src`)**
 - `App.tsx` — auth-gated routing; index → `/plan`.
-- `pages/` — `PlanPage` (**this is `/plan`**), `CalendarPage`, `CategoriesPage`,
+- `pages/` — `PlanPage` (**this is `/plan`**), `CalendarPage`, `OccurrencesPage`, `CategoriesPage`, `TagsPage`,
   `GoalsPage` (**this is `/goals`**), `ActivitiesPage`,
   `InsightsPage`, `SettingsPage`.
-- `pages/CategoriesPage.tsx` — desktop always shows the filtered occurrence list (nav is the
-  sidebar's category list). On mobile, bare `/categories` (no query params) renders a full-page
-  category list instead — `isRoot` in the component — with the header's `+` creating a category;
-  tapping an entry (`?all=true`, `?category=none` for "No category", or `?category=<id>`) switches
-  to the same occurrence-list view desktop uses, now with a back chevron in place of the `+`'s
-  sibling. `?category=none` exists only for this mobile round-trip; bare `/categories` already means
-  "no category" on desktop since the sidebar is always visible there.
+- `pages/OccurrencesPage.tsx` — **the only occurrence list view** (`/occurrences`). Status, category, tag
+  and goal filters live in the URL; the grouping (`when` / category / tag / goal / activity / none) in
+  `localStorage`. Everything runs in the client over `['events', 'all']`; `lib/occurrenceView.ts` holds the
+  pure parts (`filterOccurrences`, `groupOccurrences`, `classify`, `formatOccurrenceDate`) and has the
+  vitest cases. `pages/CategoriesPage.tsx` and `pages/TagsPage.tsx` are management lists only and link
+  to it with `?category=` / `?tag=`.
 - `lib/api.ts` — `request<T>` (bearer + one-shot 401 refresh). Key namespaces: `activitiesApi`, `occurrencesApi`, `categoriesApi`, `goalsApi`, `checkpointsApi`, `insightsApi`.
 - `lib/types.ts` — mirrors backend DTOs. Key types: `Activity`, `Occurrence` (has `effectiveTitle`), `Goal`, `Category`, `Insights`.
 - `lib/goals.ts` — `recencyLabel`/`isStale` over the server's `daysSinceLastOccurrence` (Goals page and Plan chips); `lib/useMediaQuery.ts` — `matchMedia` as a hook.
@@ -190,6 +192,9 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `components/activities/BulkAssignModal.tsx` — adds / removes / replaces goals and sets category on a multi-select. No bulk endpoint exists:
   it fans out over `PUT /api/activities/{id}`, resending unchanged fields from each activity (the PUT is a full replace,
   `repeatAfterDays` included, which is why `activitiesApi.update` requires it).
+- `components/tags/TagPicker.tsx` — toggle chips plus a create-on-Enter input; used by `ActivityModal`.
+  `TagModal.tsx` adds / renames from the Tags page. `BulkAssignModal` resends each
+  activity's `tagIds` (the PUT would otherwise wipe them).
 - `components/goals/GoalPicker.tsx` — toggle chips for an activity's goal set, used by `ActivityModal`,
   `BulkAssignModal` and `EventModal`. Options come from `pickableGoals` (`lib/goals.ts`): closed goals are
   offered only when already linked, so an edit never drops one silently.
@@ -228,10 +233,10 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `lib/api.ts` — ⚠️ `tryRefresh()` returns `'ok' | 'denied' | 'unreachable'`, **not a boolean**. Only `denied`
   may sign the user out; `unreachable` (no response, or 5xx) must keep the session. `request` turns a
   network failure into `ApiError(0, ...)`.
-- `components/layout/Sidebar.tsx` — desktop nav: five page items, then the category list (`Active` =
-  `/categories?all=true`, `No category`, one per category with inline add/edit/delete), Settings pinned at the bottom.
-- `components/layout/BottomNav.tsx` — mobile nav: 4 tabs (Plan, Activities, Calendar, Goals) + "More"
-  bottom sheet (Categories, Insights, Settings). Max 5 slots; new pages go in the sheet.
+- `components/layout/Sidebar.tsx` — desktop nav: eight page items (including Categories and Tags), a "By category" list of links to
+  `/occurrences?category=<id>` (read-only; management is `CategoriesPage`), and Settings pinned at the bottom.
+- `components/layout/BottomNav.tsx` — mobile nav: 4 tabs (Plan, Activities, Calendar, Occurrences) + "More"
+  bottom sheet (Goals, Categories, Tags, Insights, Settings). Max 5 slots; new pages go in the sheet.
 - `components/layout/LoomMark.tsx` — the brand mark (fill-based weave glyph, not a stroked lucide
   icon), used in `Sidebar.tsx` and both auth pages. The geometry lives once in `lib/brandMark.json`;
   `npm run gen:brand` (`client/scripts/gen-brand.mjs`) regenerates `public/favicon.svg` and
@@ -328,12 +333,13 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - **Enums as strings** in DB and on the frontend.
 - **Theming:** semantic CSS variables in `index.css` → Tailwind via `@theme inline`. Never hardcode
   `bg-slate-*` / `text-*-600`. Dark mode = `.dark` on `<html>`, controlled by `lib/theme.ts`.
-- **Day math is server-side.** The client consumes `occurrence.isOverdue`; it never recomputes overdue
-  locally. Purely presentational date formatting may stay client-side. The one deliberate exception is
-  **"behind you"** — pending and dated before today — which is strictly wider than `isOverdue`
-  (`DayMath.IsOverdue` returns `false` for anything `IsPlanned`). It backs the calendar's DUE row
-  (`dueRowRef`) and the Plan page's Unfinished section (`isBehind`), so a planned occurrence that
-  slipped stays visible without being styled as late.
+- **Day math is server-side.** The client consumes `occurrence.isOverdue` and `occurrence.isBehind`; it
+  never recomputes them locally. Purely presentational date formatting may stay client-side.
+  **"Behind you"** (`DayMath.IsBehind`) is pending and dated before today, plus a deadline-only
+  occurrence whose end has passed. It differs from `isOverdue`: `DayMath.IsOverdue` is `false` for
+  anything `IsPlanned`, and something overdue earlier today is not behind you. It backs the Plan
+  page's Unfinished section, so a planned occurrence that slipped stays visible without being styled
+  as late. The calendar's DUE row still computes its own client-side version (`dueRowRef`).
 - **`PATCH /api/occurrences/{id}` is a partial update**: `PatchOccurrenceRequest` fields are
   `Optional<T>` (`Common/Optional.cs`), so a field absent from the JSON is kept and an explicit `null`
   clears it (title, notes, start, end, deadline). `ActivityId` re-points and cannot be cleared; `IsAllDay` and
@@ -344,13 +350,12 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   `components/ui/ActionMenu.tsx` (portal + flip), not hand-rolled absolute menus.
 - **Frontend:** `verbatimModuleSyntax` — use `import type` for type-only imports. TanStack Query for
   server state; Zustand for auth (access token in memory).
-- **Query keys:** every occurrence list lives under `['events', ...]` (`['events', 'all']` for Categories page + nav
-  badge, `['events', 'calendar', ...]` for calendar ranges, `['events', 'activity', id]` for one activity's history).
+- **Query keys:** every occurrence list lives under `['events', ...]` (`['events', 'all']` for the Occurrences page, `['events', 'calendar', ...]` for calendar ranges, `['events', 'activity', id]` for one activity's history).
   After any occurrence write invalidate `['events']` (a time split write also `['insights']`). After any activity write invalidate `['activities']`
   **and `['events']`** (occurrences embed their activity: its title feeds `effectiveTitle` and its category
   feeds every row and calendar block's colour). After any goal write also invalidate `['goals']`.
   Never call `invalidateQueries` for these directly: use the helpers in `lib/invalidate.ts`
-  (`invalidateOccurrences`, `invalidateActivities`, `invalidateWorkTypes`, `invalidateGoals`, `invalidateAll`).
+  (`invalidateOccurrences`, `invalidateActivities`, `invalidateWorkTypes`, `invalidateGoals`, `invalidateTags`, `invalidateAll`).
 - **Design:** see `design.md`. Use semantic color tokens, not hardcoded values.
 
 ## Gotchas

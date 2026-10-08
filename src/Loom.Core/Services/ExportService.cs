@@ -17,12 +17,14 @@ public class ExportService(LoomDbContext db)
             ?? new UserSettings { UserId = userId };
 
         var categories = await db.Categories.Where(c => c.UserId == userId).ToListAsync();
+        var tags = await db.Tags.Where(t => t.UserId == userId).ToListAsync();
         var goals = await db.Goals.Include(g => g.Checkpoints).Where(g => g.UserId == userId).ToListAsync();
         var activities = await db.Activities
             .Include(a => a.Subtasks)
             .Include(a => a.WorkTypes)
             .Include(a => a.Category)
             .Include(a => a.Goals)
+            .Include(a => a.Tags)
             .Where(a => a.UserId == userId)
             .ToListAsync();
         var occurrences = await db.Occurrences
@@ -37,6 +39,7 @@ public class ExportService(LoomDbContext db)
             UserDto.FromEntity(user),
             UserSettingsDto.FromEntity(settings, user.Timezone),
             categories.OrderBy(c => c.CreatedAt).Select(CategoryDto.FromEntity).ToList(),
+            tags.OrderBy(t => t.CreatedAt).Select(TagDto.FromEntity).ToList(),
             goals.OrderBy(g => g.CreatedAt).Select(g => GoalDto.FromEntity(g)).ToList(),
             activities.OrderBy(a => a.CreatedAt).Select(a => ActivityDto.FromEntity(a)).ToList(),
             occurrences.OrderBy(o => o.CreatedAt).Select(ExportOccurrenceDto.FromEntity).ToList()));

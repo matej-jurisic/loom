@@ -60,19 +60,27 @@ time. Activities are managed at `/activities`.
 | Title | Required, max 255 characters |
 | Goals | Optional, any number. An occurrence of the activity counts toward every one of them. |
 | Category | Optional |
+| Tags | Optional, any number. Free-form labels for grouping and searching, such as a course name. |
 | Kind | `activity` or `event`. Internal, never shown. |
 | Subtasks | Ordered checklist template, copied onto every new occurrence. |
 | Work types | Labels for the kinds of work a session can be split into. Not copied anywhere. |
 | Repeat after days | Optional, 1 to 365. The gap offered for the next occurrence when one is completed or skipped. Activity kind only. |
 
 Deleting an activity cascades to its occurrences. Deleting a category set-nulls the link and deleting
-a goal removes only that goal's link; either way the activity stays alive, with its other goals.
+a goal or a tag removes only that link; either way the activity stays alive, with its other goals and tags.
 
 The goal link is many-to-many (`ActivityGoals`). Create and update take the full set as `goalIds`
 (absent or empty means none), and responses carry `goals`, ordered by status then title. Per-goal
 figures therefore overlap: an occurrence on an activity with two goals is in both goals' counts,
 heatmaps and history, so they are never presented as parts of a total. Anything summed *across*
 goals counts the occurrence once.
+
+The tag link is many-to-many (`ActivityTags`), shaped like the goal link: create and update take the
+full set as `tagIds` (absent or empty means none) and responses carry `tags`, ordered by name. Tags
+belong to the user and are managed at `/api/tags` (list, create, rename, delete). A name is unique per
+user ignoring case; a clash is a 409. Tags exist only on activities of kind `activity`; the event
+endpoints leave them alone. `GET /api/activities` takes an optional `tagId` filter beside `goalId`.
+A tag has no status, colour or archive: it groups and searches, nothing more.
 
 `GET /api/activities` also returns a derived `recentOccurrenceCount` per activity: its occurrences in
 the last 365 days, each counted from its start, falling back to its deadline and then to when it was
@@ -195,7 +203,7 @@ one is not yet.
 
 The calendar's FLOAT row shows both, planned first, and either can be dragged into the grid to give
 it a time. The Daily Plan lists unplanned floating occurrences in its "Floating" group on every day,
-since they have no day of their own. On the Categories page a planned floating occurrence groups
+since they have no day of their own. On the Occurrences page, grouped by When, a planned floating occurrence groups
 under "Planned" and an unplanned one under "Floating". Floating occurrences are never overdue. The
 `floating=true` list filter also drops occurrences whose activity has goals and every one of them is
 benched; one goal that is not benched keeps it in.
@@ -278,8 +286,7 @@ a goal.
 | Icon | Optional icon key |
 
 Activities carry an optional `CategoryId`; deleting a category set-nulls it. Categories are managed
-inline from the sidebar (desktop) or the Categories page's own list view (mobile) - there is no
-separate management page. The category's colour drives every occurrence row and calendar block for
+on the `/categories` page, a plain list that works the same on every screen size. The category's colour drives every occurrence row and calendar block for
 its activities.
 
 ---
@@ -352,18 +359,21 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 |---|---|
 | `/plan` | Daily Plan: one day's agenda. Index route. |
 | `/calendar` | Day / 3-day / week grid. Visualization, and the fastest way to add something. |
-| `/categories` | Occurrence lists per category, plus "Active" and "No category". |
+| `/occurrences` | Every occurrence, filtered and grouped. The one place occurrences are listed and sliced. |
+| `/categories` | Category management: add, rename, recolour, delete. |
+| `/tags` | Tag management: add, rename, delete. |
 | `/goals` | Goal list grouped by status. Focus goals are always expanded and their section shows slots used (`2/3`); Active, Bench and Closed goals are one-line rows that a chevron expands to checkpoints, notes and heatmap (Closed has no heatmap). Tapping a goal opens its History; the menu edits, adds a checkpoint, changes status or deletes. |
 | `/activities` | Activity list; clicking a title edits, the row menu opens History. |
 | `/insights` | Totals over what was logged. |
 | `/settings` | Preferences, data export, sign out. |
 
-`/inbox` redirects to `/categories`.
+`/inbox` redirects to `/occurrences`.
 
-Navigation: a 240px desktop sidebar (Daily Plan, Calendar, Goals, Activities, Insights, then the
-category list with inline add/edit/delete, and Settings pinned at the bottom); on mobile a 5-slot
-bottom bar (Plan, Activities, Calendar, Goals) plus a "More" sheet holding Categories, Insights, and
-Settings. Nav items are not `end`-matched, so drilling into a goal or activity keeps the parent item
+Navigation: a 240px desktop sidebar (Daily Plan, Calendar, Occurrences, Goals, Activities, Categories, Tags,
+Insights, then a "By category" list - one link per category plus No category - that opens
+`/occurrences` filtered to it, and Settings pinned at the bottom); on mobile a
+5-slot bottom bar (Plan, Activities, Calendar, Occurrences) plus a "More" sheet holding Goals,
+Categories, Tags, Insights and Settings. Nav items are not `end`-matched, so drilling into a goal or activity keeps the parent item
 lit.
 
 ### Daily Plan
@@ -377,7 +387,10 @@ the goal sections, which are standing context rather than something to clear bef
 - **Unfinished** — on today's view only, every pending occurrence whose date has passed, regardless
   of the day it was scheduled for, with its date, above the agenda and not in it. Wider than the
   overdue rule: planned occurrences are never *overdue*, but a planned one whose date is behind you
-  is listed here too, since not being late is no reason to disappear. Undated (floating) occurrences
+  is listed here too, since not being late is no reason to disappear. Only dates before today count:
+  something earlier today stays on the agenda, styled overdue if it is. The exception is a
+  deadline-only occurrence (end, no start): it has no hour on the agenda, so it moves here once its
+  end has passed. Undated (floating) occurrences
   are not included - they have no date to be behind. One button moves the whole set to tomorrow,
   preserving each clock time and each occurrence's planned / all-day flags.
 - **Timeline agenda** — every dated occurrence on the day as a spine with a time gutter, split by a
@@ -462,25 +475,47 @@ expects you to complete. Empty grid means nothing in particular.
   gliding when the finger landed. A scrolling finger looks like a tap at several points - stopping
   momentum, resting before a flick - and none of those may create anything.
 
-### Categories
+### Occurrences
 
-Three kinds of view over the same occurrence list: **Active** (`?all=true`, every pending occurrence
-across all categories), **No category** (the default: occurrences whose activity has no category),
-and one per category (`?category={id}`). Rows group into Overdue → Today → Planned → Upcoming →
-Floating → Completed/Skipped, with overdue winning over the day grouping.
+One list over every occurrence, narrowed by filters and split by a grouping.
+
+**Filters** combine: **status** (Open = pending, the default; Done; Skipped; All), **category**,
+**tag**, **goal** (each takes one value, "Any" by default, or "No category" / "No tag" / "No goal"
+for the absence of one) and a text search over the title, notes, category, tag and goal names.
+Status, category, tag and goal live in the URL (`?status=done&tag={id}`), so the Categories and Tags
+pages link straight to a filtered view; search does not. "Reset filters" returns to Open with
+everything else cleared.
+
+**Grouping** (remembered in `localStorage`): **When** (the default), **Category**, **Tag**, **Goal**,
+**Activity** or **None**. When groups into Overdue → Today → Planned → Upcoming → Floating →
+Completed/Skipped, with overdue winning over the day grouping; Completed/Skipped lists the most
+recent first. The other groupings sort each section by date, undated last, and put the "No ..."
+section last; an occurrence whose activity has several tags or goals is listed under each of them.
+Sections collapse and carry counts.
+
+The toolbar is the search box and a "Filters" button (with a count of the active filters) at every
+width. On mobile the category filter is a searchable dropdown under the search box, always visible;
+on desktop it sits with the other filters and the sidebar's category list is the quick path. The rest is
+behind a "Filters" button next to the search box (with a count of the active filters): the status
+control, the tag and goal filters and the grouping open beneath it on tap.
+
+Filtering and grouping run in the client over the full occurrence list (`GET /api/occurrences`).
+Grouped by Activity under one tag, a course reads as its Lecture, Lab and Homework sections.
 
 ### Activities
 
-One flat list: title search and a grouping toggle over **Goal / Category / None** (persisted in
+One flat list: title search and a grouping toggle over **Goal / Category / Tag / None** (persisted in
 `localStorage`). Sections collapse and carry counts; rows sort by title within a section. Grouped by
 goal, an activity with several goals is listed under each of them, and its row still shows the other
-goals.
+goals. Grouped by tag works the same way, with a "No tag" section last. Search also matches tag names.
+Tags are created from the Tags field of the activity dialog or on the Tags page, which also renames
+and deletes them.
 
 Each row leads with a tile in its **category's colour and icon** - the same colour that draws its
 occurrences everywhere else - then title and a meta line dropping whatever the section header already
 says, then an action menu (history, edit, delete). **Multi-select mode** turns the tiles into
 checkboxes and the row actions into a bottom bar: assign, delete, with per-section select-all. Bulk
-assign changes goals and category across the selection, each defaulting to "keep current". Goals can
+assign changes goals and category across the selection (tags are carried through untouched), each defaulting to "keep current". Goals can
 be added to, removed from, or replaced on every selected activity; it fans
 out over the single-item PUT, resending unchanged fields.
 
@@ -526,6 +561,6 @@ averaged over days.
 
 Settings holds preferences only.
 
-**Data export** (`GET /api/export`) is a single JSON document: user, settings, categories, goals with
-checkpoints, activities with subtasks and work types, and flat occurrences (effective title, notes, time split, no nested activity). Good enough to hand to a person or an LLM for analysis; not a
+**Data export** (`GET /api/export`) is a single JSON document: user, settings, categories, tags, goals with
+checkpoints, activities with tags, subtasks and work types, and flat occurrences (effective title, notes, time split, no nested activity). Good enough to hand to a person or an LLM for analysis; not a
 backup format, since there is no import path and the shape may change freely.

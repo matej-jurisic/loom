@@ -64,7 +64,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
       qc.setQueriesData<Occurrence[]>({ queryKey: ['events'] }, (old) =>
         old?.map((o) =>
           o.id === occurrence.id
-            ? { ...o, status, isOverdue: status === 'pending' ? o.isOverdue : false }
+            ? { ...o, status, isOverdue: status === 'pending' ? o.isOverdue : false, isBehind: status === 'pending' ? o.isBehind : false }
             : o,
         ),
       )
@@ -108,7 +108,9 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
   ]
 
   return (
-    <li className="group relative flex items-center gap-3 border-b border-border bg-card px-5 py-3 last:border-b-0 first:rounded-t-lg last:rounded-b-lg hover:bg-muted/40 transition-colors">
+    <li className={`group relative flex items-center gap-3 border-b border-border px-5 py-3 last:border-b-0 first:rounded-t-lg last:rounded-b-lg transition-colors ${
+      isPending && occurrence.isOverdue ? 'bg-destructive/10 hover:bg-destructive/15' : 'bg-card hover:bg-muted/40'
+    }`}>
       {/* Status checkbox */}
       <button
         onClick={() => statusMutation.mutate(isPending ? 'done' : 'pending')}

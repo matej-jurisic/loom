@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
 import { flushSync } from 'react-dom'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import { occurrencesApi, settingsApi, goalsApi, categoriesApi } from '@/lib/api'
+import { occurrencesApi, settingsApi, goalsApi, categoriesApi, tagsApi } from '@/lib/api'
 import type { Occurrence } from '@/lib/types'
 import { EventModal } from '@/components/events/EventModal'
 import { EventDetailModal } from '@/components/events/EventDetailModal'
@@ -181,6 +181,12 @@ export function CalendarPage() {
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],
     queryFn: () => categoriesApi.list(),
+    enabled: modals.activityModal.open,
+  })
+
+  const { data: tags = [] } = useQuery({
+    queryKey: ['tags'],
+    queryFn: () => tagsApi.list(),
     enabled: modals.activityModal.open,
   })
 
@@ -1912,6 +1918,7 @@ export function CalendarPage() {
         activity={modals.activityModal.activity}
         goals={goals}
         categories={categories}
+        tags={tags}
       />
 
       <EventModal

@@ -15,6 +15,7 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
     public DbSet<Checkpoint> Checkpoints => Set<Checkpoint>();
     public DbSet<UserSettings> UserSettings => Set<UserSettings>();
     public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Tag> Tags => Set<Tag>();
     public DbSet<ActivitySubtask> ActivitySubtasks => Set<ActivitySubtask>();
     public DbSet<OccurrenceSubtask> OccurrenceSubtasks => Set<OccurrenceSubtask>();
     public DbSet<ActivityWorkType> ActivityWorkTypes => Set<ActivityWorkType>();
@@ -66,6 +67,17 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
                 "ActivityGoals",
                 r => r.HasOne<Goal>().WithMany().HasForeignKey("GoalId").OnDelete(DeleteBehavior.Cascade),
                 l => l.HasOne<Activity>().WithMany().HasForeignKey("ActivityId").OnDelete(DeleteBehavior.Cascade));
+
+        modelBuilder.Entity<Activity>()
+            .HasMany(a => a.Tags)
+            .WithMany()
+            .UsingEntity<Dictionary<string, object>>(
+                "ActivityTags",
+                r => r.HasOne<Tag>().WithMany().HasForeignKey("TagId").OnDelete(DeleteBehavior.Cascade),
+                l => l.HasOne<Activity>().WithMany().HasForeignKey("ActivityId").OnDelete(DeleteBehavior.Cascade));
+
+        modelBuilder.Entity<Tag>()
+            .HasIndex(t => t.UserId);
 
         modelBuilder.Entity<Goal>()
             .HasIndex(g => g.UserId);

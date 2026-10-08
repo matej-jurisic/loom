@@ -17,6 +17,7 @@ public class ActivityService(LoomDbContext db)
         var a = await db.Activities
             .Include(a => a.Category)
             .Include(a => a.Goals)
+            .Include(a => a.Tags)
             .Include(a => a.Subtasks)
             .Include(a => a.WorkTypes)
             .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
@@ -25,17 +26,21 @@ public class ActivityService(LoomDbContext db)
             : Result<ActivityDto>.Success(ActivityDto.FromEntity(a));
     }
 
-    public async Task<List<ActivityDto>> ListAsync(Guid userId, Guid? goalId = null)
+    public async Task<List<ActivityDto>> ListAsync(Guid userId, Guid? goalId = null, Guid? tagId = null)
     {
         var query = db.Activities
             .Include(a => a.Category)
             .Include(a => a.Goals)
+            .Include(a => a.Tags)
             .Include(a => a.Subtasks)
             .Include(a => a.WorkTypes)
             .Where(a => a.UserId == userId && a.Kind == ActivityKind.activity);
 
         if (goalId.HasValue)
             query = query.Where(a => a.Goals.Any(g => g.Id == goalId.Value));
+
+        if (tagId.HasValue)
+            query = query.Where(a => a.Tags.Any(t => t.Id == tagId.Value));
 
         var all = await query.OrderBy(a => a.Title).ToListAsync();
         var counts = await RecentOccurrenceCountsAsync(userId);
@@ -83,6 +88,10 @@ public class ActivityService(LoomDbContext db)
         if (!goals.IsSuccess) return Result<ActivityDto>.Fail(goals.Error!);
         a.Goals = goals.Value!;
 
+        var tags = await ResolveTagsAsync(db, userId, req.TagIds);
+        if (!tags.IsSuccess) return Result<ActivityDto>.Fail(tags.Error!);
+        a.Tags = tags.Value!;
+
         db.Activities.Add(a);
         await db.SaveChangesAsync();
         return Result<ActivityDto>.Success(ActivityDto.FromEntity(a));
@@ -97,6 +106,7 @@ public class ActivityService(LoomDbContext db)
         var a = await db.Activities
             .Include(a => a.Category)
             .Include(a => a.Goals)
+            .Include(a => a.Tags)
             .Include(a => a.Subtasks)
             .Include(a => a.WorkTypes)
             .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId);
@@ -122,6 +132,13 @@ public class ActivityService(LoomDbContext db)
         if (!goals.IsSuccess) return Result<ActivityDto>.Fail(goals.Error!);
         SetGoals(a, goals.Value!);
 
+        var tags = await ResolveTagsAsync(db, userId, req.TagIds);
+        if (!tags.IsSuccess) return Result<ActivityDto>.Fail(tags.Error!);
+        a.Tags.RemoveAll(t => tags.Value!.All(n => n.Id != t.Id));
+        foreach (var tag in tags.Value!)
+            if (a.Tags.All(t => t.Id != tag.Id))
+                a.Tags.Add(tag);
+
         await db.SaveChangesAsync();
         return Result<ActivityDto>.Success(ActivityDto.FromEntity(a));
     }
@@ -135,6 +152,17 @@ public class ActivityService(LoomDbContext db)
         return goals.Count == ids.Count
             ? Result<List<Goal>>.Success(goals)
             : Result<List<Goal>>.Fail(new Error(ErrorType.NotFound, "Goal not found."));
+    }
+
+    internal static async Task<Result<List<Tag>>> ResolveTagsAsync(LoomDbContext db, Guid userId, List<Guid>? tagIds)
+    {
+        var ids = (tagIds ?? []).Distinct().ToList();
+        if (ids.Count == 0) return Result<List<Tag>>.Success([]);
+
+        var tags = await db.Tags.Where(t => t.UserId == userId && ids.Contains(t.Id)).ToListAsync();
+        return tags.Count == ids.Count
+            ? Result<List<Tag>>.Success(tags)
+            : Result<List<Tag>>.Fail(new Error(ErrorType.NotFound, "Tag not found."));
     }
 
     internal static void SetGoals(Activity a, List<Goal> goals)

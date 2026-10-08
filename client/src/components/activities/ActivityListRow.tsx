@@ -25,6 +25,7 @@ interface ActivityListRowProps {
   /** Hidden when the section already says it (grouping by that attribute). */
   hideCategory?: boolean
   hiddenGoalId?: string
+  hiddenTagId?: string
 }
 
 export function ActivityListRow({
@@ -37,12 +38,14 @@ export function ActivityListRow({
   onHistory,
   hideCategory,
   hiddenGoalId,
+  hiddenTagId,
 }: ActivityListRowProps) {
   const category = activity.category
 
   const showCategory = !hideCategory && category
   const goals = activity.goals.filter((g) => g.id !== hiddenGoalId)
-  const hasMeta = showCategory || goals.length > 0 || activity.subtasks.length > 0 || activity.repeatAfterDays
+  const tags = activity.tags.filter((t) => t.id !== hiddenTagId)
+  const hasMeta = showCategory || goals.length > 0 || tags.length > 0 || activity.subtasks.length > 0 || activity.repeatAfterDays
 
   return (
     <li
@@ -114,6 +117,11 @@ export function ActivityListRow({
                 again after {daysLabel(activity.repeatAfterDays)}
               </span>
             )}
+            {tags.map((t) => (
+              <span key={t.id} className="text-xs text-muted-foreground">
+                #{t.name}
+              </span>
+            ))}
             {goals.map((g) => (
               <Badge key={g.id} tone={GOAL_TONE[g.status] ?? 'neutral'}>
                 {g.title}

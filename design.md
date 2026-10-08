@@ -74,6 +74,7 @@ The panes are separated by a 1px `border-[var(--border)]` vertical divider. No g
 - **Middle:** Vertical nav. Items: icon + label. Gap `gap-0.5` between items. Padding `px-3 py-4`.
 - **Active nav item:** `bg-accent` (gray tint) pill. Icon in `text-primary`. Label in `text-foreground font-semibold`.
 - **Inactive nav item:** Icon and label both in `text-muted-foreground`. Hover: `bg-accent`.
+- **Groups:** the main items (Daily Plan, Calendar, Occurrences, Goals, Activities, Categories, Tags, Insights), then a `border-t` and a "By category" label (`text-[11px] uppercase tracking-wide text-muted-foreground`) over a scrollable list of category links (the category's icon, lit in its colour when active, then "No category"), each opening `/occurrences?category=<id>`. The plain Occurrences item is lit only when no category is selected. The list is navigation only; adding and editing categories lives on the Categories page.
 - **Bottom (pinned):** Settings item, separated by `border-t`.
 - Sidebar is `sticky top-0 h-screen` — does not scroll.
 
@@ -169,6 +170,8 @@ start and an end. It says where the block's time went without adding blocks to t
   otherwise. No percentages anywhere.
 - Every change saves immediately; a failed save restores the last saved rows and raises a toast.
 
+**Tags** appear as a chip picker in the activity dialog (between Goals/Category and Do again after), styled like the goal chips: `rounded-full` toggles, `border-primary bg-primary/10 text-primary` when selected, with a `New tag...` input and `+` button below that creates the tag and selects it. On an activity row a tag is plain `text-xs text-muted-foreground` text prefixed with `#`, no badge, so goals stay the only coloured chips.
+
 The same list is editable in the Edit Activity dialog (below Subtasks, existing activities only) as a bordered `divide-y` list: click a title to rename it in place, `X` to remove.
 
 ### Cards
@@ -225,7 +228,7 @@ The same list is editable in the Edit Activity dialog (below Subtasks, existing 
 
 ### Scrollbars
 
-- Internal scroll areas (sidebar category list, calendar grid, the history dialog's recent list) use the `.scroll-slim` utility from `index.css`: a thin scrollbar whose thumb is invisible until the container is hovered, tinted from `--muted-foreground`. Never leave a default OS scrollbar visible inside a panel.
+- Internal scroll areas (calendar grid, the history dialog's recent list) use the `.scroll-slim` utility from `index.css`: a thin scrollbar whose thumb is invisible until the container is hovered, tinted from `--muted-foreground`. Never leave a default OS scrollbar visible inside a panel.
 
 ---
 
@@ -243,7 +246,7 @@ The `/plan` view is a single canvas holding (top to bottom):
 
 1. **Day header** — 57px bar: prev/next chevrons, day title (full on `sm+`, compact below), jump-to-today button (only when the viewed day is not today), date input (`sm+` only), and a `+`. Same pattern as the calendar header.
 2. **Overdue** — `border-destructive/30 bg-destructive/5` card: the count, a "Move to tomorrow" button (`bg-foreground text-background`), then the rows in a plain card list.
-3. **Timeline agenda** — a three-column grid (content-sized time gutter, 0.75rem spine, fluid rows) so every row shares one time column. The spine is a 1px `border` line with a 2px dot per row, ringed in `background`; the current time is a primary label, dot, and hairline splitting past from upcoming. Relative labels ("now", "in 40m") sit under the gutter time. No hour grid: this is a checklist, not a scheduling surface. A pending **planned** row reads as soft rather than fixed: its gutter time carries a `~` and its spine dot is hollow (`border-2 bg-background`), the flat echo of the calendar's dashed block.
+3. **Timeline agenda** — a three-column grid (content-sized time gutter, 0.75rem spine, fluid rows) so every row shares one time column. The spine is a 1px `border` line with a 2px dot per row, ringed in `background`; the current time is a primary label, dot, and hairline splitting past from upcoming. Relative labels ("now", "in 40m") sit under the gutter time. No hour grid: this is a checklist, not a scheduling surface. A pending **planned** row reads as soft rather than fixed: its gutter time carries a `~` and its spine dot is hollow (`border-2 bg-background`), the flat echo of the calendar's dashed block. A pending row that is overdue today stays in the agenda with a `bg-destructive/10` row and a `bg-destructive` spine dot; only things dated before today move up to the Overdue card.
 4. **Deadlines** — the same uppercase section label, but as a full-width button: label, the count in mono `text-muted-foreground/70`, and a `ChevronDown` pushed to the right edge that rotates 180° when open. Collapsed, only that header row remains. Open, a bordered card list whose meta line reads date, time, then the distance ("Oct 12, 14:00 · in 6 days"). No urgency colouring: nearness is said in words, and late ones live in the Overdue card.
 5. **Planned** and **Floating** — uppercase section labels over bordered card lists. These are the holding places: something can live here indefinitely without a time, which is the point. Planned holds only what has no hour (all-day, or a window with no start) - anything with a start time is on the timeline above.
 6. **Focus goal chips** and **Goal activity** — closing the page under a `border-t` rule: one bordered chip per Focus goal in a 1-up / `sm:`2-up grid (status dot, title, last-session recency, and the checkpoint percentage in mono when it has checkpoints, and the occurrence bar when it has linked occurrences), then the summed goal heatmap. **The day's own lists open the page; goals are the standing context under them, not a gate in front of them.** There is deliberately no completion ring and no done/left/planned stat row: those score how much of a day was executed, which turns the page into a report card for a schedule the app never asked you to keep.
@@ -292,9 +295,10 @@ The compact toggle sits left of the range switch in the toolbar: `FoldVertical` 
 
 ## Mobile Navigation
 
-- **Bottom tab bar is capped at 5 slots**, icon-only: Plan, Activities, Calendar, Goals, and a "More" button (`Ellipsis` icon). New pages go in the More sheet, never a 6th tab.
-- **More sheet:** bottom sheet (same overlay + slide-up animation as mobile modals: `bg-black/40 backdrop-blur-sm`, `rounded-t-2xl`, drag handle) listing secondary destinations — Categories, Insights, Settings — as icon + label rows styled like sidebar nav items. Closes on backdrop tap, Escape, or navigation. The More button shows the active (primary) tint when the current route is one of its items.
-- **Categories page on mobile** has no sidebar to lean on, so it is two screens instead of one: bare `/categories` is a full-page list of categories (`Active`, `No category`, then each category as an icon-tile row with an edit/delete `ActionMenu`), with the header `+` creating a category. Tapping a row drills into the same filtered occurrence list the desktop layout shows inline, with the header `+` now creating an occurrence and a `ChevronLeft` back button in place of the (removed) drawer trigger.
+- **Bottom tab bar is capped at 5 slots**, icon-only: Plan, Activities, Calendar, Occurrences, and a "More" button (`Ellipsis` icon). New pages go in the More sheet, never a 6th tab.
+- **More sheet:** bottom sheet (same overlay + slide-up animation as mobile modals: `bg-black/40 backdrop-blur-sm`, `rounded-t-2xl`, drag handle) listing secondary destinations — Goals, Categories, Tags, Insights, Settings — as icon + label rows styled like sidebar nav items. Closes on backdrop tap, Escape, or navigation. The More button shows the active (primary) tint when the current route is one of its items.
+- **Management pages** (Categories, Tags) are one screen at every width: a bordered `divide-y` list, each row a `h-8 w-8 rounded-lg` tile (the category's tinted colour and icon, or a `Hash` on `bg-muted` for a tag), the name with a muted `N activities` line under it, and an `ActionMenu` (View occurrences, Edit, Delete). The header `+` adds. Neither page lists occurrences; "View occurrences" opens `/occurrences` with that category or tag filtered.
+- **Occurrences page:** below the header, a toolbar outside the scroll area. It is one row at every width, the search field and a `Filters` button (`SlidersHorizontal`, `border-primary text-primary` with a small count pill when any filter is active) that expands the rest beneath it, collapsed by default. Below `md:` a full-width category `Select` sits under that row and stays visible when the panel is closed (a long category list stays one control, never a row of pills). The expandable part is: a full-width segmented status control (Open / Done / Skipped / All, `bg-primary` when pressed), then a `grid-cols-2 sm:grid-cols-4` of `Select`s for category (`md:` and up only), tag, goal and grouping (`Group: When`). "Reset filters" appears right-aligned only when something is narrowed. Sections use the Activities page's collapsible header; an Overdue section's label is `text-destructive`.
 
 ---
 

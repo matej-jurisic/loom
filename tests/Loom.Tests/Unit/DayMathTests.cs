@@ -143,6 +143,19 @@ public class DayMathTests
     };
 
     [Fact]
+    public void IsBehind_OnlyBeforeToday_ExceptDeadlineOnlyWhoseEndPassed()
+    {
+        var ctx = Ctx(Zagreb);
+        var now = At("2026-06-02T15:00:00+02:00");
+        Assert.True(DayMath.IsBehind(Pending("2026-06-01T09:00:00+02:00"), ctx, now));
+        Assert.True(DayMath.IsBehind(Pending("2026-06-01T09:00:00+02:00", planned: true), ctx, now));
+        Assert.False(DayMath.IsBehind(Pending("2026-06-02T08:00:00+02:00", "2026-06-02T09:00:00+02:00"), ctx, now));
+        Assert.True(DayMath.IsBehind(Pending(null, "2026-06-02T09:00:00+02:00"), ctx, now));
+        Assert.False(DayMath.IsBehind(Pending(null, "2026-06-02T18:00:00+02:00"), ctx, now));
+        Assert.False(DayMath.IsBehind(Pending(null), ctx, now));
+    }
+
+    [Fact]
     public void IsOverdue_TimedWithoutEnd_StaysOpenUntilItsDayEnds()
     {
         var ctx = Ctx(Zagreb);

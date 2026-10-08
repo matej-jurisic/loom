@@ -201,7 +201,9 @@ function TimelineRow({
           className={`relative mt-4 h-2 w-2 rounded-full ring-4 ring-background ${
             event.isPlanned && event.status === 'pending'
               ? 'border-2 bg-background'
-              : rel.tone === 'now'
+              : event.isOverdue
+                ? 'bg-destructive'
+                : rel.tone === 'now'
                 ? 'bg-primary'
                 : event.status === 'done'
                   ? 'bg-primary/40'
@@ -283,24 +285,9 @@ export function PlanPage() {
   // something toward a goal today", not any one goal's own card.
   const { data: goalHeatmap } = useQuery({ queryKey: ['goals', 'heatmap'], queryFn: goalsApi.heatmap })
 
-  // Anything pending that is already behind you. Wider than isOverdue on purpose: a
-  // planned occurrence is never overdue by design (DayMath.IsOverdue returns early on
-  // IsPlanned), but one whose date has passed still has to be seen, or it is only ever
-  // found by paging back to the day it was on. Floating occurrences have no date and
-  // are not behind anything - they belong to the Floating group.
-  const isBehind = useCallback(
-    (o: Occurrence) => {
-      if (o.status !== 'pending') return false
-      if (o.isOverdue) return true
-      const ref = o.startAt ?? o.endAt
-      return ref !== null && new Date(ref).getTime() < effectiveToday.getTime()
-    },
-    [effectiveToday.getTime()],
-  )
-
   const overdueEvents = useMemo(
-    () => (isToday ? allOccurrences.filter(isBehind).sort((a, b) => refTime(a) - refTime(b)) : []),
-    [allOccurrences, isToday, isBehind],
+    () => (isToday ? allOccurrences.filter((o) => o.isBehind).sort((a, b) => refTime(a) - refTime(b)) : []),
+    [allOccurrences, isToday],
   )
 
   // A planned occurrence that already has a time is a commitment on this day like any other, so
@@ -312,9 +299,9 @@ export function PlanPage() {
   const timedEvents = useMemo(
     () =>
       occurrences
-        .filter((o) => o.startAt !== null && !isPlannedHold(o) && !(isToday && isBehind(o)))
+        .filter((o) => o.startAt !== null && !isPlannedHold(o) && !(isToday && o.isBehind))
         .sort((a, b) => refTime(a) - refTime(b)),
-    [occurrences, isToday, isBehind, isPlannedHold],
+    [occurrences, isToday, isPlannedHold],
   )
 
   const plannedEvents = useMemo(() => occurrences.filter(isPlannedHold), [occurrences, isPlannedHold])

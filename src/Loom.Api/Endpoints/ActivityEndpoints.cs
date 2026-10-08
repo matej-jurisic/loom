@@ -12,11 +12,11 @@ public static class ActivityEndpoints
         var subtasks = app.MapGroup("/api/activities/{activityId:guid}/subtasks").RequireAuthorization();
         var workTypes = app.MapGroup("/api/activities/{activityId:guid}/work-types").RequireAuthorization();
 
-        group.MapGet("/", async (ClaimsPrincipal principal, ActivityService svc, Guid? goalId) =>
+        group.MapGet("/", async (ClaimsPrincipal principal, ActivityService svc, Guid? goalId, Guid? tagId) =>
         {
             var userId = principal.GetUserId();
             if (userId is null) return Results.Unauthorized();
-            return Results.Ok(await svc.ListAsync(userId.Value, goalId));
+            return Results.Ok(await svc.ListAsync(userId.Value, goalId, tagId));
         });
 
         group.MapGet("/{id:guid}", async (Guid id, ClaimsPrincipal principal, ActivityService svc) =>

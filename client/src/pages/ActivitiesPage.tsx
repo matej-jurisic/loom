@@ -10,7 +10,7 @@ import {
   Tags,
   Trash2,
 } from "lucide-react";
-import { activitiesApi, goalsApi, categoriesApi } from "@/lib/api";
+import { activitiesApi, goalsApi, categoriesApi, tagsApi } from "@/lib/api";
 import { toastError } from "@/store/toasts";
 import type { Activity } from "@/lib/types";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -21,11 +21,12 @@ import { ActivityHistoryModal } from "@/components/activities/ActivityHistoryMod
 import { BulkAssignModal } from "@/components/activities/BulkAssignModal";
 import { invalidateActivities } from "@/lib/invalidate";
 
-type GroupBy = "goal" | "category" | "none";
+type GroupBy = "goal" | "category" | "tag" | "none";
 
 const GROUPS: { value: GroupBy; label: string }[] = [
   { value: "goal", label: "Goal" },
   { value: "category", label: "Category" },
+  { value: "tag", label: "Tag" },
   { value: "none", label: "None" },
 ];
 
@@ -73,6 +74,11 @@ export function ActivitiesPage() {
   const { data: categories = [] } = useQuery({
     queryKey: ["categories"],
     queryFn: () => categoriesApi.list(),
+  });
+
+  const { data: tags = [] } = useQuery({
+    queryKey: ["tags"],
+    queryFn: () => tagsApi.list(),
   });
 
   const deleteMutation = useMutation({
@@ -141,7 +147,7 @@ export function ActivitiesPage() {
   const visible = useMemo(() => {
     if (!query) return activities;
     return activities.filter((a) =>
-      [a.title, a.category?.name, ...a.goals.map((g) => g.title)].some((field) =>
+      [a.title, a.category?.name, ...a.goals.map((g) => g.title), ...a.tags.map((t) => t.name)].some((field) =>
         field?.toLowerCase().includes(query),
       ),
     );
@@ -157,11 +163,14 @@ export function ActivitiesPage() {
     }
 
     const buckets = new Map<string, { label: string; items: Activity[] }>();
-    const noneLabel = group === "goal" ? "No goal" : "No category";
+    const noneLabel =
+      group === "goal" ? "No goal" : group === "tag" ? "No tag" : "No category";
 
     if (group === "goal") {
       for (const g of goals.filter((g) => g.status !== "closed"))
         buckets.set(g.id, { label: g.title, items: [] });
+    } else if (group === "tag") {
+      for (const t of tags) buckets.set(t.id, { label: t.name, items: [] });
     } else {
       for (const c of categories) buckets.set(c.id, { label: c.name, items: [] });
     }
@@ -173,13 +182,19 @@ export function ActivitiesPage() {
           ? a.goals.length
             ? a.goals.map((g) => g.id)
             : [NONE_BUCKET]
-          : [a.categoryId ?? NONE_BUCKET];
+          : group === "tag"
+            ? a.tags.length
+              ? a.tags.map((t) => t.id)
+              : [NONE_BUCKET]
+            : [a.categoryId ?? NONE_BUCKET];
       for (const key of keys) {
         if (!buckets.has(key)) {
           const label =
             group === "goal"
               ? (a.goals.find((g) => g.id === key)?.title ?? noneLabel)
-              : noneLabel;
+              : group === "tag"
+                ? (a.tags.find((t) => t.id === key)?.name ?? noneLabel)
+                : noneLabel;
           buckets.set(key, { label, items: [] });
         }
         buckets.get(key)!.items.push(a);
@@ -196,7 +211,7 @@ export function ActivitiesPage() {
 
     const catchAll = filled.filter((s) => s.key === NONE_BUCKET);
     return [...filled.filter((s) => s.key !== NONE_BUCKET), ...catchAll];
-  }, [group, visible, goals, categories]);
+  }, [group, visible, goals, categories, tags]);
 
   const selectedActivities = activities.filter((a) => selected.has(a.id));
   const allVisibleSelected =
@@ -251,7 +266,7 @@ export function ActivitiesPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search title, category, goal..."
+                placeholder="Search title, category, goal, tag..."
                 className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
               {search && (
@@ -384,6 +399,7 @@ export function ActivitiesPage() {
                               onDelete={() => setDeleting(a)}
                               onHistory={() => setHistoryFor(a)}
                               hiddenGoalId={group === "goal" ? section.key : undefined}
+                              hiddenTagId={group === "tag" ? section.key : undefined}
                               hideCategory={group === "category"}
                             />
                           ))}
@@ -452,6 +468,7 @@ export function ActivitiesPage() {
         activity={editing}
         goals={goals}
         categories={categories}
+        tags={tags}
       />
 
       <BulkAssignModal
