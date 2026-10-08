@@ -161,7 +161,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `App.tsx` — auth-gated routing; index → `/plan`.
 - `pages/` — `PlanPage` (**this is `/plan`**), `CalendarPage`, `OccurrencesPage`, `CategoriesPage`, `TagsPage`,
   `GoalsPage` (**this is `/goals`**), `ActivitiesPage`,
-  `InsightsPage`, `SettingsPage`.
+  `InsightsPage`, `GuidePage` (**`/guide`**, in-app usage guide, static content, kept to short scannable lines), `SettingsPage`.
 - `pages/OccurrencesPage.tsx` — **the only occurrence list view** (`/occurrences`). Status, category, tag
   and goal filters live in the URL; the grouping (`when` / category / tag / goal / activity / none) in
   `localStorage`. Everything runs in the client over `['events', 'all']`; `lib/occurrenceView.ts` holds the
@@ -234,9 +234,9 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   may sign the user out; `unreachable` (no response, or 5xx) must keep the session. `request` turns a
   network failure into `ApiError(0, ...)`.
 - `components/layout/Sidebar.tsx` — desktop nav: eight page items (including Categories and Tags), a "By category" list of links to
-  `/occurrences?category=<id>` (read-only; management is `CategoriesPage`), and Settings pinned at the bottom.
+  `/occurrences?category=<id>` (read-only; management is `CategoriesPage`), and Guide + Settings pinned at the bottom.
 - `components/layout/BottomNav.tsx` — mobile nav: 4 tabs (Plan, Activities, Calendar, Occurrences) + "More"
-  bottom sheet (Goals, Categories, Tags, Insights, Settings). Max 5 slots; new pages go in the sheet.
+  bottom sheet (Goals, Categories, Tags, Insights, Guide, Settings). Max 5 slots; new pages go in the sheet.
 - `components/layout/LoomMark.tsx` — the brand mark (fill-based weave glyph, not a stroked lucide
   icon), used in `Sidebar.tsx` and both auth pages. The geometry lives once in `lib/brandMark.json`;
   `npm run gen:brand` (`client/scripts/gen-brand.mjs`) regenerates `public/favicon.svg` and

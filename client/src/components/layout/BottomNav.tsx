@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { ClipboardList, CalendarDays, Hash, ListTodo, Shapes, Target, Layers, Settings, ChartColumn, Ellipsis } from 'lucide-react'
+import { BookOpen, ClipboardList, CalendarDays, Hash, ListTodo, Shapes, Target, Layers, Settings, ChartColumn, Ellipsis } from 'lucide-react'
 
 const tabs = [
   { to: '/plan',       label: 'Plan',       Icon: ClipboardList },
@@ -14,6 +14,7 @@ const moreItems = [
   { to: '/categories', label: 'Categories', Icon: Shapes },
   { to: '/tags',       label: 'Tags',       Icon: Hash },
   { to: '/insights',   label: 'Insights',   Icon: ChartColumn },
+  { to: '/guide',      label: 'Guide',      Icon: BookOpen },
   { to: '/settings',   label: 'Settings',   Icon: Settings },
 ]
 

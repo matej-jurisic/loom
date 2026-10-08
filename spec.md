@@ -371,9 +371,10 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 
 Navigation: a 240px desktop sidebar (Daily Plan, Calendar, Occurrences, Goals, Activities, Categories, Tags,
 Insights, then a "By category" list - one link per category plus No category - that opens
-`/occurrences` filtered to it, and Settings pinned at the bottom); on mobile a
+`/occurrences` filtered to it, and Guide and Settings pinned at the bottom); on mobile a
 5-slot bottom bar (Plan, Activities, Calendar, Occurrences) plus a "More" sheet holding Goals,
-Categories, Tags, Insights and Settings. Nav items are not `end`-matched, so drilling into a goal or activity keeps the parent item
+Categories, Tags, Insights, Guide and Settings. `/guide` is an in-app guide to using Loom; it
+currently defines activity, occurrence, category, tag, goal, work type and subtask and how they relate. Nav items are not `end`-matched, so drilling into a goal or activity keeps the parent item
 lit.
 
 ### Daily Plan

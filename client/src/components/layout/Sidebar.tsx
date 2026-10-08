@@ -1,6 +1,6 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { CalendarRange, CalendarDays, ChartColumn, CircleDashed, Hash, Layers, ListTodo, Settings, Shapes, Target } from 'lucide-react'
+import { BookOpen, CalendarRange, CalendarDays, ChartColumn, CircleDashed, Hash, Layers, ListTodo, Settings, Shapes, Target } from 'lucide-react'
 import { categoriesApi } from '@/lib/api'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
 import { NONE_FILTER } from '@/lib/occurrenceView'
@@ -129,7 +129,8 @@ export function Sidebar() {
         )}
       </nav>
 
-      <div className="border-t border-border px-3 py-4">
+      <div className="flex flex-col gap-0.5 border-t border-border px-3 py-4">
+        <NavItem to="/guide" label="Guide" Icon={BookOpen} />
         <NavItem to="/settings" label="Settings" Icon={Settings} />
       </div>
     </aside>
