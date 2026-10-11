@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, X, Pencil, Trash2, Clock, CalendarPlus, Copy, History, MoreHorizontal, Pin, PinOff, Layers, Flag } from 'lucide-react'
+import { Check, X, Pencil, Trash2, Clock, CalendarPlus, Copy, History, MoreHorizontal, Pin, PinOff, Layers, Flag, CalendarOff } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -169,7 +169,8 @@ const statusMutation = useMutation({
   })
 
   const floatMutation = useMutation({
-    mutationFn: () => occurrencesApi.patch(occurrence!.id, { startAt: null, endAt: null, isAllDay: false, isPlanned: false }),
+    mutationFn: (isNoDate: boolean) =>
+      occurrencesApi.patch(occurrence!.id, { startAt: null, endAt: null, isAllDay: false, isPlanned: false, isNoDate }),
     onSuccess: () => {
       invalidateOccurrences(qc)
       onClose()
@@ -308,13 +309,22 @@ const statusMutation = useMutation({
                   Plan
                 </button>
               )}
-              {isPending && occurrence.startAt && (
+              {isPending && (occurrence.startAt || occurrence.isNoDate) && (
                 <button
-                  onClick={() => { setMoreOpen(false); floatMutation.mutate() }}
+                  onClick={() => { setMoreOpen(false); floatMutation.mutate(false) }}
                   className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
                 >
                   <PinOff className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2} />
                   Float
+                </button>
+              )}
+              {isPending && !occurrence.isNoDate && (
+                <button
+                  onClick={() => { setMoreOpen(false); floatMutation.mutate(true) }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+                >
+                  <CalendarOff className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2} />
+                  No date
                 </button>
               )}
               {isPending && !isFloat && (

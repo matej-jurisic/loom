@@ -134,6 +134,7 @@ onto an occurrence, and an occurrence only references the ones it actually used.
 | End datetime | Window end when `IsPlanned`; deadline or span end otherwise. Must be after start. |
 | Is all day | Marks a date-only occurrence. |
 | Is planned | Marks a flexible/windowed occurrence (dashed on the calendar, never overdue). May be set on a floating occurrence. |
+| Is no date | Marks a todo with no date: floating in shape, listed on the Occurrences page only. Excludes a start, an end, all-day and planned. |
 | Status | `pending`, `done`, `skipped`. Marking done clears `IsPlanned`. |
 | Subtasks | Per-occurrence checklist with `IsDone`, seeded from the activity's template. |
 | Time split | Optional rows of work type + time, saying where this occurrence's time went. |
@@ -208,6 +209,16 @@ under "Planned" and an unplanned one under "Floating". Floating occurrences are 
 `floating=true` list filter also drops occurrences whose activity has goals and every one of them is
 benched; one goal that is not benched keeps it in.
 
+**No date** — a floating occurrence with `IsNoDate = true`: a todo that is written down and nothing
+more. It has no start, no end, is not all-day and is not planned, and the server rejects the flag
+alongside any of those. It is left out of the `floating=true` list filter, so it appears on neither
+the calendar's FLOAT row nor the Daily Plan; the Occurrences page is where it lives, under its own
+"No date" group when grouped by When. Everything else treats it as the floating occurrence it is: it
+is never overdue, can be completed or skipped in place, and still counts in its activity's history
+and its goals' occurrence counts. Giving it a date ends the state: a partial update that sets a
+start, an end, all-day or planned without mentioning the flag clears it, so scheduling it needs no
+extra step.
+
 **All-day planned** is the other holding state: a date with no time, for something that belongs to a
 day without belonging to an hour of it.
 
@@ -224,9 +235,11 @@ An occurrence is overdue when it is pending, not planned, has a start, and:
 One modal covers all of it. It creates either an occurrence of an existing activity (activity picker,
 with inline quick-create) or a one-off event (title field). The picker is ordered by how many
 occurrences each activity has had in the last year, most first, so the things actually being logged
-sit at the top; ties and never-used activities fall back to alphabetical. Time mode is a three-way choice - **due**
-(end only), **scheduled** (start, optional end), **floating** (neither) - with `all day` and
-`planned` as independent flags. Scheduling an occurrence means giving it a start; rescheduling means
+sit at the top; ties and never-used activities fall back to alphabetical. Time mode is a four-way choice - **due**
+(end only), **scheduled** (start, optional end), **floating** (neither), **no date** (neither, and
+kept off the plan and the calendar) - with `all day` and `planned` as independent flags, neither of
+which applies to no date. The occurrence detail menu has the same two as one-tap actions: **Float**
+and **No date**. Scheduling an occurrence means giving it a start; rescheduling means
 changing it. From the calendar, blocks can be dragged to move, dragged from the FLOAT or all-day row
 into the grid, and resized.
 
@@ -488,7 +501,7 @@ pages link straight to a filtered view; search does not. "Reset filters" returns
 everything else cleared.
 
 **Grouping** (remembered in `localStorage`): **When** (the default), **Category**, **Tag**, **Goal**,
-**Activity** or **None**. When groups into Overdue → Today → Planned → Upcoming → Floating →
+**Activity** or **None**. When groups into Overdue → Today → Planned → Upcoming → Floating → No date →
 Completed/Skipped, with overdue winning over the day grouping; Completed/Skipped lists the most
 recent first. The other groupings sort each section by date, undated last, and put the "No ..."
 section last; an occurrence whose activity has several tags or goals is listed under each of them.

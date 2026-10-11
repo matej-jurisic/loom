@@ -249,6 +249,9 @@ namespace Loom.Core.Migrations
                     b.Property<bool>("IsAllDay")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("IsNoDate")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsPlanned")
                         .HasColumnType("INTEGER");
 

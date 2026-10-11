@@ -121,6 +121,12 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   unchanged, no self/loop); `WithLinksAsync` fills `OccurrenceDto.Deadline` and the target's
   `LinkedDoneCount`/`LinkedDoneMinutes` on every list and single read. On `PATCH`, an absent id
   leaves the link alone and an explicit null removes it.
+- `Occurrence.IsNoDate` — a todo with no date: floating in shape, but excluded from the
+  `floating=true` list filter, so only the Occurrences page shows it (`classify` puts it in its own
+  `nodate` bucket). `OccurrenceService.ValidateNoDate` rejects it alongside a start, end, all-day or
+  planned. On `PATCH`, an absent flag is cleared when the result has any of those, so scheduling
+  paths never send it; an explicit `true` with a date is a 400. Anything new that surfaces floating
+  occurrences must skip these.
 - `OccurrenceService.RepeatAsync` (`POST /api/occurrences/{id}/repeat`) — the "do again" copy made on
   completion: a pending copy of a **done** occurrence of an activity with `RepeatAfterDays`, placed
   on the first day after today reached by stepping N days from the source's own day (so a weekly task

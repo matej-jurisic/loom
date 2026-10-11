@@ -126,6 +126,88 @@ public class OccurrenceTests : IDisposable
     }
 
     [Fact]
+    public async Task NoDateOccurrence_ExcludedFromFloatingFilter_ButListed()
+    {
+        var token = await _client.SetupUserAsync();
+        _client.UseBearer(token);
+        var activityId = await CreateActivityAsync();
+
+        await _client.PostAsJsonAsync("/api/occurrences", new { activityId, title = "Someday", isNoDate = true });
+        await _client.PostAsJsonAsync("/api/occurrences", new { activityId, title = "Floating task" });
+
+        var floating = await (await _client.GetAsync("/api/occurrences?floating=true")).ReadAsync<List<OccurrenceDto>>();
+        Assert.Equal("Floating task", Assert.Single(floating).EffectiveTitle);
+
+        var all = await (await _client.GetAsync("/api/occurrences")).ReadAsync<List<OccurrenceDto>>();
+        Assert.True(Assert.Single(all, o => o.EffectiveTitle == "Someday").IsNoDate);
+    }
+
+    [Fact]
+    public async Task NoDateOccurrence_RejectsDateOrPlanned()
+    {
+        var token = await _client.SetupUserAsync();
+        _client.UseBearer(token);
+        var activityId = await CreateActivityAsync();
+
+        var dated = await _client.PostAsJsonAsync("/api/occurrences", new
+        {
+            activityId, isNoDate = true, startAt = DateTimeOffset.UtcNow.AddHours(1),
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, dated.StatusCode);
+
+        var planned = await _client.PostAsJsonAsync("/api/occurrences", new { activityId, isNoDate = true, isPlanned = true });
+        Assert.Equal(HttpStatusCode.BadRequest, planned.StatusCode);
+
+        var occ = await (await _client.PostAsJsonAsync("/api/occurrences", new { activityId, isNoDate = true }))
+            .ReadAsync<OccurrenceDto>();
+        var patch = await _client.PatchAsJsonAsync($"/api/occurrences/{occ.Id}", new
+        {
+            isNoDate = true, startAt = DateTimeOffset.UtcNow.AddHours(1),
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, patch.StatusCode);
+    }
+
+    [Fact]
+    public async Task NoDateOccurrence_PatchingADateClearsTheFlag()
+    {
+        var token = await _client.SetupUserAsync();
+        _client.UseBearer(token);
+        var activityId = await CreateActivityAsync();
+        var occ = await (await _client.PostAsJsonAsync("/api/occurrences", new { activityId, isNoDate = true }))
+            .ReadAsync<OccurrenceDto>();
+
+        // A title-only patch leaves it alone.
+        var renamed = await (await _client.PatchAsJsonAsync($"/api/occurrences/{occ.Id}", new { title = "Renamed" }))
+            .ReadAsync<OccurrenceDto>();
+        Assert.True(renamed.IsNoDate);
+
+        var scheduled = await (await _client.PatchAsJsonAsync($"/api/occurrences/{occ.Id}", new
+        {
+            startAt = DateTimeOffset.UtcNow.AddHours(1),
+        })).ReadAsync<OccurrenceDto>();
+        Assert.False(scheduled.IsNoDate);
+        Assert.NotNull(scheduled.StartAt);
+    }
+
+    [Fact]
+    public async Task NoDateEvent_RoundTripsThroughCreateAndUpdate()
+    {
+        var token = await _client.SetupUserAsync();
+        _client.UseBearer(token);
+
+        var created = await (await _client.PostAsJsonAsync("/api/occurrences/event", new { title = "Renew passport", isNoDate = true }))
+            .ReadAsync<OccurrenceDto>();
+        Assert.True(created.IsNoDate);
+
+        var floating = await (await _client.GetAsync("/api/occurrences?floating=true")).ReadAsync<List<OccurrenceDto>>();
+        Assert.Empty(floating);
+
+        var updated = await (await _client.PutAsJsonAsync($"/api/occurrences/{created.Id}/event", new { title = "Renew passport" }))
+            .ReadAsync<OccurrenceDto>();
+        Assert.False(updated.IsNoDate);
+    }
+
+    [Fact]
     public async Task CreateWindowedOccurrence_IncludedInCalendarRange()
     {
         var token = await _client.SetupUserAsync();
@@ -347,5 +429,5 @@ public class OccurrenceTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     private sealed record ActivityDto(Guid Id);
-    private sealed record OccurrenceDto(Guid Id, Guid ActivityId, string? Title, string EffectiveTitle, string Status, DateTimeOffset? StartAt, DateTimeOffset? WindowStart, DateTimeOffset? WindowEnd, int? WindowDurationMinutes, DateTimeOffset? EndAt = null, bool IsPlanned = false);
+    private sealed record OccurrenceDto(Guid Id, Guid ActivityId, string? Title, string EffectiveTitle, string Status, DateTimeOffset? StartAt, DateTimeOffset? WindowStart, DateTimeOffset? WindowEnd, int? WindowDurationMinutes, DateTimeOffset? EndAt = null, bool IsPlanned = false, bool IsNoDate = false);
 }

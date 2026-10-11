@@ -13,7 +13,8 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     {
         var err = ValidateOptionalTitle(req.Title)
             ?? ValidateWindowAndStartAt(req.StartAt, req.WindowStart)
-            ?? Validators.ValidateDateRange(req.StartAt, req.EndAt);
+            ?? Validators.ValidateDateRange(req.StartAt, req.EndAt)
+            ?? ValidateNoDate(req.IsNoDate, req.StartAt ?? req.WindowStart, req.EndAt, req.IsAllDay, req.IsPlanned);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
         var activity = await FindActivityAsync(req.ActivityId, userId);
@@ -39,6 +40,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             EndAt = req.EndAt,
             IsAllDay = req.IsAllDay,
             IsPlanned = req.IsPlanned,
+            IsNoDate = req.IsNoDate,
             WindowStart = req.WindowStart,
             WindowEnd = req.WindowEnd,
             WindowDurationMinutes = req.WindowDurationMinutes,
@@ -82,7 +84,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             .Where(o => o.UserId == userId);
 
         if (status.HasValue) query = query.Where(o => o.Status == status.Value);
-        if (floatingOnly) query = query.Where(o => o.StartAt == null && o.EndAt == null && o.WindowStart == null && !o.IsAllDay
+        // "No date" occurrences are floating in shape but stay off every surface this filter feeds
+        // (the calendar's FLOAT row, the Daily Plan's Floating group).
+        if (floatingOnly) query = query.Where(o => o.StartAt == null && o.EndAt == null && o.WindowStart == null && !o.IsAllDay && !o.IsNoDate
             && (!o.Activity.Goals.Any() || o.Activity.Goals.Any(g => g.Status != GoalStatus.bench)));
         if (goalId.HasValue) query = query.Where(o => o.Activity.Goals.Any(g => g.Id == goalId.Value));
         if (activityId.HasValue) query = query.Where(o => o.ActivityId == activityId.Value);
@@ -178,6 +182,13 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         o.EndAt = endAt;
         if (req.IsAllDay.IsSet) o.IsAllDay = req.IsAllDay.Value;
         if (req.IsPlanned.IsSet) o.IsPlanned = req.IsPlanned.Value;
+        // Giving a "no date" occurrence a date (or planning it) is what ends that state, so a patch
+        // that does so without mentioning the flag clears it: scheduling and calendar drops need
+        // not know about it. Asking for both at once is a contradiction and is rejected.
+        if (req.IsNoDate.IsSet) o.IsNoDate = req.IsNoDate.Value;
+        else if (o.StartAt is not null || o.EndAt is not null || o.IsAllDay || o.IsPlanned) o.IsNoDate = false;
+        var noDateErr = ValidateNoDate(o.IsNoDate, o.StartAt, o.EndAt, o.IsAllDay, o.IsPlanned);
+        if (noDateErr is not null) return Result<OccurrenceDto>.Fail(noDateErr);
 
         var splitErr = ValidateTimeSplitFits(o);
         if (splitErr is not null) return Result<OccurrenceDto>.Fail(splitErr);
@@ -250,7 +261,8 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     public async Task<Result<OccurrenceDto>> CreateEventAsync(Guid userId, CreateEventRequest req)
     {
         var err = Validators.ValidateTitle(req.Title, "Title")
-            ?? Validators.ValidateDateRange(req.StartAt, req.EndAt);
+            ?? Validators.ValidateDateRange(req.StartAt, req.EndAt)
+            ?? ValidateNoDate(req.IsNoDate, req.StartAt, req.EndAt, req.IsAllDay, req.IsPlanned);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
         var a = new Activity
@@ -289,6 +301,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             EndAt = req.EndAt,
             IsAllDay = req.IsAllDay,
             IsPlanned = req.IsPlanned,
+            IsNoDate = req.IsNoDate,
             DeadlineOccurrenceId = req.DeadlineOccurrenceId,
         };
         db.Occurrences.Add(o);
@@ -300,6 +313,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     {
         var err = Validators.ValidateTitle(req.Title, "Title")
             ?? Validators.ValidateDateRange(req.StartAt, req.EndAt)
+            ?? ValidateNoDate(req.IsNoDate, req.StartAt, req.EndAt, req.IsAllDay, req.IsPlanned)
             ?? ValidateSubtaskInputs(req.Subtasks);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
@@ -332,6 +346,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         o.EndAt = req.EndAt;
         o.IsAllDay = req.IsAllDay;
         o.IsPlanned = req.IsPlanned;
+        o.IsNoDate = req.IsNoDate;
 
         var splitErr = ValidateTimeSplitFits(o);
         if (splitErr is not null) return Result<OccurrenceDto>.Fail(splitErr);
@@ -706,6 +721,13 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     private static Error? ValidateWindowAndStartAt(DateTimeOffset? startAt, DateTimeOffset? windowStart) =>
         startAt.HasValue && windowStart.HasValue
             ? new Error(ErrorType.Validation, "StartAt and WindowStart cannot both be set.")
+            : null;
+
+    // "No date" is a floating occurrence that is deliberately kept off the calendar and the plan,
+    // so it cannot also carry a date or be planned (planned means committed to, only missing a time).
+    private static Error? ValidateNoDate(bool isNoDate, DateTimeOffset? startAt, DateTimeOffset? endAt, bool isAllDay, bool isPlanned) =>
+        isNoDate && (startAt.HasValue || endAt.HasValue || isAllDay || isPlanned)
+            ? new Error(ErrorType.Validation, "An occurrence with no date cannot have a start, an end, or be all-day or planned.")
             : null;
 
     private static Error? ValidateOptionalTitle(string? title) =>

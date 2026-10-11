@@ -146,6 +146,7 @@ export interface Occurrence {
   status: EventStatus
   isAllDay: boolean
   isPlanned: boolean
+  isNoDate: boolean
   createdAt: string
   isOverdue: boolean
   isBehind: boolean

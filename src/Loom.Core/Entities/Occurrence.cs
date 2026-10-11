@@ -14,6 +14,9 @@ public class Occurrence
     public EventStatus Status { get; set; } = EventStatus.pending;
     public bool IsAllDay { get; set; } = false;
     public bool IsPlanned { get; set; } = false;
+    // A todo with no date: floating in shape (no start, no end, not all-day, not planned) but kept
+    // off the calendar and the Daily Plan. OccurrenceService.ValidateNoDate owns the invariant.
+    public bool IsNoDate { get; set; } = false;
     public DateTimeOffset? WindowStart { get; set; }
     public DateTimeOffset? WindowEnd { get; set; }
     public int? WindowDurationMinutes { get; set; }

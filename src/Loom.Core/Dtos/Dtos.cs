@@ -121,7 +121,8 @@ public sealed record CreateEventRequest(
     DateTimeOffset? EndAt,
     bool IsAllDay,
     bool IsPlanned,
-    Guid? DeadlineOccurrenceId = null);
+    Guid? DeadlineOccurrenceId = null,
+    bool IsNoDate = false);
 
 public sealed record UpdateEventRequest(
     string Title,
@@ -133,7 +134,8 @@ public sealed record UpdateEventRequest(
     bool IsPlanned,
     List<OccurrenceSubtaskInput>? Subtasks = null,
     Guid? DeadlineOccurrenceId = null,
-    bool ClearDeadline = false);
+    bool ClearDeadline = false,
+    bool IsNoDate = false);
 
 // Occurrences
 public sealed record OccurrenceDto(
@@ -160,7 +162,8 @@ public sealed record OccurrenceDto(
     DeadlineRefDto? Deadline = null,
     int LinkedDoneCount = 0,
     int LinkedDoneMinutes = 0,
-    bool IsBehind = false)
+    bool IsBehind = false,
+    bool IsNoDate = false)
 {
     public static OccurrenceDto FromEntity(Occurrence o, DayContext ctx, DateTimeOffset nowUtc) => new(
         o.Id, o.UserId, o.ActivityId, o.Title, o.Notes,
@@ -175,7 +178,8 @@ public sealed record OccurrenceDto(
         TimeSplitDto.FromOccurrence(o),
         ActivityDto.FromEntity(o.Activity),
         o.DeadlineOccurrenceId,
-        IsBehind: DayMath.IsBehind(o, ctx, nowUtc));
+        IsBehind: DayMath.IsBehind(o, ctx, nowUtc),
+        IsNoDate: o.IsNoDate);
 }
 
 public sealed record DeadlineRefDto(
@@ -200,7 +204,8 @@ public sealed record CreateOccurrenceRequest(
     DateTimeOffset? WindowStart,
     DateTimeOffset? WindowEnd,
     int? WindowDurationMinutes,
-    Guid? DeadlineOccurrenceId = null);
+    Guid? DeadlineOccurrenceId = null,
+    bool IsNoDate = false);
 
 public sealed record PatchOccurrenceRequest(
     Optional<Guid?> ActivityId = default,
@@ -211,7 +216,8 @@ public sealed record PatchOccurrenceRequest(
     Optional<bool> IsPlanned = default,
     Optional<Guid?> DeadlineOccurrenceId = default,
     List<OccurrenceSubtaskInput>? Subtasks = null,
-    Optional<string?> Notes = default);
+    Optional<string?> Notes = default,
+    Optional<bool> IsNoDate = default);
 
 public sealed record SetOccurrenceStatusRequest(EventStatus Status);
 public sealed record RepeatOccurrenceRequest(bool IsPlanned = false);
@@ -321,7 +327,8 @@ public sealed record ExportOccurrenceDto(
     DateTimeOffset CreatedAt,
     List<OccurrenceSubtaskDto> Subtasks,
     List<TimeSplitDto> TimeSplit,
-    Guid? DeadlineOccurrenceId)
+    Guid? DeadlineOccurrenceId,
+    bool IsNoDate)
 {
     public static ExportOccurrenceDto FromEntity(Occurrence o) => new(
         o.Id, o.ActivityId, o.Title ?? o.Activity.Title, o.Notes, o.Status.ToString(),
@@ -329,7 +336,8 @@ public sealed record ExportOccurrenceDto(
         o.WindowStart, o.WindowEnd, o.WindowDurationMinutes, o.CreatedAt,
         o.Subtasks.OrderBy(s => s.CreatedAt).Select(OccurrenceSubtaskDto.FromEntity).ToList(),
         TimeSplitDto.FromOccurrence(o),
-        o.DeadlineOccurrenceId);
+        o.DeadlineOccurrenceId,
+        o.IsNoDate);
 }
 
 public sealed record ExportDto(

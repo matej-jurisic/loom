@@ -47,6 +47,7 @@ function occ(over: Partial<Occurrence> = {}, act: Partial<Activity> = {}): Occur
     status: 'pending',
     isAllDay: false,
     isPlanned: false,
+    isNoDate: false,
     createdAt: '2026-01-01T00:00:00Z',
     isOverdue: false,
     isBehind: false,
@@ -74,6 +75,8 @@ describe('classify', () => {
   it('lets planned beat overdue and floating beat nothing but planned', () => {
     expect(classify(occ({ isPlanned: true, isOverdue: true }), now)).toBe('planned')
     expect(classify(occ(), now)).toBe('floating')
+    expect(classify(occ({ isNoDate: true }), now)).toBe('nodate')
+    expect(classify(occ({ isNoDate: true, status: 'done' }), now)).toBe('done')
     expect(classify(occ({ isOverdue: true, startAt: at(1) }), now)).toBe('overdue')
   })
 

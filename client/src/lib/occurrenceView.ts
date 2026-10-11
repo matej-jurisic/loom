@@ -1,8 +1,8 @@
 import type { Occurrence } from './types'
 
-export type WhenBucket = 'overdue' | 'today' | 'planned' | 'upcoming' | 'floating' | 'done'
+export type WhenBucket = 'overdue' | 'today' | 'planned' | 'upcoming' | 'floating' | 'nodate' | 'done'
 
-export const WHEN_ORDER: WhenBucket[] = ['overdue', 'today', 'planned', 'upcoming', 'floating', 'done']
+export const WHEN_ORDER: WhenBucket[] = ['overdue', 'today', 'planned', 'upcoming', 'floating', 'nodate', 'done']
 
 export const WHEN_LABELS: Record<WhenBucket, string> = {
   overdue: 'Overdue',
@@ -10,6 +10,7 @@ export const WHEN_LABELS: Record<WhenBucket, string> = {
   planned: 'Planned',
   upcoming: 'Upcoming',
   floating: 'Floating',
+  nodate: 'No date',
   done: 'Completed / Skipped',
 }
 
@@ -63,6 +64,7 @@ export function formatOccurrenceDate(o: Occurrence, now: Date = new Date()): str
 
 export function classify(o: Occurrence, now: Date = new Date()): WhenBucket {
   if (o.status !== 'pending') return 'done'
+  if (o.isNoDate) return 'nodate'
   if (o.isPlanned) return 'planned'
   if (!o.startAt && !o.endAt && !o.isAllDay) return 'floating'
   if (o.isOverdue) return 'overdue'
@@ -171,7 +173,7 @@ export function groupOccurrences(
       key: k,
       label: WHEN_LABELS[k],
       tone: k === 'overdue' ? ('overdue' as const) : undefined,
-      items: [...buckets.get(k)!].sort((a, b) => (k === 'floating' ? 0 : compareByDate(a, b, k === 'done'))),
+      items: [...buckets.get(k)!].sort((a, b) => (k === 'floating' || k === 'nodate' ? 0 : compareByDate(a, b, k === 'done'))),
     }))
   }
 

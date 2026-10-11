@@ -35,7 +35,10 @@ interface Errors {
   endAt?: string
 }
 
-type TimeMode = 'due' | 'scheduled' | 'floating'
+type TimeMode = 'due' | 'scheduled' | 'floating' | 'nodate'
+
+// The two modes that carry no date at all.
+const isUndated = (mode: TimeMode) => mode === 'floating' || mode === 'nodate'
 
 function validate(form: FormState, kind: ActivityKind, timeMode: TimeMode, isAllDay: boolean): Errors {
   const errs: Errors = {}
@@ -137,6 +140,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
       return 'due'
     }
     if (source) {
+      if (source.isNoDate) return 'nodate'
       if (!source.startAt && !source.endAt && !source.isAllDay) return 'floating'
       if (source.startAt && source.endAt) return 'scheduled'
       return 'due'
@@ -212,12 +216,14 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   const mutation = useMutation({
     mutationFn: () => {
       const schedulePayload = {
-        startAt: timeMode === 'floating' ? null : toIso(form.startAt),
+        startAt: isUndated(timeMode) ? null : toIso(form.startAt),
         endAt: isAllDay
           ? (form.endAt ? toAllDayExclusiveEndIso(form.endAt.substring(0, 10)) : null)
           : (timeMode !== 'scheduled' ? null : toIso(form.endAt)),
-        isAllDay: timeMode === 'floating' ? false : isAllDay,
-        isPlanned,
+        isAllDay: isUndated(timeMode) ? false : isAllDay,
+        isPlanned: timeMode === 'nodate' ? false : isPlanned,
+        // Never sent from the schedule-only form: giving a date is what clears it server-side.
+        isNoDate: scheduleOnly ? undefined : timeMode === 'nodate',
         // Subtasks are edited as a draft and applied here; omitted when the section
         // is not shown so the server leaves them untouched.
         subtasks: isEdit && !scheduleOnly
@@ -293,8 +299,9 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
 
   function switchMode(mode: TimeMode) {
     setTimeMode(mode)
-    if (mode === 'floating') {
+    if (isUndated(mode)) {
       setIsAllDay(false)
+      if (mode === 'nodate') setIsPlanned(false)
       setForm((f) => ({ ...f, startAt: '', endAt: '' }))
       setErrors({})
     } else if (mode === 'scheduled') {
@@ -538,10 +545,11 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
       {/* Scheduling (When) */}
       {!scheduleOnly && (
         <div className="flex flex-col gap-3">
-          <div className="grid grid-cols-3 gap-0.5 rounded-lg border border-border bg-muted p-0.5">
+          <div className="grid grid-cols-4 gap-0.5 rounded-lg border border-border bg-muted p-0.5">
             <button type="button" onClick={() => switchMode('due')} className={segmentClass(timeMode === 'due')}>Due</button>
             <button type="button" onClick={() => switchMode('scheduled')} className={segmentClass(timeMode === 'scheduled')}>Scheduled</button>
             <button type="button" onClick={() => switchMode('floating')} className={segmentClass(timeMode === 'floating')}>Floating</button>
+            <button type="button" onClick={() => switchMode('nodate')} className={segmentClass(timeMode === 'nodate')}>No date</button>
           </div>
 
           {timeMode === 'due' && (
@@ -594,15 +602,23 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
             </p>
           )}
 
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={isPlanned}
-              onChange={(e) => setIsPlanned(e.target.checked)}
-              className="h-4 w-4 rounded border-input accent-primary"
-            />
-            Planned
-          </label>
+          {timeMode === 'nodate' && (
+            <p className="rounded-lg border border-dashed border-border px-3 py-2.5 text-sm text-muted-foreground">
+              No date - kept on the Occurrences list only, off the plan and the calendar
+            </p>
+          )}
+
+          {timeMode !== 'nodate' && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={isPlanned}
+                onChange={(e) => setIsPlanned(e.target.checked)}
+                className="h-4 w-4 rounded border-input accent-primary"
+              />
+              Planned
+            </label>
+          )}
         </div>
       )}
 

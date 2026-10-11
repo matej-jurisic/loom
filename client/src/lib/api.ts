@@ -161,10 +161,10 @@ export const occurrencesApi = {
 
   get: (id: string) => request<Occurrence>(`/api/occurrences/${id}`),
 
-  create: (body: { activityId: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; deadlineOccurrenceId?: string | null }) =>
+  create: (body: { activityId: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; deadlineOccurrenceId?: string | null }) =>
     request<Occurrence>('/api/occurrences', { method: 'POST', body: JSON.stringify(body) }),
 
-  patch: (id: string, body: { activityId?: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; notes?: string | null }) =>
+  patch: (id: string, body: { activityId?: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; notes?: string | null }) =>
     request<Occurrence>(`/api/occurrences/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   delete: (id: string) => request<void>(`/api/occurrences/${id}`, { method: 'DELETE' }),
@@ -185,10 +185,10 @@ export const occurrencesApi = {
   setTimeSplit: (id: string, rows: TimeSplitInput[]) =>
     request<Occurrence>(`/api/occurrences/${id}/time-split`, { method: 'PUT', body: JSON.stringify({ rows }) }),
 
-  createEvent: (body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; deadlineOccurrenceId?: string | null }) =>
+  createEvent: (body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; deadlineOccurrenceId?: string | null }) =>
     request<Occurrence>('/api/occurrences/event', { method: 'POST', body: JSON.stringify(body) }),
 
-  updateEvent: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; clearDeadline?: boolean }) =>
+  updateEvent: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; clearDeadline?: boolean }) =>
     request<Occurrence>(`/api/occurrences/${id}/event`, { method: 'PUT', body: JSON.stringify(body) }),
 }
 
