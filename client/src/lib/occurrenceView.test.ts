@@ -35,7 +35,7 @@ let seq = 0
 function occ(over: Partial<Occurrence> = {}, act: Partial<Activity> = {}): Occurrence {
   seq += 1
   const a = activity(act)
-  return {
+  const base: Occurrence = {
     id: `o${seq}`,
     userId: 'u',
     activityId: a.id,
@@ -53,12 +53,18 @@ function occ(over: Partial<Occurrence> = {}, act: Partial<Activity> = {}): Occur
     isBehind: false,
     subtasks: [],
     timeSplit: [],
+    tags: [],
+    effectiveTags: [],
     activity: a,
     deadlineOccurrenceId: null,
     deadline: null,
     linkedDoneCount: 0,
     linkedDoneMinutes: 0,
     ...over,
+  }
+  return {
+    ...base,
+    effectiveTags: [...a.tags, ...base.tags.filter((t) => !a.tags.some((x) => x.id === t.id))],
   }
 }
 
@@ -126,6 +132,13 @@ describe('filterOccurrences', () => {
     expect(filterOccurrences(rows, { ...none, category: NONE_FILTER })).toHaveLength(4)
   })
 
+  it('matches the tags set on the occurrence itself', () => {
+    const lecture = occ({ effectiveTitle: 'Lecture', tags: [math] }, { id: 'a5', title: 'Lecture' })
+    expect(filterOccurrences([...rows, lecture], { ...none, tag: 't2' }).map((o) => o.effectiveTitle)).toEqual(['Calc', 'Lecture'])
+    expect(filterOccurrences([lecture], { ...none, tag: NONE_FILTER })).toHaveLength(0)
+    expect(filterOccurrences([lecture], { ...none, search: 'math' })).toHaveLength(1)
+  })
+
   it('searches titles, tag names and notes', () => {
     expect(filterOccurrences(rows, { ...none, search: 'cs101' })).toHaveLength(2)
     expect(filterOccurrences(rows, { ...none, search: 'calc' })).toHaveLength(1)
@@ -157,6 +170,17 @@ describe('groupOccurrences', () => {
     expect(sections.map((s) => s.label)).toEqual(['CS101', 'Math', 'No tag'])
     expect(sections[0].items.map((o) => o.effectiveTitle)).toEqual(['Both'])
     expect(sections[2].key).toBe(NONE_BUCKET)
+  })
+
+  it('groups under the occurrence tags as well as the activity tags', () => {
+    const rows = [
+      occ({ effectiveTitle: 'Calc', tags: [math] }, { id: 'a1', title: 'Lecture', tags: [cs] }),
+      occ({ effectiveTitle: 'Physics' }, { id: 'a1', title: 'Lecture', tags: [cs] }),
+    ]
+    const sections = groupOccurrences(rows, 'tag', now)
+    expect(sections.map((s) => s.label)).toEqual(['CS101', 'Math'])
+    expect(sections[0].items).toHaveLength(2)
+    expect(sections[1].items.map((o) => o.effectiveTitle)).toEqual(['Calc'])
   })
 
   it('groups by activity and sorts each section by date with undated last', () => {

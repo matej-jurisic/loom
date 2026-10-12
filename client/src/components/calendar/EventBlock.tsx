@@ -39,6 +39,9 @@ export function EventBlock({
     ? `${timeLabel(event.startAt)}${event.endAt ? ` – ${timeLabel(event.endAt)}` : ''}`
     : ''
 
+  const tagText = event.effectiveTags.map((t) => `#${t.name}`).join(' ')
+  const showTags = tagText !== '' && heightPx >= (timeText ? 56 : 32)
+
   // Handles show always when resizing (touch mode), or on mouse hover via CSS
   const handleVisibility = isResizing ? 'flex' : 'hidden group-hover/calev:flex'
 
@@ -138,6 +141,11 @@ export function EventBlock({
                 >
                   {event.effectiveTitle}
                 </p>
+                {showTags && (
+                  <p className="overflow-hidden whitespace-nowrap text-[10px] leading-tight opacity-70" style={{ color: accentColor }}>
+                    {tagText}
+                  </p>
+                )}
               </div>
             </button>
           ) : (
@@ -164,6 +172,11 @@ export function EventBlock({
                   {heightPx >= 44 && timeText && (
                     <p className={`@max-[10px]:hidden overflow-hidden whitespace-nowrap text-[10px] leading-tight opacity-70 ${isDone ? 'text-muted-foreground' : textClass}`}>
                       {timeText}
+                    </p>
+                  )}
+                  {showTags && (
+                    <p className={`@max-[10px]:hidden overflow-hidden whitespace-nowrap text-[10px] leading-tight opacity-70 ${isDone ? 'text-muted-foreground' : textClass}`}>
+                      {tagText}
                     </p>
                   )}
                 </div>

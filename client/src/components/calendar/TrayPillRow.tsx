@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Occurrence } from '@/lib/types'
-import { dueRowRef, eventAllDayColors } from '@/lib/calendarLayout'
+import { dueRowRef, eventAllDayColors, titleWithTags } from '@/lib/calendarLayout'
 
 export type FloatingDragInfo = { pointerId: number; clientX: number; clientY: number; pointerType: string }
 
@@ -133,7 +133,7 @@ function TrayPillRow({
                   className={`shrink-0 ${pillMaxWidthClassName} truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${movingEventId === o.id ? 'opacity-20' : pendingDragId === o.id ? 'opacity-50 scale-95' : ''} ${className}`}
                   style={{ touchAction: 'none', ...style }}
                 >
-                  {pillText ? pillText(o) : o.effectiveTitle}
+                  {pillText ? pillText(o) : titleWithTags(o)}
                 </button>
               )
             })}

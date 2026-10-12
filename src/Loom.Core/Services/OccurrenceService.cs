@@ -30,6 +30,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             return Result<OccurrenceDto>.Fail(new Error(ErrorType.Validation,
                 "An occurrence cannot be created on an event."));
 
+        var tags = await ActivityService.ResolveTagsAsync(db, userId, req.TagIds);
+        if (!tags.IsSuccess) return Result<OccurrenceDto>.Fail(tags.Error!);
+
         var o = new Occurrence
         {
             UserId = userId,
@@ -45,6 +48,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             WindowEnd = req.WindowEnd,
             WindowDurationMinutes = req.WindowDurationMinutes,
             DeadlineOccurrenceId = req.DeadlineOccurrenceId,
+            Tags = tags.Value!,
         };
 
         var subtaskCopies = activity.Subtasks
@@ -200,6 +204,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         var subtaskErr = ApplySubtasks(o, req.Subtasks);
         if (subtaskErr is not null) return Result<OccurrenceDto>.Fail(subtaskErr);
 
+        var tagErr = await ApplyTagsAsync(o, userId, req.TagIds);
+        if (tagErr is not null) return Result<OccurrenceDto>.Fail(tagErr);
+
         await db.SaveChangesAsync();
         return Result<OccurrenceDto>.Success(await ToDtoAsync(o, userId));
     }
@@ -284,6 +291,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         if (!goals.IsSuccess) return Result<OccurrenceDto>.Fail(goals.Error!);
         a.Goals = goals.Value!;
 
+        var tags = await ActivityService.ResolveTagsAsync(db, userId, req.TagIds);
+        if (!tags.IsSuccess) return Result<OccurrenceDto>.Fail(tags.Error!);
+
         if (req.DeadlineOccurrenceId is { } deadlineId)
         {
             var deadlineErr = await ValidateDeadlineAsync(userId, null, deadlineId, null);
@@ -303,6 +313,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             IsPlanned = req.IsPlanned,
             IsNoDate = req.IsNoDate,
             DeadlineOccurrenceId = req.DeadlineOccurrenceId,
+            Tags = tags.Value!,
         };
         db.Occurrences.Add(o);
         await db.SaveChangesAsync();
@@ -356,6 +367,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
 
         var subtaskErr = ApplySubtasks(o, req.Subtasks);
         if (subtaskErr is not null) return Result<OccurrenceDto>.Fail(subtaskErr);
+
+        var tagErr = await ApplyTagsAsync(o, userId, req.TagIds);
+        if (tagErr is not null) return Result<OccurrenceDto>.Fail(tagErr);
 
         await db.SaveChangesAsync();
         return Result<OccurrenceDto>.Success(await ToDtoAsync(o, userId));
@@ -437,6 +451,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         var source = await db.Occurrences
             .AsNoTracking()
             .Include(o => o.Activity)
+            .Include(o => o.Tags)
             .FirstOrDefaultAsync(o => o.Id == id && o.UserId == userId);
         if (source is null) return Result<OccurrenceDto>.Fail(new Error(ErrorType.NotFound, "Occurrence not found."));
         if (source.Activity.Kind == ActivityKind.@event || source.Activity.RepeatAfterDays is not { } days)
@@ -479,7 +494,8 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             deadlineId = null;
 
         return await CreateAsync(userId, new CreateOccurrenceRequest(
-            source.ActivityId, source.Title, startAt, endAt, isAllDay, isPlanned, null, null, null, deadlineId));
+            source.ActivityId, source.Title, startAt, endAt, isAllDay, isPlanned, null, null, null, deadlineId,
+            TagIds: source.Tags.Select(t => t.Id).ToList()));
     }
 
     private static DateOnly AnchorDay(DateTimeOffset at, bool isAllDay, DayContext ctx) =>
@@ -664,6 +680,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             .Include(o => o.Activity).ThenInclude(a => a.Subtasks)
             .Include(o => o.Activity).ThenInclude(a => a.WorkTypes)
             .Include(o => o.Subtasks)
+            .Include(o => o.Tags)
             .Include(o => o.TimeSplits).ThenInclude(t => t.WorkType);
 
     private static Error? ValidateTimeSplitFits(Occurrence o)
@@ -715,6 +732,20 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
                 db.OccurrenceSubtasks.Add(new OccurrenceSubtask { OccurrenceId = o.Id, Title = input.Title.Trim() });
         }
 
+        return null;
+    }
+
+    private async Task<Error?> ApplyTagsAsync(Occurrence o, Guid userId, List<Guid>? tagIds)
+    {
+        if (tagIds is null) return null;
+
+        var tags = await ActivityService.ResolveTagsAsync(db, userId, tagIds);
+        if (!tags.IsSuccess) return tags.Error;
+
+        o.Tags.RemoveAll(t => tags.Value!.All(n => n.Id != t.Id));
+        foreach (var tag in tags.Value!)
+            if (o.Tags.All(t => t.Id != tag.Id))
+                o.Tags.Add(tag);
         return null;
     }
 

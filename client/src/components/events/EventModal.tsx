@@ -6,11 +6,12 @@ import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { Select } from '@/components/ui/Select'
 import { DateTimePicker } from '@/components/ui/DateTimePicker'
-import { occurrencesApi, activitiesApi, categoriesApi, goalsApi } from '@/lib/api'
+import { occurrencesApi, activitiesApi, categoriesApi, goalsApi, tagsApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Activity, ActivityKind, Occurrence } from '@/lib/types'
 import { invalidateOccurrences } from '@/lib/invalidate'
 import { GoalPicker } from '@/components/goals/GoalPicker'
+import { TagPicker } from '@/components/tags/TagPicker'
 import { pickableGoals } from '@/lib/goals'
 
 // Draft subtask row: id present = existing subtask, absent = added in this edit session.
@@ -24,6 +25,7 @@ interface FormState {
   title: string
   categoryId: string
   goalIds: string[]
+  tagIds: string[]
   startAt: string
   endAt: string
   deadlineId: string
@@ -124,6 +126,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     title: isEventKind ? (source?.activity.title ?? '') : (occurrence?.title ?? duplicateFrom?.title ?? ''),
     categoryId: source?.activity.categoryId ?? '',
     goalIds: source?.activity.goals.map((g) => g.id) ?? [],
+    tagIds: source?.tags.map((t) => t.id) ?? [],
     startAt: occurrence ? (toInputValue(occurrence.startAt) || (scheduleOnly ? todayLocal() : '')) : (duplicateFrom ? toInputValue(duplicateFrom.startAt) : (defaultStartAt ?? todayLocal())),
     endAt: source?.isAllDay && source?.endAt
       ? toAllDayEndInput(source.endAt)
@@ -195,6 +198,12 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     enabled: open && kind === 'event',
   })
 
+  const { data: tags = [] } = useQuery({
+    queryKey: ['tags'],
+    queryFn: tagsApi.list,
+    enabled: open && !scheduleOnly,
+  })
+
   const { data: pendingEvents = [] } = useQuery({
     queryKey: ['events', 'pending-deadlines'],
     queryFn: () => occurrencesApi.list({ status: 'pending' }),
@@ -234,6 +243,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
       const linkPayload = scheduleOnly
         ? {}
         : {
+            tagIds: form.tagIds,
             deadlineOccurrenceId: form.deadlineId || null,
             clearDeadline: isEdit && !form.deadlineId && Boolean(occurrence?.deadlineOccurrenceId),
           }
@@ -255,7 +265,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
         activityId: form.activityId,
         title: form.title.trim() || null,
         ...schedulePayload,
-        ...(scheduleOnly ? {} : { deadlineOccurrenceId: form.deadlineId || null }),
+        ...(scheduleOnly ? {} : { deadlineOccurrenceId: form.deadlineId || null, tagIds: form.tagIds }),
       }
       return isEdit
         ? occurrencesApi.patch(occurrence!.id, occurrencePayload)
@@ -337,6 +347,8 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   }
 
   const selectedActivity = activities.find((a) => a.id === form.activityId) ?? defaultActivity ?? duplicateFrom?.activity ?? null
+
+  const inheritedTags = (selectedActivity?.tags ?? []).filter((t) => !form.tagIds.includes(t.id))
 
   // Most-used first (occurrences in the last year, from the server), so the activities the user
   // keeps logging are at the top of the picker. Never-used ones fall to the tail, alphabetically.
@@ -697,6 +709,24 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
           </svg>
           {showAdvanced ? 'Fewer options' : 'More options'}
         </button>
+      )}
+
+      {!scheduleOnly && (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-foreground">
+            Tags <span className="font-normal text-muted-foreground">(optional)</span>
+          </span>
+          <TagPicker
+            tags={tags}
+            value={form.tagIds}
+            onChange={(ids) => setForm((f) => ({ ...f, tagIds: ids }))}
+          />
+          {kind === 'activity' && inheritedTags.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Also from the activity: {inheritedTags.map((t) => t.name).join(', ')}
+            </p>
+          )}
+        </div>
       )}
 
       {/* Details */}

@@ -446,6 +446,21 @@ namespace Loom.Core.Migrations
                     b.ToTable("UserSettings");
                 });
 
+            modelBuilder.Entity("OccurrenceTags", b =>
+                {
+                    b.Property<Guid>("OccurrenceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("TagId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("OccurrenceId", "TagId");
+
+                    b.HasIndex("TagId");
+
+                    b.ToTable("OccurrenceTags");
+                });
+
             modelBuilder.Entity("ActivityGoals", b =>
                 {
                     b.HasOne("Loom.Core.Entities.Activity", null)
@@ -617,6 +632,21 @@ namespace Loom.Core.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("OccurrenceTags", b =>
+                {
+                    b.HasOne("Loom.Core.Entities.Occurrence", null)
+                        .WithMany()
+                        .HasForeignKey("OccurrenceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Loom.Core.Entities.Tag", null)
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Loom.Core.Entities.Activity", b =>

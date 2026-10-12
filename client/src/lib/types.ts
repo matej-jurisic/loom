@@ -152,6 +152,8 @@ export interface Occurrence {
   isBehind: boolean
   subtasks: OccurrenceSubtask[]
   timeSplit: TimeSplitRow[]
+  tags: Tag[]
+  effectiveTags: Tag[]
   activity: Activity
   deadlineOccurrenceId: string | null
   deadline: DeadlineRef | null

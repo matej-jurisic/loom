@@ -228,3 +228,7 @@ export function occursOnDay(e: Occurrence, dayStartMs: number, dayEndMs: number)
   if (!e.endAt) return startMs >= dayStartMs && startMs < dayEndMs
   return startMs < dayEndMs && new Date(e.endAt).getTime() > dayStartMs
 }
+
+export function titleWithTags(o: Occurrence): string {
+  return [o.effectiveTitle, ...o.effectiveTags.map((t) => `#${t.name}`)].join(' ')
+}

@@ -22,7 +22,7 @@ const core: Term[] = [
     name: 'Occurrence',
     Icon: ListTodo,
     what: 'One time you do it. This is what sits on the calendar.',
-    relation: 'One activity per occurrence. It uses that activity\'s category, goals and tags.',
+    relation: 'One activity per occurrence. It uses that activity\'s category and goals, and can add tags of its own.',
     example: 'Thesis work, Tue 14:00',
   },
 ]
@@ -39,7 +39,7 @@ const organise: Term[] = [
     name: 'Tag',
     Icon: Hash,
     what: 'Free label.',
-    relation: 'Any number per activity. Deleting it leaves the activities alone.',
+    relation: 'Any number per activity or occurrence. Deleting it leaves both alone.',
     example: 'Year 3',
   },
   {

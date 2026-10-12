@@ -421,6 +421,12 @@ const statusMutation = useMutation({
           </div>
         )}
 
+        {occurrence.effectiveTags.length > 0 && (
+          <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
+            {occurrence.effectiveTags.map((t) => <span key={t.id}>#{t.name}</span>)}
+          </div>
+        )}
+
         {goals.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {goals.map((g) => <Badge key={g.id} tone={GOAL_TONE[g.status] ?? 'neutral'}>{g.title}</Badge>)}

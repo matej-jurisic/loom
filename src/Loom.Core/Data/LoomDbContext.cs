@@ -76,6 +76,14 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
                 r => r.HasOne<Tag>().WithMany().HasForeignKey("TagId").OnDelete(DeleteBehavior.Cascade),
                 l => l.HasOne<Activity>().WithMany().HasForeignKey("ActivityId").OnDelete(DeleteBehavior.Cascade));
 
+        modelBuilder.Entity<Occurrence>()
+            .HasMany(o => o.Tags)
+            .WithMany()
+            .UsingEntity<Dictionary<string, object>>(
+                "OccurrenceTags",
+                r => r.HasOne<Tag>().WithMany().HasForeignKey("TagId").OnDelete(DeleteBehavior.Cascade),
+                l => l.HasOne<Occurrence>().WithMany().HasForeignKey("OccurrenceId").OnDelete(DeleteBehavior.Cascade));
+
         modelBuilder.Entity<Tag>()
             .HasIndex(t => t.UserId);
 

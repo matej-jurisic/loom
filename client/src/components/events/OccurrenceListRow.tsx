@@ -137,7 +137,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
           </span>
           {goals.map((g) => <Badge key={g.id} tone={GOAL_TONE[g.status] ?? 'neutral'}>{g.title}</Badge>)}
         </div>
-        {(timeText || cat || hasSubtasks || deadline || linkedLabel) && (
+        {(timeText || cat || hasSubtasks || deadline || linkedLabel || occurrence.effectiveTags.length > 0) && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             {timeText && (
               <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
@@ -151,6 +151,11 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
                 {cat.name}
               </span>
             )}
+            {occurrence.effectiveTags.map((t) => (
+              <span key={t.id} className="text-xs text-muted-foreground">
+                #{t.name}
+              </span>
+            ))}
             {deadline && (
               <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground" title="Deadline">
                 <Flag className="h-3 w-3 shrink-0" strokeWidth={2} />

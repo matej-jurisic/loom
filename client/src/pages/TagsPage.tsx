@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { Hash, ListTodo, Pencil, Plus, Trash2 } from 'lucide-react'
-import { activitiesApi, tagsApi } from '@/lib/api'
+import { activitiesApi, occurrencesApi, tagsApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Tag } from '@/lib/types'
 import { TagModal } from '@/components/tags/TagModal'
@@ -21,11 +21,22 @@ export function TagsPage() {
   const { data: tags = [], isLoading } = useQuery({ queryKey: ['tags'], queryFn: tagsApi.list })
   const { data: activities = [] } = useQuery({ queryKey: ['activities'], queryFn: () => activitiesApi.list() })
 
+  const { data: occurrences = [] } = useQuery({
+    queryKey: ['events', 'all'],
+    queryFn: () => occurrencesApi.list(),
+  })
+
   const counts = useMemo(() => {
     const map = new Map<string, number>()
     for (const a of activities) for (const t of a.tags) map.set(t.id, (map.get(t.id) ?? 0) + 1)
     return map
   }, [activities])
+
+  const occurrenceCounts = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const o of occurrences) for (const t of o.effectiveTags) map.set(t.id, (map.get(t.id) ?? 0) + 1)
+    return map
+  }, [occurrences])
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => tagsApi.delete(id),
@@ -81,7 +92,7 @@ export function TagsPage() {
               <div>
                 <p className="text-sm font-medium text-foreground">No tags yet</p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Tag activities to group them, for example by course.
+                  Tag activities or single occurrences to group them, for example by course.
                 </p>
               </div>
               <button
@@ -97,6 +108,7 @@ export function TagsPage() {
               <ul className="divide-y divide-border">
                 {tags.map((tag) => {
                   const count = counts.get(tag.id) ?? 0
+                  const occurrenceCount = occurrenceCounts.get(tag.id) ?? 0
                   return (
                     <li key={tag.id} className="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40">
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
@@ -108,7 +120,8 @@ export function TagsPage() {
                       >
                         <span className="block truncate text-sm text-foreground">{tag.name}</span>
                         <span className="block text-xs text-muted-foreground">
-                          {count} {count === 1 ? 'activity' : 'activities'}
+                          {count} {count === 1 ? 'activity' : 'activities'}, {occurrenceCount}{' '}
+                          {occurrenceCount === 1 ? 'occurrence' : 'occurrences'}
                         </span>
                       </button>
                       <ActionMenu
@@ -147,7 +160,7 @@ export function TagsPage() {
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
         loading={deleteMutation.isPending}
         title="Delete tag?"
-        message={`"${deleting?.name ?? ''}" is removed from every activity that has it. The activities stay.`}
+        message={`"${deleting?.name ?? ''}" is removed from every activity and occurrence that has it. They stay.`}
       />
     </div>
   )

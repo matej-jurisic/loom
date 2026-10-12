@@ -90,8 +90,8 @@ export function filterOccurrences(list: Occurrence[], f: OccurrenceFilters): Occ
     }
 
     if (f.tag === NONE_FILTER) {
-      if (o.activity.tags.length > 0) return false
-    } else if (f.tag && !o.activity.tags.some((t) => t.id === f.tag)) {
+      if (o.effectiveTags.length > 0) return false
+    } else if (f.tag && !o.effectiveTags.some((t) => t.id === f.tag)) {
       return false
     }
 
@@ -107,7 +107,7 @@ export function filterOccurrences(list: Occurrence[], f: OccurrenceFilters): Occ
         o.activity.title,
         o.notes,
         o.activity.category?.name,
-        ...o.activity.tags.map((t) => t.name),
+        ...o.effectiveTags.map((t) => t.name),
         ...o.activity.goals.map((g) => g.title),
       ]
       if (!fields.some((field) => field?.toLowerCase().includes(query))) return false
@@ -143,8 +143,8 @@ function bucketKeys(o: Occurrence, by: OccurrenceGroupBy): { key: string; label:
       : [{ key: NONE_BUCKET, label: 'No category' }]
   }
   if (by === 'tag') {
-    return o.activity.tags.length
-      ? o.activity.tags.map((t) => ({ key: t.id, label: t.name }))
+    return o.effectiveTags.length
+      ? o.effectiveTags.map((t) => ({ key: t.id, label: t.name }))
       : [{ key: NONE_BUCKET, label: 'No tag' }]
   }
   if (by === 'goal') {

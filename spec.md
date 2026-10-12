@@ -78,9 +78,19 @@ goals counts the occurrence once.
 The tag link is many-to-many (`ActivityTags`), shaped like the goal link: create and update take the
 full set as `tagIds` (absent or empty means none) and responses carry `tags`, ordered by name. Tags
 belong to the user and are managed at `/api/tags` (list, create, rename, delete). A name is unique per
-user ignoring case; a clash is a 409. Tags exist only on activities of kind `activity`; the event
-endpoints leave them alone. `GET /api/activities` takes an optional `tagId` filter beside `goalId`.
+user ignoring case; a clash is a 409. Activity tags exist only on activities of kind `activity`.
+`GET /api/activities` takes an optional `tagId` filter beside `goalId`.
 A tag has no status, colour or archive: it groups and searches, nothing more.
+
+An occurrence can carry tags of its own (`OccurrenceTags`), so one "Lecture" activity can be tagged
+with the course per calendar entry. Create, patch and the event endpoints take the full set as
+`tagIds` (on patch and event update an absent `tagIds` leaves the set alone, an empty list clears it)
+and responses carry `tags` (the occurrence's own) and `effectiveTags` (the activity's tags plus the
+occurrence's, by name, each once). The two layers are additive and independent: retagging the
+activity still reaches every occurrence of it, and an occurrence cannot hide a tag its activity has.
+Events have no activity tags, so their occurrence tags are the only ones. A repeat copy takes the
+tags of the occurrence it was made from. Every tag filter, grouping and search over occurrences
+works on `effectiveTags`. Deleting a tag removes it from both layers.
 
 `GET /api/activities` also returns a derived `recentOccurrenceCount` per activity: its occurrences in
 the last 365 days, each counted from its start, falling back to its deadline and then to when it was
@@ -505,7 +515,7 @@ everything else cleared.
 **Activity** or **None**. When groups into Overdue → Today → Planned → Upcoming → Floating → No date →
 Completed/Skipped, with overdue winning over the day grouping; Completed/Skipped lists the most
 recent first. The other groupings sort each section by date, undated last, and put the "No ..."
-section last; an occurrence whose activity has several tags or goals is listed under each of them.
+section last; an occurrence with several tags (its own plus its activity's) or goals is listed under each of them.
 Sections collapse and carry counts.
 
 The toolbar is the search box and a "Filters" button (with a count of the active filters) at every
@@ -515,7 +525,9 @@ behind a "Filters" button next to the search box (with a count of the active fil
 tag and goal filters and the grouping open beneath it on tap.
 
 Filtering and grouping run in the client over the full occurrence list (`GET /api/occurrences`).
-Grouped by Activity under one tag, a course reads as its Lecture, Lab and Homework sections.
+Grouped by Activity under one tag, a course reads as its Lecture, Lab and Homework sections. A tag
+set on an occurrence puts it in that tag's view without touching its activity, so one Lecture
+activity tagged per course per entry reads the same way under Group: Tag.
 
 ### Activities
 
@@ -523,8 +535,9 @@ One flat list: title search and a grouping toggle over **Goal / Category / Tag /
 `localStorage`). Sections collapse and carry counts; rows sort by title within a section. Grouped by
 goal, an activity with several goals is listed under each of them, and its row still shows the other
 goals. Grouped by tag works the same way, with a "No tag" section last. Search also matches tag names.
-Tags are created from the Tags field of the activity dialog or on the Tags page, which also renames
-and deletes them.
+Tags are created from the Tags field of the activity dialog, the Tags field of the occurrence dialog,
+or on the Tags page, which also renames and deletes them and shows, per tag, how many activities
+carry it and how many occurrences it reaches (the activity's tags and its own).
 
 Each row leads with a tile in its **category's colour and icon** - the same colour that draws its
 occurrences everywhere else - then title and a meta line dropping whatever the section header already
@@ -577,5 +590,5 @@ averaged over days.
 Settings holds preferences only.
 
 **Data export** (`GET /api/export`) is a single JSON document: user, settings, categories, tags, goals with
-checkpoints, activities with tags, subtasks and work types, and flat occurrences (effective title, notes, time split, no nested activity). Good enough to hand to a person or an LLM for analysis; not a
+checkpoints, activities with tags, subtasks and work types, and flat occurrences (effective title, notes, time split, own tags, no nested activity). Good enough to hand to a person or an LLM for analysis; not a
 backup format, since there is no import path and the shape may change freely.

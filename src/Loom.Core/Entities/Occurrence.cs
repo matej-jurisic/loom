@@ -27,4 +27,5 @@ public class Occurrence
     public Occurrence? DeadlineOccurrence { get; set; }
     public List<OccurrenceSubtask> Subtasks { get; set; } = [];
     public List<OccurrenceTimeSplit> TimeSplits { get; set; } = [];
+    public List<Tag> Tags { get; set; } = [];
 }

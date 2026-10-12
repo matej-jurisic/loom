@@ -18,7 +18,7 @@ import { CalendarTray } from '@/components/calendar/CalendarTray'
 import type { FloatingDragInfo } from '@/components/calendar/TrayPillRow'
 import { VIEW_OPTIONS, addDays, assignAllDayRows, dayHeader, effectiveAllDayEnd, formatDateInput, formatDatetimeLocal, hourLabel, isSameDay, sod, startOfWeek } from '@/lib/calendarDates'
 import type { ViewMode } from '@/lib/calendarDates'
-import { DUE_SPAN_MINUTES, MIN_EVENT_PX, dragStartFor, duePinHeight, dueRowRef, eventAllDayColors, isDueOccurrence, isEODDue, occursOnDay, snapToGrid, snapToGridDue } from '@/lib/calendarLayout'
+import { DUE_SPAN_MINUTES, MIN_EVENT_PX, dragStartFor, duePinHeight, dueRowRef, eventAllDayColors, isDueOccurrence, isEODDue, occursOnDay, snapToGrid, snapToGridDue, titleWithTags } from '@/lib/calendarLayout'
 
 const DEFAULT_HOUR_PX = 64
 const MIN_HOUR_PX = 32
@@ -1734,7 +1734,7 @@ export function CalendarPage() {
                             }}
                             className={`truncate rounded-[3px] px-1.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : e.status === 'skipped' ? 'opacity-30' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`}
                           >
-                            {e.effectiveTitle}
+                            {titleWithTags(e)}
                           </button>
                         )
                       })}
@@ -1770,7 +1770,7 @@ export function CalendarPage() {
                     <div className="flex flex-1 flex-col gap-0.5 border-l border-r px-0.5 py-0.5 min-h-[26px]" style={{ borderColor: 'var(--calendar-line)' }}>
                       {dayAllDayEvents.map((e) => (
                         <button key={e.id} onPointerDown={(ev) => handleAllDayPillMoveStart(ev, e)} onClick={() => { if (!suppressClickRef.current) openDetail(e) }} className={`w-full truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status !== 'pending' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`} style={{ touchAction: 'none', ...eventAllDayColors(e).style }}>
-                          {e.effectiveTitle}
+                          {titleWithTags(e)}
                         </button>
                       ))}
                     </div>
@@ -1879,7 +1879,7 @@ export function CalendarPage() {
                         >
                           <div style={{ width: 3, minWidth: 3, alignSelf: 'stretch', background: leftColor }} className="shrink-0" />
                           <div className="flex min-w-0 flex-1 items-center gap-1 px-1.5 py-0.5">
-                            <p className="min-w-0 flex-1 truncate" style={{ color: accentColor }}>{o.effectiveTitle}</p>
+                            <p className="min-w-0 flex-1 truncate" style={{ color: accentColor }}>{titleWithTags(o)}</p>
                             <span className="shrink-0 text-[9px] leading-none opacity-60" style={{ color: accentColor }}>{time}</span>
                           </div>
                         </button>

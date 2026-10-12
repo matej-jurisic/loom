@@ -94,6 +94,11 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   `Activity.Tags` is the same shape through `ActivityTags`, written only by `ActivityService`
   (`ResolveTagsAsync`); every query that builds an `ActivityDto` must `.Include(a => a.Tags)`.
   The activity PUT is a full replace, so a caller that omits `tagIds` clears the tags.
+  `Occurrence.Tags` is a second, additive layer through `OccurrenceTags`, written only by
+  `OccurrenceService` (`ApplyTagsAsync`; a null `TagIds` leaves it alone). `OccurrenceDto` carries
+  both `Tags` (own) and `EffectiveTags` (union with the activity's); every filter, grouping and
+  count over occurrences uses `effectiveTags`, never `activity.tags`. Anything that builds an
+  `OccurrenceDto` must `.Include(o => o.Tags)` beside the activity's (`WithFullIncludes`).
 - `Common/Result.cs` — `Result`/`Result<T>` + `Error(ErrorType, msg)`. **Expected failures = Results, not exceptions.**
 - `Common/Validators.cs` — shared static validation rules.
 - `Common/DayMath.cs` — all "which day / is this overdue?" logic goes through here, in the user's IANA
@@ -198,7 +203,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `components/activities/BulkAssignModal.tsx` — adds / removes / replaces goals and sets category on a multi-select. No bulk endpoint exists:
   it fans out over `PUT /api/activities/{id}`, resending unchanged fields from each activity (the PUT is a full replace,
   `repeatAfterDays` included, which is why `activitiesApi.update` requires it).
-- `components/tags/TagPicker.tsx` — toggle chips plus a create-on-Enter input; used by `ActivityModal`.
+- `components/tags/TagPicker.tsx` — toggle chips plus a create-on-Enter input; used by `ActivityModal`
+  and `EventModal` (the occurrence's own tags).
   `TagModal.tsx` adds / renames from the Tags page. `BulkAssignModal` resends each
   activity's `tagIds` (the PUT would otherwise wipe them).
 - `components/goals/GoalPicker.tsx` — toggle chips for an activity's goal set, used by `ActivityModal`,

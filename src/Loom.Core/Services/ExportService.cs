@@ -30,6 +30,7 @@ public class ExportService(LoomDbContext db)
         var occurrences = await db.Occurrences
             .Include(o => o.Activity)
             .Include(o => o.Subtasks)
+            .Include(o => o.Tags)
             .Include(o => o.TimeSplits).ThenInclude(t => t.WorkType)
             .Where(o => o.UserId == userId)
             .ToListAsync();
