@@ -404,7 +404,8 @@ the goal sections, which are standing context rather than something to clear bef
   is listed here too, since not being late is no reason to disappear. Only dates before today count:
   something earlier today stays on the agenda, styled overdue if it is. The exception is a
   deadline-only occurrence (end, no start): it has no hour on the agenda, so it moves here once its
-  end has passed. Undated (floating) occurrences
+  end has passed. A date-only (all-day) occurrence is judged by its calendar date, so the day
+  boundary never makes today's one count as behind. Undated (floating) occurrences
   are not included - they have no date to be behind. One button moves the whole set to tomorrow,
   preserving each clock time and each occurrence's planned / all-day flags.
 - **Timeline agenda** — every dated occurrence on the day as a spine with a time gutter, split by a
@@ -510,8 +511,8 @@ Sections collapse and carry counts.
 The toolbar is the search box and a "Filters" button (with a count of the active filters) at every
 width. On mobile the category filter is a searchable dropdown under the search box, always visible;
 on desktop it sits with the other filters and the sidebar's category list is the quick path. The rest is
-behind a "Filters" button next to the search box (with a count of the active filters): the status
-control, the tag and goal filters and the grouping open beneath it on tap.
+behind a "Filters" button next to the search box (with a count of the active filters): the status,
+tag and goal filters and the grouping open beneath it on tap.
 
 Filtering and grouping run in the client over the full occurrence list (`GET /api/occurrences`).
 Grouped by Activity under one tag, a course reads as its Lecture, Lab and Homework sections.

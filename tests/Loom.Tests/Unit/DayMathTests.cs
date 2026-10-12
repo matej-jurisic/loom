@@ -156,6 +156,17 @@ public class DayMathTests
     }
 
     [Fact]
+    public void IsBehind_AllDayIgnoresDayBoundary()
+    {
+        var ctx = Ctx(Zagreb, "05:00");
+        var allDayToday = Pending("2026-06-02T00:00:00+02:00", allDay: true);
+        Assert.False(DayMath.IsBehind(allDayToday, ctx, At("2026-06-02T06:00:00+02:00")));
+        Assert.False(DayMath.IsBehind(allDayToday, ctx, At("2026-06-02T23:00:00+02:00")));
+        Assert.True(DayMath.IsBehind(allDayToday, ctx, At("2026-06-03T06:00:00+02:00")));
+        Assert.True(DayMath.IsBehind(Pending("2026-06-01T00:00:00+02:00", allDay: true), ctx, At("2026-06-02T06:00:00+02:00")));
+    }
+
+    [Fact]
     public void IsOverdue_TimedWithoutEnd_StaysOpenUntilItsDayEnds()
     {
         var ctx = Ctx(Zagreb);

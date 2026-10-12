@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useLayoutEffect } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, Check, Search } from 'lucide-react'
 
@@ -18,6 +18,7 @@ interface SelectProps {
   onCreateNew?: () => void
   createNewLabel?: string
   className?: string
+  icon?: ReactNode
 }
 
 export function Select({
@@ -30,6 +31,7 @@ export function Select({
   onCreateNew,
   createNewLabel = '+ Create new',
   className = '',
+  icon,
 }: SelectProps) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -174,6 +176,7 @@ export function Select({
           error ? 'border-destructive' : 'border-input'
         } ${selected ? 'text-foreground' : 'text-muted-foreground'} ${className}`}
       >
+        {icon && <span className="shrink-0 text-muted-foreground">{icon}</span>}
         <span className="min-w-0 flex-1 truncate">{selected ? selected.label : placeholder}</span>
         <ChevronDown
           className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`}

@@ -1,7 +1,19 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router-dom'
-import { ChevronDown, CircleDashed, Plus, Search, SlidersHorizontal, X } from 'lucide-react'
+import {
+  ChevronDown,
+  CircleCheck,
+  CircleDashed,
+  Hash,
+  Layers,
+  Plus,
+  Search,
+  Shapes,
+  SlidersHorizontal,
+  Target,
+  X,
+} from 'lucide-react'
 import { categoriesApi, goalsApi, occurrencesApi, tagsApi } from '@/lib/api'
 import type { Occurrence } from '@/lib/types'
 import {
@@ -150,7 +162,12 @@ export function OccurrencesPage() {
     ...categories.map((c) => ({ value: c.id, label: c.name })),
   ]
   const categorySelect = (
-    <Select value={filters.category ?? ''} onChange={(v) => setParam('category', v)} options={categoryOptions} />
+    <Select
+      icon={<Shapes className="h-4 w-4" strokeWidth={2} />}
+      value={filters.category ?? ''}
+      onChange={(v) => setParam('category', v)}
+      options={categoryOptions}
+    />
   )
   const tagOptions = [
     { value: '', label: 'Any tag' },
@@ -226,28 +243,28 @@ export function OccurrencesPage() {
           <div className="md:hidden">{categorySelect}</div>
 
           <div className={`${filtersOpen ? 'flex' : 'hidden'} flex-col gap-2.5`}>
-            <div className="flex overflow-hidden rounded-md border border-border">
-              {STATUSES.map(({ value, label }) => (
-                <button
-                  key={value}
-                  onClick={() => setParam('status', value === 'open' ? null : value)}
-                  aria-pressed={filters.status === value}
-                  className={`flex-1 border-l border-border px-2.5 py-1.5 text-xs font-medium transition-colors first:border-l-0 ${
-                    filters.status === value
-                      ? 'bg-primary text-primary-foreground'
-                      : 'text-muted-foreground hover:bg-muted'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <div className="hidden md:block">{categorySelect}</div>
-              <Select value={filters.tag ?? ''} onChange={(v) => setParam('tag', v)} options={tagOptions} />
-              <Select value={filters.goal ?? ''} onChange={(v) => setParam('goal', v)} options={goalOptions} />
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               <Select
+                icon={<CircleCheck className="h-4 w-4" strokeWidth={2} />}
+                value={filters.status}
+                onChange={(v) => setParam('status', v === 'open' ? null : v)}
+                options={STATUSES.map((s) => ({ value: s.value, label: s.label }))}
+              />
+              <div className="hidden md:block">{categorySelect}</div>
+              <Select
+                icon={<Hash className="h-4 w-4" strokeWidth={2} />}
+                value={filters.tag ?? ''}
+                onChange={(v) => setParam('tag', v)}
+                options={tagOptions}
+              />
+              <Select
+                icon={<Target className="h-4 w-4" strokeWidth={2} />}
+                value={filters.goal ?? ''}
+                onChange={(v) => setParam('goal', v)}
+                options={goalOptions}
+              />
+              <Select
+                icon={<Layers className="h-4 w-4" strokeWidth={2} />}
                 value={group}
                 onChange={(v) => chooseGroup(v as OccurrenceGroupBy)}
                 options={GROUPS.map((g) => ({ value: g.value, label: `Group: ${g.label}` }))}

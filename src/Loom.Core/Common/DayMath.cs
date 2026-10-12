@@ -95,6 +95,11 @@ public static class DayMath
     public static bool IsBehind(Occurrence o, DayContext ctx, DateTimeOffset nowUtc)
     {
         if (o.Status != EventStatus.pending) return false;
+        if (o.IsAllDay && o.StartAt.HasValue)
+        {
+            var occDate = DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(o.StartAt.Value, ctx.TimeZone).DateTime);
+            return occDate < Today(ctx, nowUtc);
+        }
         var reference = o.StartAt ?? o.EndAt;
         if (reference is null) return false;
         if (DayOf(reference.Value, ctx) < Today(ctx, nowUtc)) return true;
