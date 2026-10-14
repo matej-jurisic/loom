@@ -53,7 +53,7 @@ function CategoryLink({
   children: React.ReactNode
 }) {
   return (
-    <NavLink to={`/occurrences?category=${categoryId}`} className="block">
+    <NavLink to={`/occurrences/all?category=${categoryId}`} className="block">
       <span
         className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
           active
@@ -70,8 +70,9 @@ function CategoryLink({
 
 export function Sidebar() {
   const location = useLocation()
-  const onOccurrences = location.pathname === '/occurrences'
-  const activeCategory = onOccurrences ? new URLSearchParams(location.search).get('category') : null
+  const onOccurrences = location.pathname.startsWith('/occurrences')
+  const activeCategory =
+    location.pathname === '/occurrences/all' ? new URLSearchParams(location.search).get('category') : null
 
   const { data: categories = [] } = useQuery({
     queryKey: ['categories'],

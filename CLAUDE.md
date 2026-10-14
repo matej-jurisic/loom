@@ -79,11 +79,13 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 **Backend (`Loom.Core`)**
 - `Entities/` — POCOs; `Guid Id = Guid.NewGuid()` + `DateTimeOffset CreatedAt`, no base class.
   Entities: `User, Activity, Occurrence, Goal, Checkpoint, Category, Tag, UserSettings, ActivitySubtask,
-  OccurrenceSubtask, ActivityWorkType, OccurrenceTimeSplit` (subtasks are two levels:
+  OccurrenceSubtask, ActivityWorkType, OccurrenceTimeSplit, OccurrenceList` (subtasks are two levels:
   `ActivitySubtask` is the title-only template, copied into `OccurrenceSubtask` rows — which carry
   `IsDone` — when an occurrence is created. Work types are **not** copied: `ActivityWorkType` is a
   label list on the activity, and an `OccurrenceTimeSplit` row references one, with `Minutes` null
   meaning "auto").
+  `ActivitySubtaskService.ApplyToPendingAsync` (`/api/activities/{id}/subtasks/apply`, GET counts, POST
+  applies) is the only path from a later template edit to existing occurrences: pending only, append-only.
 - `Enums/` — stored as strings (`HasConversion<string>`).
 - `Data/LoomDbContext.cs` — DbSets + `OnModelCreating`. `Occurrence → Activity` cascade delete; `Activity → Category` set-null.
   `Activity.Goals` is many-to-many through the `ActivityGoals` join table (no entity class, cascade on
@@ -173,13 +175,22 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `pages/` — `PlanPage` (**this is `/plan`**), `CalendarPage`, `OccurrencesPage`, `CategoriesPage`, `TagsPage`,
   `GoalsPage` (**this is `/goals`**), `ActivitiesPage`,
   `InsightsPage`, `GuidePage` (**`/guide`**, in-app usage guide, static content, kept to short scannable lines), `SettingsPage`.
-- `pages/OccurrencesPage.tsx` — **the only occurrence list view** (`/occurrences`). Status, category, tag
-  and goal filters live in the URL; the grouping (`when` / category / tag / goal / activity / none) in
-  `localStorage`. Everything runs in the client over `['events', 'all']`; `lib/occurrenceView.ts` holds the
-  pure parts (`filterOccurrences`, `groupOccurrences`, `classify`, `formatOccurrenceDate`) and has the
-  vitest cases. `pages/CategoriesPage.tsx` and `pages/TagsPage.tsx` are management lists only and link
-  to it with `?category=` / `?tag=`.
-- `lib/api.ts` — `request<T>` (bearer + one-shot 401 refresh). Key namespaces: `activitiesApi`, `occurrencesApi`, `categoriesApi`, `goalsApi`, `checkpointsApi`, `insightsApi`.
+- `pages/OccurrencesPage.tsx` — **the only occurrence list view**, one `OccurrencesView` behind two routes:
+  `AllOccurrencesPage` (`/occurrences/all`; status, category, tag and goal in the URL, grouping in
+  `localStorage`) and `OccurrenceListPage` (`/occurrences/lists/:id`; local state seeded from a saved
+  List, "Save to list" writes it back). Everything runs in the client over `['events', 'all']`;
+  `lib/occurrenceView.ts` holds the pure parts (`filterOccurrences`, `groupOccurrences`, `classify`,
+  `formatOccurrenceDate`, and `OccurrenceView` / `viewFromList` / `listBody` / `sameView` for Lists) and
+  has the vitest cases. `components/events/OccurrenceFilterFields.tsx` is the selects grid, shared with
+  `components/lists/ListModal.tsx`. `pages/CategoriesPage.tsx` and `pages/TagsPage.tsx` are management
+  lists only and link to it with `/occurrences/all?category=` / `?tag=`.
+- `pages/ListsPage.tsx` — `/occurrences`: the saved Lists (`OccurrenceList` entity, `OccurrenceListService`,
+  `/api/lists`, query key `['lists']`, `invalidateLists`) then an "All occurrences" link. A query string
+  redirects to `/occurrences/all` so old filtered links keep working. Lists store category / tag / goal
+  as the filter string (id or `none`), not foreign keys. A list's optional `icon` is a name from the category
+  icon set and its optional `color` a hex, drawn by `components/lists/ListIcon.tsx` (`ListTile`); the PUT is a full
+  replace, so `listBody` carries both.
+- `lib/api.ts` — `request<T>` (bearer + one-shot 401 refresh). Key namespaces: `activitiesApi`, `occurrencesApi`, `categoriesApi`, `goalsApi`, `checkpointsApi`, `listsApi`, `insightsApi`.
 - `lib/types.ts` — mirrors backend DTOs. Key types: `Activity`, `Occurrence` (has `effectiveTitle`), `Goal`, `Category`, `Insights`.
 - `lib/goals.ts` — `recencyLabel`/`isStale` over the server's `daysSinceLastOccurrence` (Goals page and Plan chips); `lib/useMediaQuery.ts` — `matchMedia` as a hook.
 - `lib/invalidate.ts` — the query-invalidation helpers; every mutation goes through them.
@@ -203,6 +214,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `components/activities/BulkAssignModal.tsx` — adds / removes / replaces goals and sets category on a multi-select. No bulk endpoint exists:
   it fans out over `PUT /api/activities/{id}`, resending unchanged fields from each activity (the PUT is a full replace,
   `repeatAfterDays` included, which is why `activitiesApi.update` requires it).
+- `components/categories/categoryIcons.tsx` — `ICON_GROUPS` (the picker's tabs) and `ICON_MAP` derived from them;
+  stored icon names are the keys, so moving an icon between groups is free but renaming one orphans it.
 - `components/tags/TagPicker.tsx` — toggle chips plus a create-on-Enter input; used by `ActivityModal`
   and `EventModal` (the occurrence's own tags).
   `TagModal.tsx` adds / renames from the Tags page. `BulkAssignModal` resends each
@@ -246,7 +259,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   may sign the user out; `unreachable` (no response, or 5xx) must keep the session. `request` turns a
   network failure into `ApiError(0, ...)`.
 - `components/layout/Sidebar.tsx` — desktop nav: eight page items (including Categories and Tags), a "By category" list of links to
-  `/occurrences?category=<id>` (read-only; management is `CategoriesPage`), and Guide + Settings pinned at the bottom.
+  `/occurrences/all?category=<id>` (read-only; management is `CategoriesPage`), and Guide + Settings pinned at the bottom.
 - `components/layout/BottomNav.tsx` — mobile nav: 4 tabs (Plan, Activities, Calendar, Occurrences) + "More"
   bottom sheet (Goals, Categories, Tags, Insights, Guide, Settings). Max 5 slots; new pages go in the sheet.
 - `components/layout/LoomMark.tsx` — the brand mark (fill-based weave glyph, not a stroked lucide
@@ -367,7 +380,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   **and `['events']`** (occurrences embed their activity: its title feeds `effectiveTitle` and its category
   feeds every row and calendar block's colour). After any goal write also invalidate `['goals']`.
   Never call `invalidateQueries` for these directly: use the helpers in `lib/invalidate.ts`
-  (`invalidateOccurrences`, `invalidateActivities`, `invalidateWorkTypes`, `invalidateGoals`, `invalidateTags`, `invalidateAll`).
+  (`invalidateOccurrences`, `invalidateActivities`, `invalidateWorkTypes`, `invalidateGoals`, `invalidateTags`, `invalidateLists`, `invalidateAll`).
 - **Design:** see `design.md`. Use semantic color tokens, not hardcoded values.
 
 ## Gotchas

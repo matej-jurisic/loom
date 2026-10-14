@@ -449,7 +449,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
                     value={form.title}
                     onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
-                    autoFocus
+                    autoFocus={!isEdit}
                     className={`h-10 rounded-lg border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring ${errors.title ? 'border-destructive' : 'border-input'}`}
                   />
                 </>

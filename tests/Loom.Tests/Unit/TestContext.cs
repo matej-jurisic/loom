@@ -18,7 +18,9 @@ public class TestContext : IDisposable
     public UserSettingsService UserSettingsService { get; }
     public InsightsService InsightsService { get; }
     public ActivityWorkTypeService ActivityWorkTypeService { get; }
+    public ActivitySubtaskService ActivitySubtaskService { get; }
     public TagService TagService { get; }
+    public OccurrenceListService OccurrenceListService { get; }
 
     public TestContext()
     {
@@ -49,7 +51,9 @@ public class TestContext : IDisposable
         CheckpointService = new CheckpointService(Db);
         InsightsService = new InsightsService(Db, UserSettingsService);
         ActivityWorkTypeService = new ActivityWorkTypeService(Db);
+        ActivitySubtaskService = new ActivitySubtaskService(Db);
         TagService = new TagService(Db);
+        OccurrenceListService = new OccurrenceListService(Db);
     }
 
     public void Dispose()

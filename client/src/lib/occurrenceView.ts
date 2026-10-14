@@ -1,4 +1,4 @@
-import type { Occurrence } from './types'
+import type { Occurrence, OccurrenceList, SaveOccurrenceListBody } from './types'
 
 export type WhenBucket = 'overdue' | 'today' | 'planned' | 'upcoming' | 'floating' | 'nodate' | 'done'
 
@@ -19,12 +19,79 @@ export type OccurrenceGroupBy = 'when' | 'category' | 'tag' | 'goal' | 'activity
 
 export const NONE_FILTER = 'none'
 
+export const STATUS_OPTIONS: { value: StatusFilter; label: string }[] = [
+  { value: 'open', label: 'Open' },
+  { value: 'done', label: 'Done' },
+  { value: 'skipped', label: 'Skipped' },
+  { value: 'all', label: 'All' },
+]
+
+export const GROUP_OPTIONS: { value: OccurrenceGroupBy; label: string }[] = [
+  { value: 'when', label: 'When' },
+  { value: 'category', label: 'Category' },
+  { value: 'tag', label: 'Tag' },
+  { value: 'goal', label: 'Goal' },
+  { value: 'activity', label: 'Activity' },
+  { value: 'none', label: 'None' },
+]
+
 export interface OccurrenceFilters {
   status: StatusFilter
   category: string | null
   tag: string | null
   goal: string | null
   search: string
+}
+
+/** Everything a list saves: the filters plus the grouping. */
+export interface OccurrenceView extends OccurrenceFilters {
+  group: OccurrenceGroupBy
+}
+
+export const DEFAULT_GROUP: OccurrenceGroupBy = 'when'
+
+export function viewFromList(l: OccurrenceList): OccurrenceView {
+  return {
+    status: l.status,
+    category: l.category,
+    tag: l.tag,
+    goal: l.goal,
+    search: l.search ?? '',
+    group: l.groupBy ?? DEFAULT_GROUP,
+  }
+}
+
+export function listBody(
+  meta: Pick<OccurrenceList, 'name' | 'icon' | 'color'>,
+  v: OccurrenceView,
+): SaveOccurrenceListBody {
+  return {
+    name: meta.name.trim(),
+    icon: meta.icon,
+    color: meta.color,
+    status: v.status,
+    category: v.category,
+    tag: v.tag,
+    goal: v.goal,
+    search: v.search.trim() || null,
+    groupBy: v.group,
+  }
+}
+
+/** True when the filters narrow anything compared with the page's default (open, no other filter). */
+export function isNarrowed(f: OccurrenceFilters): boolean {
+  return f.status !== 'open' || f.category !== null || f.tag !== null || f.goal !== null || f.search.trim() !== ''
+}
+
+export function sameView(a: OccurrenceView, b: OccurrenceView): boolean {
+  return (
+    a.status === b.status &&
+    a.category === b.category &&
+    a.tag === b.tag &&
+    a.goal === b.goal &&
+    a.search.trim() === b.search.trim() &&
+    a.group === b.group
+  )
 }
 
 export interface OccurrenceSection {

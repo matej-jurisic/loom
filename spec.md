@@ -117,6 +117,13 @@ Two levels, deliberately separate:
   can be toggled from the occurrence detail modal, edited individually, or replaced as a full set on
   an occurrence update (id present = keep and rename, id absent = create, missing = delete, whole
   field omitted = leave untouched).
+- **Applying the template later.** Because the copy happens once, a title added to the template does
+  not reach occurrences that already exist on its own. The Edit Activity dialog shows "Add to N pending
+  occurrences" under the subtask list while any **pending** occurrence of the activity lacks a template
+  title (compared trimmed, case-insensitive); `GET /api/activities/{id}/subtasks/apply` returns that N
+  and `POST` to the same path does it. It only appends the missing titles, in template order, after
+  the occurrence's own: it never renames, removes or unticks a subtask, done and skipped occurrences
+  keep the checklist they were done with, and running it again adds nothing.
 
 ### Work types
 
@@ -282,7 +289,7 @@ there is no series and no backlog to catch up on.
 - **On skip**, the skip modal's default date becomes that same date in place of the day after the
   occurrence's own.
 
-**Duplicate.** The occurrence detail modal duplicates into a pre-filled create modal. No backend
+**Duplicate.** The occurrence detail modal and the Occurrences page row menu duplicate into a pre-filled create modal. No backend
 support is needed: it is a create with copied fields.
 
 **Re-pointing.** An occurrence's activity can be changed after creation, from the same picker used to
@@ -382,7 +389,9 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 |---|---|
 | `/plan` | Daily Plan: one day's agenda. Index route. |
 | `/calendar` | Day / 3-day / week grid. Visualization, and the fastest way to add something. |
-| `/occurrences` | Every occurrence, filtered and grouped. The one place occurrences are listed and sliced. |
+| `/occurrences` | The saved Lists, then an "All occurrences" entry. Opened with filter params, it redirects to `/occurrences/all` with them. |
+| `/occurrences/all` | Every occurrence, filtered and grouped. The one place occurrences are listed and sliced. |
+| `/occurrences/lists/{id}` | The same list view, starting from one saved List's filters and grouping. |
 | `/categories` | Category management: add, rename, recolour, delete. |
 | `/tags` | Tag management: add, rename, delete. |
 | `/goals` | Goal list grouped by status. Focus goals are always expanded and their section shows slots used (`2/3`); Active, Bench and Closed goals are one-line rows that a chevron expands to checkpoints, notes and heatmap (Closed has no heatmap). Tapping a goal opens its History; the menu edits, adds a checkpoint, changes status or deletes. |
@@ -394,7 +403,7 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 
 Navigation: a 240px desktop sidebar (Daily Plan, Calendar, Occurrences, Goals, Activities, Categories, Tags,
 Insights, then a "By category" list - one link per category plus No category - that opens
-`/occurrences` filtered to it, and Guide and Settings pinned at the bottom); on mobile a
+`/occurrences/all` filtered to it, and Guide and Settings pinned at the bottom); on mobile a
 5-slot bottom bar (Plan, Activities, Calendar, Occurrences) plus a "More" sheet holding Goals,
 Categories, Tags, Insights, Guide and Settings. `/guide` is an in-app guide to using Loom; it
 currently defines activity, occurrence, category, tag, goal, work type and subtask and how they relate. Nav items are not `end`-matched, so drilling into a goal or activity keeps the parent item
@@ -463,6 +472,8 @@ expects you to complete. Empty grid means nothing in particular.
   it stops when its bottom edge reaches midnight, however deep into the block it was grabbed. So an
   occurrence cannot be dragged across midnight - the model and the grid both still handle ones that
   do, they are just made in the edit modal.
+- **Done and skipped occurrences stay on the calendar**, styled apart (see `design.md`), so a skipped
+  slot still shows where it was meant to be. Both can be opened, moved and resized like any block.
 - **Dropping a pending occurrence on a different date asks first**, since that gesture reads two ways:
   *Move* changes the occurrence's date, and *Skip & reschedule* marks the original day skipped and puts
   a new pending copy on the new date. Dismissing the dialog leaves it where it was. A same-day drag is
@@ -507,9 +518,9 @@ One list over every occurrence, narrowed by filters and split by a grouping.
 **Filters** combine: **status** (Open = pending, the default; Done; Skipped; All), **category**,
 **tag**, **goal** (each takes one value, "Any" by default, or "No category" / "No tag" / "No goal"
 for the absence of one) and a text search over the title, notes, category, tag and goal names.
-Status, category, tag and goal live in the URL (`?status=done&tag={id}`), so the Categories and Tags
-pages link straight to a filtered view; search does not. "Reset filters" returns to Open with
-everything else cleared.
+On `/occurrences/all`, status, category, tag and goal live in the URL (`?status=done&tag={id}`), so
+the Categories and Tags pages and the sidebar link straight to a filtered view; search does not.
+"Reset filters" returns to Open with everything else cleared.
 
 **Grouping** (remembered in `localStorage`): **When** (the default), **Category**, **Tag**, **Goal**,
 **Activity** or **None**. When groups into Overdue → Today → Planned → Upcoming → Floating → No date →
@@ -519,10 +530,18 @@ section last; an occurrence with several tags (its own plus its activity's) or g
 Sections collapse and carry counts.
 
 The toolbar is the search box and a "Filters" button (with a count of the active filters) at every
-width. On mobile the category filter is a searchable dropdown under the search box, always visible;
-on desktop it sits with the other filters and the sidebar's category list is the quick path. The rest is
-behind a "Filters" button next to the search box (with a count of the active filters): the status,
-tag and goal filters and the grouping open beneath it on tap.
+width; the status, category, tag and goal filters and the grouping open beneath it on tap.
+
+**Lists** are saved filter presets: a name, an optional icon (from the category icon set), an optional colour (6-digit hex, validated like a category's) plus status, category, tag, goal, search text and grouping.
+They hold no occurrences and create none; opening one runs its filters over the same full list.
+`/occurrences` shows them first (each with its filters summarised and a count of what matches now),
+then "All occurrences". Inside a list the filters stay editable; once they differ from what is saved,
+"Save to list" writes them back and "Revert" restores them. On All occurrences, "Save as list" opens
+the list modal pre-filled with the current filters. The header menu edits (same modal) or deletes the list.
+Stored per user (`/api/lists`, `GET`/`POST`/`PUT` full replace/`DELETE`), names unique ignoring case.
+Category, tag and goal are stored as the filter value (an id or `none`), not as a foreign key, so
+deleting the target leaves the list matching nothing (summarised as "Deleted tag") rather than
+silently widening to "any".
 
 Filtering and grouping run in the client over the full occurrence list (`GET /api/occurrences`).
 Grouped by Activity under one tag, a course reads as its Lecture, Lab and Homework sections. A tag

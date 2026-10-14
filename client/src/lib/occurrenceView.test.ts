@@ -7,7 +7,12 @@ import {
   filterOccurrences,
   formatOccurrenceDate,
   groupOccurrences,
+  isNarrowed,
+  listBody,
+  sameView,
+  viewFromList,
   type OccurrenceFilters,
+  type OccurrenceView,
 } from './occurrenceView'
 
 const now = new Date(2026, 9, 7, 12, 0)
@@ -197,5 +202,32 @@ describe('groupOccurrences', () => {
   it('returns one headerless section for none and nothing for an empty list', () => {
     expect(groupOccurrences([occ()], 'none', now)).toMatchObject([{ key: 'all', label: null }])
     expect(groupOccurrences([], 'when', now)).toEqual([])
+  })
+})
+
+describe('lists', () => {
+  const view: OccurrenceView = { status: 'open', category: null, tag: 't1', goal: null, search: ' milk ', group: 'when' }
+
+  it('round-trips a view through the saved list shape', () => {
+    const body = listBody({ name: '  Errands ', icon: 'ShoppingCart', color: '#3b82f6' }, view)
+    expect(body).toEqual({ name: 'Errands', icon: 'ShoppingCart', color: '#3b82f6', status: 'open', category: null, tag: 't1', goal: null, search: 'milk', groupBy: 'when' })
+    const back = viewFromList({ id: 'l1', ...body })
+    expect(sameView(back, view)).toBe(true)
+  })
+
+  it('defaults a list without grouping to when and treats an empty search as none', () => {
+    const v = viewFromList({ id: 'l1', name: 'x', icon: null, color: null, status: 'done', category: null, tag: null, goal: null, search: null, groupBy: null })
+    expect(v.group).toBe('when')
+    expect(v.search).toBe('')
+    expect(listBody({ name: 'x', icon: null, color: null }, { ...v, search: '   ' }).search).toBeNull()
+  })
+
+  it('sees a grouping change as a difference but not as narrowing', () => {
+    const regrouped = { ...view, group: 'tag' as const }
+    expect(sameView(view, regrouped)).toBe(false)
+    const plain = { ...view, tag: null, search: '' }
+    expect(isNarrowed(plain)).toBe(false)
+    expect(isNarrowed({ ...plain, group: 'tag' })).toBe(false)
+    expect(isNarrowed({ ...plain, category: 'none' })).toBe(true)
   })
 })

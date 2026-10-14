@@ -104,7 +104,7 @@ export function CheckpointModal({ open, onClose, goalId, checkpoint }: Checkpoin
         onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
         placeholder="e.g. Learn your first full song"
         error={errors.title}
-        autoFocus
+        autoFocus={!isEdit}
       />
 
       <div className="flex flex-col gap-1.5">

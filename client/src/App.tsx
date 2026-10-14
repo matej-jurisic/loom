@@ -11,7 +11,8 @@ import { PlanPage } from '@/pages/PlanPage'
 import { GoalsPage } from '@/pages/GoalsPage'
 import { CategoriesPage } from '@/pages/CategoriesPage'
 import { TagsPage } from '@/pages/TagsPage'
-import { OccurrencesPage } from '@/pages/OccurrencesPage'
+import { AllOccurrencesPage, OccurrenceListPage } from '@/pages/OccurrencesPage'
+import { ListsPage } from '@/pages/ListsPage'
 import { CalendarPage } from '@/pages/CalendarPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { ActivitiesPage } from '@/pages/ActivitiesPage'
@@ -60,7 +61,9 @@ function AppRoutes() {
       <ErrorBoundary resetKey={location.pathname}>
         <Routes>
           <Route path="/plan"     element={<PlanPage />} />
-          <Route path="/occurrences" element={<OccurrencesPage />} />
+          <Route path="/occurrences" element={<ListsPage />} />
+          <Route path="/occurrences/all" element={<AllOccurrencesPage />} />
+          <Route path="/occurrences/lists/:id" element={<OccurrenceListPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/tags"     element={<TagsPage />} />
           <Route path="/inbox"    element={<Navigate to="/occurrences" replace />} />

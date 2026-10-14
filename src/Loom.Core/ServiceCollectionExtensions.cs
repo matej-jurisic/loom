@@ -28,6 +28,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<CheckpointService>();
         services.AddScoped<CategoryService>();
         services.AddScoped<TagService>();
+        services.AddScoped<OccurrenceListService>();
         services.AddScoped<InsightsService>();
         services.AddScoped<ExportService>();
 

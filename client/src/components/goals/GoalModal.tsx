@@ -95,7 +95,7 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
         onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
         placeholder="What are you working towards?"
         error={errors.title}
-        autoFocus
+        autoFocus={!isEdit}
       />
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-medium text-foreground">Description</label>

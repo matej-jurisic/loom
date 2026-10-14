@@ -129,6 +129,7 @@ app.MapCheckpointEndpoints();
 app.MapSettingsEndpoints();
 app.MapCategoryEndpoints();
 app.MapTagEndpoints();
+app.MapOccurrenceListEndpoints();
 app.MapInsightsEndpoints();
 app.MapExportEndpoints();
 

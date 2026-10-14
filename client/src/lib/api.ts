@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/store/auth'
 import { getServerUrl, isNative, getNativeRefreshToken, setNativeRefreshToken } from './server-config'
-import type { AuthResponse, User, Goal, GoalStatus, GoalHeatmap, Checkpoint, CheckpointStatus, UserSettings, Category, Tag, Activity, ActivitySubtask, ActivityWorkType, Occurrence, Insights } from './types'
+import type { AuthResponse, User, Goal, GoalStatus, GoalHeatmap, Checkpoint, CheckpointStatus, UserSettings, Category, Tag, OccurrenceList, SaveOccurrenceListBody, Activity, ActivitySubtask, ActivityWorkType, Occurrence, Insights } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -111,6 +111,13 @@ export const activitySubtasksApi = {
 
   delete: (activityId: string, id: string) =>
     request<void>(`/api/activities/${activityId}/subtasks/${id}`, { method: 'DELETE' }),
+
+  // Pending occurrences missing at least one template title; apply appends the missing ones.
+  applicable: (activityId: string) =>
+    request<{ occurrenceCount: number }>(`/api/activities/${activityId}/subtasks/apply`),
+
+  apply: (activityId: string) =>
+    request<{ occurrenceCount: number }>(`/api/activities/${activityId}/subtasks/apply`, { method: 'POST' }),
 }
 
 export const activityWorkTypesApi = {
@@ -252,6 +259,15 @@ export const tagsApi = {
   update: (id: string, body: { name: string }) =>
     request<Tag>(`/api/tags/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   delete: (id: string) => request<void>(`/api/tags/${id}`, { method: 'DELETE' }),
+}
+
+export const listsApi = {
+  list: () => request<OccurrenceList[]>('/api/lists'),
+  create: (body: SaveOccurrenceListBody) =>
+    request<OccurrenceList>('/api/lists', { method: 'POST', body: JSON.stringify(body) }),
+  update: (id: string, body: SaveOccurrenceListBody) =>
+    request<OccurrenceList>(`/api/lists/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  delete: (id: string) => request<void>(`/api/lists/${id}`, { method: 'DELETE' }),
 }
 
 export const insightsApi = {

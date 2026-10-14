@@ -16,6 +16,7 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
     public DbSet<UserSettings> UserSettings => Set<UserSettings>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Tag> Tags => Set<Tag>();
+    public DbSet<OccurrenceList> OccurrenceLists => Set<OccurrenceList>();
     public DbSet<ActivitySubtask> ActivitySubtasks => Set<ActivitySubtask>();
     public DbSet<OccurrenceSubtask> OccurrenceSubtasks => Set<OccurrenceSubtask>();
     public DbSet<ActivityWorkType> ActivityWorkTypes => Set<ActivityWorkType>();
@@ -86,6 +87,9 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
 
         modelBuilder.Entity<Tag>()
             .HasIndex(t => t.UserId);
+
+        modelBuilder.Entity<OccurrenceList>()
+            .HasIndex(l => l.UserId);
 
         modelBuilder.Entity<Goal>()
             .HasIndex(g => g.UserId);

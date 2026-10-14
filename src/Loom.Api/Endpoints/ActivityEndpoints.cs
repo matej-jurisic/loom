@@ -63,6 +63,22 @@ public static class ActivityEndpoints
                 : result.Error!.ToProblem();
         });
 
+        subtasks.MapGet("/apply", async (Guid activityId, ClaimsPrincipal principal, ActivitySubtaskService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.CountApplicableAsync(activityId, userId.Value);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToProblem();
+        });
+
+        subtasks.MapPost("/apply", async (Guid activityId, ClaimsPrincipal principal, ActivitySubtaskService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.ApplyToPendingAsync(activityId, userId.Value);
+            return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToProblem();
+        });
+
         subtasks.MapPut("/{id:guid}", async (Guid activityId, Guid id, UpdateActivitySubtaskRequest req, ClaimsPrincipal principal, ActivitySubtaskService svc) =>
         {
             var userId = principal.GetUserId();

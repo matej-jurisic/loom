@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { activitiesApi, activitySubtasksApi } from '@/lib/api'
 import type { Activity, Goal, Category, Tag } from '@/lib/types'
@@ -9,7 +9,8 @@ import { WorkTypesSection } from '@/components/activities/WorkTypesSection'
 import { GoalPicker } from '@/components/goals/GoalPicker'
 import { TagPicker } from '@/components/tags/TagPicker'
 import { pickableGoals } from '@/lib/goals'
-import { invalidateActivities } from '@/lib/invalidate'
+import { invalidateActivities, invalidateOccurrences } from '@/lib/invalidate'
+import { toastError } from '@/store/toasts'
 import { MAX_REPEAT_AFTER_DAYS, parseRepeatAfterDays } from '@/lib/repeat'
 
 interface ActivityModalProps {
@@ -52,14 +53,28 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
     },
   })
 
+  // Under ['events'] because the count depends on the activity's occurrences too.
+  const applicableQuery = useQuery({
+    queryKey: ['events', 'subtask-apply', activity?.id],
+    queryFn: () => activitySubtasksApi.applicable(activity!.id),
+    enabled: isEdit && subtasks.length > 0,
+  })
+  const applicableCount = subtasks.length > 0 ? applicableQuery.data?.occurrenceCount ?? 0 : 0
+
   const addSubtaskMutation = useMutation({
     mutationFn: (subtaskTitle: string) => activitySubtasksApi.create(activity!.id, { title: subtaskTitle }),
-    onSuccess: (created) => { setSubtasks((prev) => [...prev, created]); setNewSubtask('') },
+    onSuccess: (created) => { setSubtasks((prev) => [...prev, created]); setNewSubtask(''); applicableQuery.refetch() },
   })
 
   const deleteSubtaskMutation = useMutation({
     mutationFn: (id: string) => activitySubtasksApi.delete(activity!.id, id),
-    onSuccess: (_, id) => { setSubtasks((prev) => prev.filter((s) => s.id !== id)) },
+    onSuccess: (_, id) => { setSubtasks((prev) => prev.filter((s) => s.id !== id)); applicableQuery.refetch() },
+  })
+
+  const applySubtasksMutation = useMutation({
+    mutationFn: () => activitySubtasksApi.apply(activity!.id),
+    onSuccess: () => invalidateOccurrences(qc),
+    onError: (err) => toastError(err),
   })
 
   function handleSubmit() {
@@ -102,7 +117,7 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
-          autoFocus
+          autoFocus={!isEdit}
           className={`h-11 rounded-lg border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring ${
             titleError ? 'border-destructive' : 'border-input'
           }`}
@@ -196,6 +211,17 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
               Add
             </Button>
           </div>
+          {applicableCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="self-start"
+              onClick={() => applySubtasksMutation.mutate()}
+              loading={applySubtasksMutation.isPending}
+            >
+              Add to {applicableCount} pending {applicableCount === 1 ? 'occurrence' : 'occurrences'}
+            </Button>
+          )}
         </div>
       )}
 

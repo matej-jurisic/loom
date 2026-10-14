@@ -66,6 +66,36 @@ export function EventBlock({
     },
   }
 
+  // Skipped: an empty outline where the block was meant to go. No category colour
+  // and no strikethrough, so it can't be mistaken for done, and solid rather than
+  // dashed, so it can't be mistaken for planned.
+  const skippedBody = (
+    <button
+      className={`absolute inset-0 overflow-hidden rounded-[4px] border border-muted-foreground/40 text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isResizing ? 'ring-1 ring-primary/40' : ''}`}
+      {...bodyPointerProps}
+    >
+      <div className={`@container min-w-0 px-1.5 ${compact ? 'py-px' : 'py-0.5'}`}>
+        <p
+          className={`@max-[10px]:hidden overflow-hidden font-medium text-muted-foreground ${
+            compact ? 'whitespace-nowrap text-[10px] leading-none' : 'break-all text-[11px] leading-tight'
+          }`}
+        >
+          × {event.effectiveTitle}
+        </p>
+        {heightPx >= 44 && timeText && (
+          <p className="@max-[10px]:hidden overflow-hidden whitespace-nowrap text-[10px] leading-tight text-muted-foreground/70">
+            {timeText}
+          </p>
+        )}
+        {showTags && (
+          <p className="@max-[10px]:hidden overflow-hidden whitespace-nowrap text-[10px] leading-tight text-muted-foreground/70">
+            {tagText}
+          </p>
+        )}
+      </div>
+    </button>
+  )
+
   return (
     <div
       className={`absolute group/calev ${dimmed ? 'opacity-20' : ''}`}
@@ -80,10 +110,12 @@ export function EventBlock({
         pointerEvents: 'auto',
       }}
     >
-      {isDue ? (
+      {isSkipped && isDue ? (
+        skippedBody
+      ) : isDue ? (
         /* Due pin — flat deadline marker, no resize handles */
         <button
-          className={`absolute inset-0 flex items-start overflow-hidden rounded-[4px] text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-40' : isSkipped ? 'opacity-25' : ''}`}
+          className={`absolute inset-0 flex items-start overflow-hidden rounded-[4px] text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-40' : ''}`}
           style={{
             border: isPlanned ? `1.5px dashed ${accentColor}` : `1px solid ${accentColor}`,
             // Opaque card base so the likely-free hatch never bleeds through
@@ -96,8 +128,8 @@ export function EventBlock({
           <div style={{ width: 3, minWidth: 3, alignSelf: 'stretch', background: leftColor }} className="shrink-0" />
           <div className="flex min-w-0 flex-1 items-center gap-1 px-1.5 py-0.5">
             <p
-              className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[10px] font-medium leading-none ${isDone ? 'line-through text-muted-foreground' : isSkipped ? 'text-muted-foreground' : ''}`}
-              style={isDone || isSkipped ? undefined : { color: accentColor }}
+              className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[10px] font-medium leading-none ${isDone ? 'line-through text-muted-foreground' : ''}`}
+              style={isDone ? undefined : { color: accentColor }}
             >
               {event.effectiveTitle}
             </p>
@@ -121,9 +153,11 @@ export function EventBlock({
           </div>
 
           {/* Event body */}
-          {isPlanned ? (
+          {isSkipped ? (
+            skippedBody
+          ) : isPlanned ? (
             <button
-              className={`absolute inset-0 overflow-hidden rounded-[4px] text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-40' : isSkipped ? 'opacity-25' : ''}`}
+              className={`absolute inset-0 overflow-hidden rounded-[4px] text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-40' : ''}`}
               style={{
                 // Opaque card base so the likely-free hatch (same stripe pattern)
                 // never shows through a planned block
@@ -150,7 +184,7 @@ export function EventBlock({
             </button>
           ) : (
             <button
-              className={`absolute inset-0 overflow-hidden rounded-[4px] border bg-card text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-50' : isSkipped ? 'opacity-30' : ''} ${isResizing ? 'border-primary/60 ring-1 ring-primary/40' : 'border-border/50'}`}
+              className={`absolute inset-0 overflow-hidden rounded-[4px] border bg-card text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-50' : ''} ${isResizing ? 'border-primary/60 ring-1 ring-primary/40' : 'border-border/50'}`}
               {...bodyPointerProps}
             >
               <div
@@ -164,7 +198,7 @@ export function EventBlock({
                     className={`@max-[10px]:hidden overflow-hidden font-medium ${
                       compact ? 'whitespace-nowrap text-[10px] leading-none' : 'break-all text-[11px] leading-tight'
                     } ${
-                      isDone ? 'line-through text-muted-foreground' : isSkipped ? 'text-muted-foreground/60' : textClass
+                      isDone ? 'line-through text-muted-foreground' : textClass
                     }`}
                   >
                     {event.effectiveTitle}

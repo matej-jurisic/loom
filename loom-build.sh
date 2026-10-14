@@ -33,11 +33,14 @@ if (( do_apk )); then
   # Keystore: created once. Losing it means reinstalling the app on every device.
   if [[ ! -f $KEYSTORE ]]; then
     echo "Creating keystore $KEYSTORE"
-    umask 077
-    head -c 24 /dev/urandom | base64 | tr -d '/+=' > "$PASSFILE"
-    docker run --rm --user "$(id -u):$(id -g)" -v "$KEYDIR:/keys" "$IMAGE" \
-      keytool -genkeypair -keystore /keys/loom-release.jks -alias loom -keyalg RSA -keysize 2048 \
-      -validity 10000 -storepass "$(cat "$PASSFILE")" -keypass "$(cat "$PASSFILE")" -dname "CN=Loom"
+    # Subshell, so the strict umask covers only the secrets and not the published APK.
+    (
+      umask 077
+      head -c 24 /dev/urandom | base64 | tr -d '/+=' > "$PASSFILE"
+      docker run --rm --user "$(id -u):$(id -g)" -v "$KEYDIR:/keys" "$IMAGE" \
+        keytool -genkeypair -keystore /keys/loom-release.jks -alias loom -keyalg RSA -keysize 2048 \
+        -validity 10000 -storepass "$(cat "$PASSFILE")" -keypass "$(cat "$PASSFILE")" -dname "CN=Loom"
+    )
   fi
   PASS="$(cat "$PASSFILE")"
 

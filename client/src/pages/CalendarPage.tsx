@@ -1497,8 +1497,8 @@ export function CalendarPage() {
     if (scrollRef.current) scrollRef.current.style.overflowY = ''
   }
 
-  const allDayEvents = events.filter((e) => e.isAllDay && e.startAt && e.status !== 'skipped')
-  const calendarEvents = events.filter((e) => !e.isAllDay && e.status !== 'skipped')
+  const allDayEvents = events.filter((e) => e.isAllDay && e.startAt)
+  const calendarEvents = events.filter((e) => !e.isAllDay)
 
   // One scale per visible day. Each column collapses its own empty stretches, so
   // in a multi-day view the hours do not line up across columns - two days with
@@ -1732,7 +1732,7 @@ export function CalendarPage() {
                               touchAction: 'none',
                               ...eventAllDayColors(e).style,
                             }}
-                            className={`truncate rounded-[3px] px-1.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : e.status === 'skipped' ? 'opacity-30' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`}
+                            className={`truncate rounded-[3px] px-1.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`}
                           >
                             {titleWithTags(e)}
                           </button>
@@ -1769,7 +1769,7 @@ export function CalendarPage() {
                     </div>
                     <div className="flex flex-1 flex-col gap-0.5 border-l border-r px-0.5 py-0.5 min-h-[26px]" style={{ borderColor: 'var(--calendar-line)' }}>
                       {dayAllDayEvents.map((e) => (
-                        <button key={e.id} onPointerDown={(ev) => handleAllDayPillMoveStart(ev, e)} onClick={() => { if (!suppressClickRef.current) openDetail(e) }} className={`w-full truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status !== 'pending' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`} style={{ touchAction: 'none', ...eventAllDayColors(e).style }}>
+                        <button key={e.id} onPointerDown={(ev) => handleAllDayPillMoveStart(ev, e)} onClick={() => { if (!suppressClickRef.current) openDetail(e) }} className={`w-full truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`} style={{ touchAction: 'none', ...eventAllDayColors(e).style }}>
                           {titleWithTags(e)}
                         </button>
                       ))}

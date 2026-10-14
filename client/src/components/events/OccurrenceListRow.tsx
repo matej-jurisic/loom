@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, X, Pencil, Trash2, CalendarPlus, Clock, History, ListChecks, Flag } from 'lucide-react'
+import { Check, X, Pencil, Trash2, CalendarPlus, Copy, Clock, History, ListChecks, Flag } from 'lucide-react'
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Occurrence, EventStatus } from '@/lib/types'
@@ -34,9 +34,10 @@ interface OccurrenceListRowProps {
   timeText?: string | null
   onEdit: (o: Occurrence) => void
   onSchedule?: (o: Occurrence) => void
+  onDuplicate?: (o: Occurrence) => void
 }
 
-export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: OccurrenceListRowProps) {
+export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, onDuplicate }: OccurrenceListRowProps) {
   const qc = useQueryClient()
   const [subtasksOpen, setSubtasksOpen] = useState(false)
   const [skipOpen, setSkipOpen] = useState(false)
@@ -61,12 +62,15 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
     onMutate: async (status) => {
       await qc.cancelQueries({ queryKey: ['events'] })
       const snapshots = qc.getQueriesData<Occurrence[]>({ queryKey: ['events'] })
+      // Not every ['events'] entry is an occurrence array (e.g. the subtask-apply count).
       qc.setQueriesData<Occurrence[]>({ queryKey: ['events'] }, (old) =>
-        old?.map((o) =>
-          o.id === occurrence.id
-            ? { ...o, status, isOverdue: status === 'pending' ? o.isOverdue : false, isBehind: status === 'pending' ? o.isBehind : false }
-            : o,
-        ),
+        Array.isArray(old)
+          ? old.map((o) =>
+              o.id === occurrence.id
+                ? { ...o, status, isOverdue: status === 'pending' ? o.isOverdue : false, isBehind: status === 'pending' ? o.isBehind : false }
+                : o,
+            )
+          : old,
       )
       return { snapshots, source: occurrence }
     },
@@ -87,7 +91,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
     onSuccess: () => {
       setConfirmDelete(false)
       qc.setQueriesData<Occurrence[]>({ queryKey: ['events'] }, (old) =>
-        old ? old.filter((o) => o.id !== occurrence.id) : old,
+        Array.isArray(old) ? old.filter((o) => o.id !== occurrence.id) : old,
       )
       invalidateOccurrences(qc)
     },
@@ -103,6 +107,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule }: 
       ? [{ icon: CalendarPlus, label: 'Schedule', onClick: () => onSchedule(occurrence) }]
       : []),
     { icon: History, label: 'History', onClick: () => setHistoryOpen(true) },
+    ...(onDuplicate ? [{ icon: Copy, label: 'Duplicate', onClick: () => onDuplicate(occurrence) }] : []),
     { icon: Pencil, label: 'Edit', onClick: () => onEdit(occurrence) },
     { icon: Trash2, label: 'Delete', onClick: () => setConfirmDelete(true), destructive: true },
   ]

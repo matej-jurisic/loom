@@ -153,6 +153,8 @@ export function eventColors(o: Occurrence): EventColors {
 }
 
 export function eventAllDayColors(o: Occurrence): { className: string; style?: CSSProperties } {
+  // Skipped: an empty grey outline, matching the grid's skipped block.
+  if (o.status === 'skipped') return { className: 'border border-muted-foreground/40 text-muted-foreground' }
   const category = o.activity.category
   const plannedBorder = o.isPlanned ? { border: `1px dashed ${category?.color ?? 'var(--color-primary)'}` } : undefined
   if (category) {
@@ -230,5 +232,5 @@ export function occursOnDay(e: Occurrence, dayStartMs: number, dayEndMs: number)
 }
 
 export function titleWithTags(o: Occurrence): string {
-  return [o.effectiveTitle, ...o.effectiveTags.map((t) => `#${t.name}`)].join(' ')
+  return [o.status === 'skipped' ? `× ${o.effectiveTitle}` : o.effectiveTitle, ...o.effectiveTags.map((t) => `#${t.name}`)].join(' ')
 }

@@ -291,6 +291,54 @@ namespace Loom.Core.Migrations
                     b.ToTable("Occurrences");
                 });
 
+            modelBuilder.Entity("Loom.Core.Entities.OccurrenceList", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Category")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Color")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Goal")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("GroupBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Icon")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Search")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Tag")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("OccurrenceLists");
+                });
+
             modelBuilder.Entity("Loom.Core.Entities.OccurrenceSubtask", b =>
                 {
                     b.Property<Guid>("Id")
@@ -569,6 +617,17 @@ namespace Loom.Core.Migrations
                     b.Navigation("Activity");
 
                     b.Navigation("DeadlineOccurrence");
+                });
+
+            modelBuilder.Entity("Loom.Core.Entities.OccurrenceList", b =>
+                {
+                    b.HasOne("Loom.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Loom.Core.Entities.OccurrenceSubtask", b =>

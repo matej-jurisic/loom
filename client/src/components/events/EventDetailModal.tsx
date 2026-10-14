@@ -183,7 +183,7 @@ const statusMutation = useMutation({
     onSuccess: () => {
       setConfirmDelete(false)
       qc.setQueriesData<Occurrence[]>({ queryKey: ['events'] }, (old) =>
-        old ? old.filter((o) => o.id !== occurrence!.id) : old,
+        Array.isArray(old) ? old.filter((o) => o.id !== occurrence!.id) : old,
       )
       invalidateOccurrences(qc)
       onClose()

@@ -34,6 +34,18 @@ public sealed record TagDto(Guid Id, string Name)
 public sealed record CreateTagRequest(string Name);
 public sealed record UpdateTagRequest(string Name);
 
+// Lists — saved filter presets of the Occurrences page; the client does the filtering.
+public sealed record OccurrenceListDto(
+    Guid Id, string Name, string? Icon, string? Color, string Status, string? Category, string? Tag, string? Goal, string? Search, string? GroupBy)
+{
+    public static OccurrenceListDto FromEntity(OccurrenceList l) =>
+        new(l.Id, l.Name, l.Icon, l.Color, l.Status, l.Category, l.Tag, l.Goal, l.Search, l.GroupBy);
+}
+
+public sealed record SaveOccurrenceListRequest(
+    string Name, string? Status, string? Category, string? Tag, string? Goal, string? Search, string? GroupBy,
+    string? Icon = null, string? Color = null);
+
 // Activities
 public sealed record ActivityDto(
     Guid Id,
@@ -74,6 +86,8 @@ public sealed record ActivitySubtaskDto(Guid Id, Guid ActivityId, string Title, 
 
 public sealed record CreateActivitySubtaskRequest(string Title);
 public sealed record UpdateActivitySubtaskRequest(string Title);
+// Pending occurrences that would gain (GET) or gained (POST) template subtasks.
+public sealed record ApplySubtasksDto(int OccurrenceCount);
 
 public sealed record ActivityWorkTypeDto(Guid Id, Guid ActivityId, string Title, DateTimeOffset CreatedAt)
 {

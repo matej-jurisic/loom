@@ -1,3 +1,5 @@
+import type { OccurrenceGroupBy, StatusFilter } from './occurrenceView'
+
 export interface User {
   id: string
   username: string
@@ -116,6 +118,24 @@ export interface Tag {
   id: string
   name: string
 }
+
+/** A saved filter preset of the Occurrences page; the client applies it to the full list. */
+export interface OccurrenceList {
+  id: string
+  name: string
+  /** A name from `ICON_MAP` (categoryIcons.tsx); null shows the default list icon. */
+  icon: string | null
+  /** 6-digit hex; null shows the neutral muted tile. */
+  color: string | null
+  status: StatusFilter
+  category: string | null
+  tag: string | null
+  goal: string | null
+  search: string | null
+  groupBy: OccurrenceGroupBy | null
+}
+
+export type SaveOccurrenceListBody = Omit<OccurrenceList, 'id'>
 
 export interface Activity {
   id: string

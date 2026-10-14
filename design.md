@@ -51,7 +51,7 @@ both auth pages. The same mark backs `public/favicon.svg` and the native app ico
   - Section/Page headers: semibold, 18-20px
   - Nav labels, event titles, goal names: regular weight, 14px
   - Metadata (times, tags, durations): 11-12px, `text-muted-foreground`
-- **Strikethrough:** Done/Skipped events show strikethrough with faded `text-muted-foreground`.
+- **Strikethrough:** Done events show strikethrough with faded `text-muted-foreground`. Skipped ones never do, so the two read apart.
 - **Do not bold** body text, nav labels (inactive), metadata, or button labels.
 - **Active nav label only:** `font-semibold`, `text-foreground`.
 
@@ -74,7 +74,7 @@ The panes are separated by a 1px `border-[var(--border)]` vertical divider. No g
 - **Middle:** Vertical nav. Items: icon + label. Gap `gap-0.5` between items. Padding `px-3 py-4`.
 - **Active nav item:** `bg-accent` (gray tint) pill. Icon in `text-primary`. Label in `text-foreground font-semibold`.
 - **Inactive nav item:** Icon and label both in `text-muted-foreground`. Hover: `bg-accent`.
-- **Groups:** the main items (Daily Plan, Calendar, Occurrences, Goals, Activities, Categories, Tags, Insights), then a `border-t` and a "By category" label (`text-[11px] uppercase tracking-wide text-muted-foreground`) over a scrollable list of category links (the category's icon, lit in its colour when active, then "No category"), each opening `/occurrences?category=<id>`. The plain Occurrences item is lit only when no category is selected. The list is navigation only; adding and editing categories lives on the Categories page.
+- **Groups:** the main items (Daily Plan, Calendar, Occurrences, Goals, Activities, Categories, Tags, Insights), then a `border-t` and a "By category" label (`text-[11px] uppercase tracking-wide text-muted-foreground`) over a scrollable list of category links (the category's icon, lit in its colour when active, then "No category"), each opening `/occurrences/all?category=<id>`. The plain Occurrences item is lit on every `/occurrences` route unless a category is selected. The list is navigation only; adding and editing categories lives on the Categories page.
 - **Bottom (pinned):** Settings item, separated by `border-t`.
 - Sidebar is `sticky top-0 h-screen` — does not scroll.
 
@@ -174,6 +174,8 @@ start and an end. It says where the block's time went without adding blocks to t
 
 The same list is editable in the Edit Activity dialog (below Subtasks, existing activities only) as a bordered `divide-y` list: click a title to rename it in place, `X` to remove.
 
+Under the Edit Activity subtask list, an `outline` `sm` button "Add to N pending occurrences" appears only while some pending occurrence lacks a template title, and disappears once applied. No confirmation: it only appends.
+
 ### Cards
 
 - `border border-border bg-card rounded-[var(--radius-lg)]`. **No shadow.**
@@ -190,6 +192,7 @@ The same list is editable in the Edit Activity dialog (below Subtasks, existing 
 - `shadow-[var(--shadow-pop)]` — the ONE place drop shadows are used.
 - `rounded-[var(--radius-xl)]`, `border border-border`.
 - Escape closes only the topmost open modal (modal stack in `Modal.tsx`).
+- A create dialog focuses its first text field. An edit dialog focuses nothing, since it is usually opened to change some other field. The exception is the tag dialog: its name is its only field, so it focuses the name on edit too.
 
 ### Confirmation dialogs
 
@@ -270,6 +273,12 @@ passes here": `--calendar-edge`, which fences off the chip bands at either end o
 time is a `destructive` hairline with a dot in the gutter. Blocks carry their category's colour; the grid
 itself stays neutral so colour means category and nothing else.
 
+**Done and skipped stay on the grid and read differently.** Done keeps its category colour, faded, with a
+struck-through title: finished. Skipped is an empty outline where the block was meant to go: no fill, no
+category stripe, a solid 1px `muted-foreground/40` border, and a muted title led by `×`, with no
+strikethrough. It is solid rather than dashed because dashed means planned. All-day pills follow the same
+rule. A skipped block packs into columns like any other, so a same-day reschedule sits beside it.
+
 **Compact mode** drops empty stretches of the day rather than shrinking them: a day's events sit in a
 straight stack, each block keeping its real duration-proportional height, with nothing between one item
 and the next but the 2px gutter every block carries. Nothing states the size of the gap that was
@@ -297,8 +306,10 @@ The compact toggle sits left of the range switch in the toolbar: `FoldVertical` 
 
 - **Bottom tab bar is capped at 5 slots**, icon-only: Plan, Activities, Calendar, Occurrences, and a "More" button (`Ellipsis` icon). New pages go in the More sheet, never a 6th tab.
 - **More sheet:** bottom sheet (same overlay + slide-up animation as mobile modals: `bg-black/40 backdrop-blur-sm`, `rounded-t-2xl`, drag handle) listing secondary destinations — Goals, Categories, Tags, Insights, Guide, Settings — as icon + label rows styled like sidebar nav items. Closes on backdrop tap, Escape, or navigation. The More button shows the active (primary) tint when the current route is one of its items.
-- **Management pages** (Categories, Tags) are one screen at every width: a bordered `divide-y` list, each row a `h-8 w-8 rounded-lg` tile (the category's tinted colour and icon, or a `Hash` on `bg-muted` for a tag), the name with a muted `N activities, M occurrences` line under it, and an `ActionMenu` (View occurrences, Edit, Delete). The header `+` adds. Neither page lists occurrences; "View occurrences" opens `/occurrences` with that category or tag filtered.
-- **Occurrences page:** below the header, a toolbar outside the scroll area. It is one row at every width, the search field and a `Filters` button (`SlidersHorizontal`, `border-primary text-primary` with a small count pill when any filter is active) that expands the rest beneath it, collapsed by default. Below `md:` a full-width category `Select` sits under that row and stays visible when the panel is closed (a long category list stays one control, never a row of pills). The expandable part is a `grid-cols-2 sm:grid-cols-3` of `Select`s, each with a leading muted icon (`icon` prop): status (`CircleCheck`; Open / Done / Skipped / All), category (`Shapes`, `md:` and up only), tag (`Hash`), goal (`Target`) and grouping (`Layers`, `Group: When`), the same icons the sidebar uses for those pages. "Reset filters" appears right-aligned only when something is narrowed. Sections use the Activities page's collapsible header; an Overdue section's label is `text-destructive`.
+- **Management pages** (Categories, Tags) are one screen at every width: a bordered `divide-y` list, each row a `h-8 w-8 rounded-lg` tile (the category's tinted colour and icon, or a `Hash` on `bg-muted` for a tag), the name with a muted `N activities, M occurrences` line under it, and an `ActionMenu` (View occurrences, Edit, Delete). The header `+` adds. Neither page lists occurrences; "View occurrences" opens `/occurrences/all` with that category or tag filtered.
+- **Occurrences page:** below the header, a toolbar outside the scroll area. It is one row at every width, the search field and a `Filters` button (`SlidersHorizontal`, `border-primary text-primary` with a small count pill when any filter is active) that expands the rest beneath it, collapsed by default. The expandable part is `OccurrenceFilterFields`: a `grid-cols-2 sm:grid-cols-3` of `Select`s, each with a leading muted icon (`icon` prop): status (`CircleCheck`; Open / Done / Skipped / All), category (`Shapes`), tag (`Hash`), goal (`Target`) and grouping (`Layers`, `Group: When`); below `sm:` the category select moves to a full-width last row so the five fill three rows evenly; the same icons the sidebar uses for those pages. Under it, a `justify-between` row of text actions shows only when it has something to offer: on All occurrences, "Save as list" (`ListPlus`, `text-primary`) and "Reset filters" when something is narrowed; in a list, "Save to list" and "Revert" when the filters differ from the saved ones. Both views carry a `ChevronLeft` back link to the Lists screen in the header; a list adds an `ActionMenu` (Edit list, Delete list) beside `+`.
+- **Icon picker** (`IconPicker` in `CategoryModal.tsx`, used by the category and list modals): a wrapping row of `h-7 rounded-full` group chips (`ICON_GROUPS` in `categoryIcons.tsx`: Health, Work, Money, Learning, People, Home, Food, Shopping, Travel, Fun, Nature, Tech, General), the active one `border-primary bg-primary/10 text-primary`, and the chip of the group holding the current icon carrying a small dot in the picked colour. Under it, the none/default tile then only the active group's `h-8 w-8` icon tiles; every group is stacked in one grid cell with the inactive ones `invisible`, so the panel keeps the tallest group's height and switching tabs never shifts the modal. It opens on the current icon's group. New icons go into a group, never a flat list.
+- **Lists screen** (`/occurrences`): a "Lists" section label over a management-style bordered `divide-y` list (`ListTile`: the list's icon, `ListFilter` when unset, tinted in the list's colour like a category tile, or muted on `bg-muted` without one, the name over a muted, truncated summary of its filters, the live match count, `ActionMenu` Edit / Delete), or a dashed empty card ("No lists yet", "New List"). Below it, a standalone bordered row for "All occurrences" (`ListTodo` on `bg-primary/10`, the label alone, open count, `ChevronRight`). The header `+` makes a new list. The list modal is, in order: a name field, Filters (the same `OccurrenceFilterFields` and a search text field, both in one `gap-2` stack so the search sits at the selects' spacing), the category `ColorPicker` with a leading neutral "Default" swatch (`onClear`, colour null), and the category `IconPicker` (its default choice shows `ListFilter`, selection in the list's colour or `--color-primary`). Sections use the Activities page's collapsible header; an Overdue section's label is `text-destructive`.
 
 ---
 

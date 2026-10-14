@@ -126,7 +126,7 @@ export function CategoriesPage() {
                           {
                             icon: ListTodo,
                             label: 'View occurrences',
-                            onClick: () => navigate(`/occurrences?category=${cat.id}`),
+                            onClick: () => navigate(`/occurrences/all?category=${cat.id}`),
                           },
                           { icon: Pencil, label: 'Edit', onClick: () => openEdit(cat) },
                           'separator',

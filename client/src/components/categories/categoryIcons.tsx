@@ -1,44 +1,49 @@
 import {
-  Heart, Activity, Dumbbell, Pill, Apple, Bike, Wind,
-  Briefcase, Laptop, Code2, Calendar, ClipboardList, Target, FileText, Pen,
-  DollarSign, CreditCard, Wallet, TrendingUp, PiggyBank,
-  BookOpen, GraduationCap, Brain, Bookmark, Lightbulb,
-  Users, Home, Coffee, MessageSquare, Phone, Baby,
-  Car, Plane, ShoppingCart, UtensilsCrossed, Map,
-  Music, Film, Gamepad2, Headphones, Camera,
-  Star, Flag, Globe, Trophy, Shield,
-  Leaf, Zap, Sun, Mountain, Snowflake, Flower2,
-  Clock, Bell, Wrench, Flame, Smile, Sparkles, Timer, Circle,
+  Heart, HeartPulse, Activity, Dumbbell, Bike, Footprints, Volleyball, Timer, Wind, Pill, Stethoscope, Syringe, Bandage, Eye, Glasses,
+  Briefcase, Laptop, Calendar, CalendarCheck, AlarmClock, Hourglass, ClipboardList, Clipboard, ListChecks, ListTodo, Kanban, Presentation, Target, FileText, Pen, Inbox, Mail, Send, Archive, Folder, Paperclip,
+  DollarSign, Coins, Banknote, CreditCard, Wallet, PiggyBank, TrendingUp, ChartPie, Percent, Receipt, Calculator, Landmark,
+  BookOpen, GraduationCap, Brain, Bookmark, Lightbulb, Library, Languages, Microscope, FlaskConical, Newspaper,
+  Users, Baby, Handshake, HeartHandshake, MessageSquare, Phone, Gift, PartyPopper, Cake, Church, Dog, Cat, PawPrint,
+  Home, Bed, Bath, Sofa, Lamp, WashingMachine, Plug, Hammer, Drill, Wrench, Paintbrush, Brush, Scissors, Shirt, Recycle, Key, Lock,
+  UtensilsCrossed, CookingPot, Coffee, Apple, Salad, Carrot, Egg, Croissant, Sandwich, Soup, Pizza, IceCreamCone, Cherry, Wine, Beer,
+  ShoppingCart, ShoppingBag, Store, Package, Truck,
+  Car, Bus, TrainFront, Plane, Ship, Sailboat, Anchor, Fuel, Map, MapPin, Compass, Luggage, Hotel, Ticket, Tent, Globe,
+  Music, Film, Tv, Gamepad2, Headphones, Mic, Guitar, Camera, Palette, Drama, Puzzle, Dices, Swords,
+  Leaf, Sprout, Flower, Flower2, Clover, TreePine, Mountain, Sun, Moon, Cloud, CloudRain, Rainbow, Snowflake, Umbrella, Droplet, Zap, Bird, Fish, Rabbit,
+  Smartphone, Monitor, Keyboard, Printer, Cpu, HardDrive, Wifi, Code2, Terminal, Bug, Bot, Headset,
+  Star, Flag, Trophy, Medal, Award, Crown, Gem, Rocket, Shield, Clock, Bell, Flame, Smile, Sparkles, Repeat, Circle,
   type LucideProps,
 } from 'lucide-react'
 import type { FC } from 'react'
 
 type IconComponent = FC<LucideProps>
 
-export const ICON_MAP: Record<string, IconComponent> = {
-  // Health & fitness
-  Heart, Activity, Dumbbell, Pill, Apple, Bike, Wind, Timer,
-  // Work & productivity
-  Briefcase, Laptop, Code2, Calendar, ClipboardList, Target, FileText, Pen,
-  // Finance
-  DollarSign, CreditCard, Wallet, TrendingUp, PiggyBank,
-  // Learning
-  BookOpen, GraduationCap, Brain, Bookmark, Lightbulb,
-  // People & communication
-  Users, Home, Coffee, MessageSquare, Phone, Baby,
-  // Travel & lifestyle
-  Car, Plane, ShoppingCart, UtensilsCrossed, Map,
-  // Entertainment
-  Music, Film, Gamepad2, Headphones, Camera,
-  // Achievements & general
-  Star, Flag, Globe, Trophy, Shield,
-  // Nature & environment
-  Leaf, Zap, Sun, Mountain, Snowflake, Flower2,
-  // Misc
-  Clock, Bell, Wrench, Flame, Smile, Sparkles, Circle,
+export interface IconGroup {
+  label: string
+  icons: Record<string, IconComponent>
 }
 
-export const ICON_NAMES = Object.keys(ICON_MAP)
+/**
+ * The picker's tabs, in order. Stored icon names are the keys, so an icon can move between groups
+ * freely, but renaming or removing one leaves categories and lists that use it on their fallback.
+ */
+export const ICON_GROUPS: IconGroup[] = [
+  { label: 'Health', icons: { Heart, HeartPulse, Activity, Dumbbell, Bike, Footprints, Volleyball, Timer, Wind, Pill, Stethoscope, Syringe, Bandage, Eye, Glasses } },
+  { label: 'Work', icons: { Briefcase, Laptop, Calendar, CalendarCheck, AlarmClock, Hourglass, ClipboardList, Clipboard, ListChecks, ListTodo, Kanban, Presentation, Target, FileText, Pen, Inbox, Mail, Send, Archive, Folder, Paperclip } },
+  { label: 'Money', icons: { DollarSign, Coins, Banknote, CreditCard, Wallet, PiggyBank, TrendingUp, ChartPie, Percent, Receipt, Calculator, Landmark } },
+  { label: 'Learning', icons: { BookOpen, GraduationCap, Brain, Bookmark, Lightbulb, Library, Languages, Microscope, FlaskConical, Newspaper } },
+  { label: 'People', icons: { Users, Baby, Handshake, HeartHandshake, MessageSquare, Phone, Gift, PartyPopper, Cake, Church, Dog, Cat, PawPrint } },
+  { label: 'Home', icons: { Home, Bed, Bath, Sofa, Lamp, WashingMachine, Plug, Hammer, Drill, Wrench, Paintbrush, Brush, Scissors, Shirt, Recycle, Key, Lock } },
+  { label: 'Food', icons: { UtensilsCrossed, CookingPot, Coffee, Apple, Salad, Carrot, Egg, Croissant, Sandwich, Soup, Pizza, IceCreamCone, Cherry, Wine, Beer } },
+  { label: 'Shopping', icons: { ShoppingCart, ShoppingBag, Store, Package, Truck } },
+  { label: 'Travel', icons: { Car, Bus, TrainFront, Plane, Ship, Sailboat, Anchor, Fuel, Map, MapPin, Compass, Luggage, Hotel, Ticket, Tent, Globe } },
+  { label: 'Fun', icons: { Music, Film, Tv, Gamepad2, Headphones, Mic, Guitar, Camera, Palette, Drama, Puzzle, Dices, Swords } },
+  { label: 'Nature', icons: { Leaf, Sprout, Flower, Flower2, Clover, TreePine, Mountain, Sun, Moon, Cloud, CloudRain, Rainbow, Snowflake, Umbrella, Droplet, Zap, Bird, Fish, Rabbit } },
+  { label: 'Tech', icons: { Smartphone, Monitor, Keyboard, Printer, Cpu, HardDrive, Wifi, Code2, Terminal, Bug, Bot, Headset } },
+  { label: 'General', icons: { Star, Flag, Trophy, Medal, Award, Crown, Gem, Rocket, Shield, Clock, Bell, Flame, Smile, Sparkles, Repeat, Circle } },
+]
+
+export const ICON_MAP: Record<string, IconComponent> = Object.assign({}, ...ICON_GROUPS.map((g) => g.icons))
 
 export function CategoryIcon({
   icon,

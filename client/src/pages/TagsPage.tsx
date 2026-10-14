@@ -131,7 +131,7 @@ export function TagsPage() {
                           {
                             icon: ListTodo,
                             label: 'View occurrences',
-                            onClick: () => navigate(`/occurrences?tag=${tag.id}`),
+                            onClick: () => navigate(`/occurrences/all?tag=${tag.id}`),
                           },
                           { icon: Pencil, label: 'Edit', onClick: () => openEdit(tag) },
                           'separator',
