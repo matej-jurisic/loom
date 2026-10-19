@@ -140,8 +140,8 @@ export function ActivityListRow({
             iconClassName="h-3.5 w-3.5"
             items={[
               { icon: History, label: 'History', onClick: onHistory },
-              { icon: Pencil, label: 'Edit', onClick: onEdit },
               { icon: Copy, label: 'Duplicate', onClick: onDuplicate },
+              { icon: Pencil, label: 'Edit', onClick: onEdit },
               'separator',
               { icon: Trash2, label: 'Delete', onClick: onDelete, destructive: true },
             ]}

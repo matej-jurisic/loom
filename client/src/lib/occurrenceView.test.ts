@@ -96,6 +96,7 @@ describe('classify', () => {
   it('splits dated pending ones at the end of today', () => {
     expect(classify(occ({ startAt: at(7, 20) }), now)).toBe('today')
     expect(classify(occ({ startAt: at(8, 0) }), now)).toBe('upcoming')
+    expect(classify(occ({ startAt: at(3) }), now)).toBe('past')
   })
 })
 
@@ -107,7 +108,7 @@ describe('formatOccurrenceDate', () => {
   })
 
   it('handles date-only, due-only and undated', () => {
-    expect(formatOccurrenceDate(occ({ startAt: at(7), isAllDay: true }), now)).toBe('Today, Date only')
+    expect(formatOccurrenceDate(occ({ startAt: at(7), isAllDay: true }), now)).toBe('Today')
     expect(formatOccurrenceDate(occ({ endAt: at(7, 18) }), now)).toBe('Today, Due 18:00')
     expect(formatOccurrenceDate(occ(), now)).toBe('')
   })

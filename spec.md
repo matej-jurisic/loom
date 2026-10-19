@@ -65,7 +65,7 @@ time. Activities are managed at `/activities`.
 | Subtasks | Ordered checklist template, copied onto every new occurrence. |
 | Work types | Labels for the kinds of work a session can be split into. Not copied anywhere. |
 | Repeat after days | Optional, 1 to 365. The gap offered for the next occurrence when one is completed or skipped. Activity kind only. |
-| Show as overdue | Default on. When off, the activity's occurrences are never `isOverdue` or `isBehind`: they stay out of the Daily Plan's Unfinished section and the Overdue group of the occurrence lists. |
+| Show as overdue | Default on. When off, the activity's occurrences are never `isOverdue` or `isBehind`: they stay out of the Daily Plan's Unfinished section and the Overdue group of the occurrence lists; on the Occurrences page a dated pending one before today lands in a neutral Past group instead. |
 
 Deleting an activity cascades to its occurrences. Deleting a category set-nulls the link and deleting
 a goal or a tag removes only that link; either way the activity stays alive, with its other goals and tags.
@@ -230,8 +230,8 @@ benched; one goal that is not benched keeps it in.
 **No date** — a floating occurrence with `IsNoDate = true`: a todo that is written down and nothing
 more. It has no start, no end, is not all-day and is not planned, and the server rejects the flag
 alongside any of those. It is left out of the `floating=true` list filter, so it appears on neither
-the calendar's FLOAT row nor the Daily Plan; the Occurrences page is where it lives, under its own
-"No date" group when grouped by When. Everything else treats it as the floating occurrence it is: it
+the calendar's FLOAT row nor the Daily Plan's Floating list; the Occurrences page is where it lives, under its own
+"No date" group when grouped by When, and the Daily Plan has a collapsed "No date" section for it. Everything else treats it as the floating occurrence it is: it
 is never overdue, can be completed or skipped in place, and still counts in its activity's history
 and its goals' occurrence counts. Giving it a date ends the state: a partial update that sets a
 start, an end, all-day or planned without mentioning the flag clears it, so scheduling it needs no
@@ -440,7 +440,7 @@ lit.
 One day, read as a list. There is no score for the day: no completion ring and no done/left counts,
 because those rate how much of a day was executed, which is the planner reading this app is not for.
 
-The page opens on the day's own lists - Unfinished, the agenda, Deadlines, Planned, Floating - and closes with
+The page opens on the day's own lists - Unfinished, the agenda, Deadlines, Planned, Floating, No date - and closes with
 the goal sections, which are standing context rather than something to clear before starting.
 
 - **Unfinished** — on today's view only, every pending occurrence whose date has passed, regardless
@@ -453,7 +453,7 @@ the goal sections, which are standing context rather than something to clear bef
   boundary never makes today's one count as behind. Undated (floating) occurrences
   are not included - they have no date to be behind. One button moves the whole set to tomorrow,
   preserving each clock time and each occurrence's planned / all-day flags.
-- **Timeline agenda** — every dated occurrence on the day as a spine with a time gutter, split by a
+- **Timeline agenda** — every dated occurrence on the day. All-day ones sit in their own bordered list above, with no time text; timed ones follow as a spine with a time gutter, split by a
   live **now** marker into past and upcoming, with relative labels ("now", "in 40m") on today. Rows
   carry a one-tap done checkbox, a skip action, and an action menu. A planned occurrence with a start
   time belongs here too, not in the Planned section: it is a commitment on this day like any other,
@@ -464,10 +464,13 @@ the goal sections, which are standing context rather than something to clear bef
   day and always counted from today, not from the day being viewed. It is the complete list, so a
   deadline due today appears here and on the agenda; ones already past are in Unfinished instead.
   The section collapses to its header and count, and the choice is remembered on the device.
+  It is open by default, unlike No date below.
 - **Planned** — the planned occurrences with no hour to place them at: all-day ones, and windows
   whose start was never set. Below Deadlines.
 - **Floating** — unplanned occurrences with no date at all, on every day. Below Planned.
-- **Focus goals** — one chip per focus goal: title, last-session recency, its checkpoint
+- **No date** — every pending No date occurrence, on every day, below Floating. Collapsed to its
+  header and count until expanded; the choice is remembered on the device. Hidden when there are none.
+- **Focus goals** — one chip per focus goal (click opens its history): title, last-session recency, its checkpoint
   percentage when it has checkpoints, and its occurrence bar when it has linked occurrences.
 - **Goal activity** — a heatmap below the focus chips, same shape and shading as a goal's
   own grid, but summed across every occurrence on an activity linked to *any* goal of kind `goal`, regardless of

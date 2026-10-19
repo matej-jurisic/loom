@@ -7,6 +7,7 @@ import { toastError } from '@/store/toasts'
 import type { Checkpoint, CheckpointSize, Occurrence, Goal } from '@/lib/types'
 import { OccurrenceBar } from '@/components/goals/OccurrenceBar'
 import { GoalTile } from '@/components/goals/GoalIcon'
+import { GoalHistoryModal } from '@/components/goals/GoalHistoryModal'
 import { OccurrenceHeatmap } from '@/components/events/OccurrenceHeatmap'
 import { EventModal } from '@/components/events/EventModal'
 import { OccurrenceListRow } from '@/components/events/OccurrenceListRow'
@@ -63,7 +64,7 @@ function formatDayLabel(iso: string): string {
 }
 
 function formatTimeRange(event: Occurrence): string {
-  if (event.isAllDay) return 'Date only'
+  if (event.isAllDay) return ''
   if (!event.startAt && event.endAt) return `Due ${formatTime(event.endAt)}`
   if (!event.startAt) return ''
   if (event.endAt) return `${formatTime(event.startAt)} - ${formatTime(event.endAt)}`
@@ -85,6 +86,7 @@ function isDue(o: Occurrence): boolean {
 }
 
 const DEADLINES_COLLAPSED_KEY = 'loom-plan-deadlines-collapsed'
+const NODATE_OPEN_KEY = 'loom-plan-nodate-open'
 
 // "Oct 12, 14:00 · in 6 days". Counted in calendar days from the effective today, so a
 // deadline tomorrow morning reads "tomorrow" late tonight rather than "in 0 days".
@@ -114,11 +116,15 @@ function believedProgress(checkpoints: Checkpoint[]): number {
   return (reached / total) * 100
 }
 
-function GoalHealthChip({ goal }: { goal: Goal }) {
+function GoalHealthChip({ goal, onOpen }: { goal: Goal; onOpen: (g: Goal) => void }) {
   const progress = believedProgress(goal.checkpoints)
   const hasCheckpoints = goal.checkpoints.length > 0
   return (
-    <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-border px-3 py-2">
+    <button
+      type="button"
+      onClick={() => onOpen(goal)}
+      className="flex min-w-0 items-center gap-2.5 rounded-lg border border-border px-3 py-2 text-left transition-colors hover:bg-muted"
+    >
       {goal.icon || goal.color
         ? <GoalTile icon={goal.icon} color={goal.color} size="sm" />
         : <span className="h-2 w-2 shrink-0 rounded-full bg-goal-focus" />}
@@ -136,7 +142,7 @@ function GoalHealthChip({ goal }: { goal: Goal }) {
           </div>
         )}
       </div>
-    </div>
+    </button>
   )
 }
 
@@ -175,7 +181,7 @@ function TimelineRow({
   showDate?: boolean
 }) {
   const rel = isToday ? relativeLabel(event, now) : { text: '', tone: 'none' as const }
-  const clock = event.startAt && !event.isAllDay ? formatTime(event.startAt) : event.isAllDay ? 'All day' : '-'
+  const clock = event.startAt && !event.isAllDay ? formatTime(event.startAt) : '-'
   // Planned occurrences share the timeline with scheduled ones now, so the row itself has to
   // say which it is: "~" on the time and a hollow spine dot, the list-view echo of the
   // calendar's dashed block. Its time is a window it sits inside, not an appointment.
@@ -238,6 +244,7 @@ export function PlanPage() {
   const [defaultEndAt, setDefaultEndAt] = useState<string | undefined>()
   const [focusStartAt, setFocusStartAt] = useState(false)
   const [scheduleMode, setScheduleMode] = useState(false)
+  const [historyFor, setHistoryFor] = useState<Goal | null>(null)
   const dateInputRef = useRef<HTMLInputElement>(null)
 
   // Live clock so the "now" line and relative labels stay honest.
@@ -339,6 +346,22 @@ export function PlanPage() {
     [upcomingPending, effectiveToday.getTime()],
   )
 
+  const { data: pendingAll = [] } = useQuery({
+    queryKey: ['events', 'nodate'],
+    queryFn: () => occurrencesApi.list({ status: 'pending' }),
+    staleTime: 30 * 1000,
+  })
+  const noDateEvents = useMemo(() => pendingAll.filter((o) => o.isNoDate), [pendingAll])
+
+  const [noDateOpen, setNoDateOpen] = useState(() => localStorage.getItem(NODATE_OPEN_KEY) === '1')
+  function toggleNoDate() {
+    setNoDateOpen((open) => {
+      if (open) localStorage.removeItem(NODATE_OPEN_KEY)
+      else localStorage.setItem(NODATE_OPEN_KEY, '1')
+      return !open
+    })
+  }
+
   const [deadlinesCollapsed, setDeadlinesCollapsed] = useState(() => localStorage.getItem(DEADLINES_COLLAPSED_KEY) === '1')
   function toggleDeadlines() {
     setDeadlinesCollapsed((c) => {
@@ -350,8 +373,10 @@ export function PlanPage() {
 
   // Split the day's timeline around "now".
   const nowMs = now.getTime()
-  const pastEvents = isToday ? timedEvents.filter((e) => new Date(e.endAt ?? e.startAt!).getTime() < nowMs || e.status !== 'pending') : []
-  const futureEvents = isToday ? timedEvents.filter((e) => !(new Date(e.endAt ?? e.startAt!).getTime() < nowMs || e.status !== 'pending')) : timedEvents
+  const allDayEvents = timedEvents.filter((e) => e.isAllDay)
+  const clockEvents = timedEvents.filter((e) => !e.isAllDay)
+  const pastEvents = isToday ? clockEvents.filter((e) => new Date(e.endAt ?? e.startAt!).getTime() < nowMs || e.status !== 'pending') : []
+  const futureEvents = isToday ? clockEvents.filter((e) => !(new Date(e.endAt ?? e.startAt!).getTime() < nowMs || e.status !== 'pending')) : clockEvents
 
   // Sweep overdue → tomorrow (relative to the effective today).
   const sweepMutation = useMutation({
@@ -494,6 +519,17 @@ export function PlanPage() {
                       <button onClick={openCreate} className="text-sm text-primary hover:underline">Add an event</button>
                     </div>
                   ) : (
+                    <>
+                    {allDayEvents.length > 0 && (
+                      <div className={`rounded-lg border border-border ${clockEvents.length > 0 ? 'mb-4' : ''}`}>
+                        <ul>
+                          {allDayEvents.map((e) => (
+                            <OccurrenceListRow key={e.id} occurrence={e} timeText={agendaTimeText(e)} onEdit={openEdit} onSchedule={openSchedule} />
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {clockEvents.length > 0 && (
                     <div className="grid items-stretch gap-x-3" style={{ gridTemplateColumns: 'max-content 0.75rem minmax(0, 1fr)' }}>
                       {pastEvents.map((e) => (
                         <TimelineRow key={e.id} event={e} now={now} isToday={isToday} onEdit={openEdit} onSchedule={openSchedule} />
@@ -517,6 +553,8 @@ export function PlanPage() {
                         <TimelineRow key={e.id} event={e} now={now} isToday={isToday} onEdit={openEdit} onSchedule={openSchedule} />
                       ))}
                     </div>
+                    )}
+                    </>
                   )}
                 </section>
 
@@ -573,6 +611,31 @@ export function PlanPage() {
                   </section>
                 )}
 
+                {/* No date */}
+                {noDateEvents.length > 0 && (
+                  <section>
+                    <button
+                      type="button"
+                      onClick={toggleNoDate}
+                      aria-expanded={noDateOpen}
+                      className="mb-2 flex w-full items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      No date
+                      <span className="font-mono font-normal text-muted-foreground/70">{noDateEvents.length}</span>
+                      <ChevronDown className={`ml-auto h-3.5 w-3.5 transition-transform ${noDateOpen ? 'rotate-180' : ''}`} strokeWidth={2} />
+                    </button>
+                    {noDateOpen && (
+                      <div className="rounded-lg border border-border">
+                        <ul>
+                          {noDateEvents.map((event) => (
+                            <OccurrenceListRow key={event.id} occurrence={event} timeText={null} onEdit={openEdit} onSchedule={openSchedule} />
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </section>
+                )}
+
                 {/* Goals close the page rather than open it: the day's own lists are what you came
                     for, and these two read as standing context you scroll down to, not a score to
                     clear before getting to work. */}
@@ -580,7 +643,7 @@ export function PlanPage() {
                   <div className="mt-2 flex flex-col gap-6 border-t border-border pt-6">
                     {focusGoals.length > 0 && (
                       <section className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                        {focusGoals.map((g) => <GoalHealthChip key={g.id} goal={g} />)}
+                        {focusGoals.map((g) => <GoalHealthChip key={g.id} goal={g} onOpen={setHistoryFor} />)}
                       </section>
                     )}
 
@@ -605,6 +668,13 @@ export function PlanPage() {
           </div>
         </div>
       </div>
+
+      <GoalHistoryModal
+        open={historyFor !== null}
+        goal={historyFor}
+        color={historyFor?.color ?? undefined}
+        onClose={() => setHistoryFor(null)}
+      />
 
       <EventModal
         key={`${editingOccurrence?.id ?? defaultActivity?.id ?? 'new'}-${scheduleMode}-${defaultStartAt ?? ''}`}

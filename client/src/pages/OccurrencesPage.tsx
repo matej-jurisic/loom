@@ -208,9 +208,9 @@ function ListView({ list }: { list: OccurrenceList }) {
             iconClassName="h-3.5 w-3.5"
             triggerClassName="flex h-8 w-8 items-center justify-center rounded-md border border-border text-foreground transition-colors hover:bg-muted"
             items={[
-              { icon: Pencil, label: 'Edit list', onClick: () => setEditOpen(true) },
+              { icon: Pencil, label: 'Edit', onClick: () => setEditOpen(true) },
               'separator',
-              { icon: Trash2, label: 'Delete list', onClick: () => setConfirmDelete(true), destructive: true },
+              { icon: Trash2, label: 'Delete', onClick: () => setConfirmDelete(true), destructive: true },
             ]}
           />
         }

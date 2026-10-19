@@ -1,11 +1,12 @@
 import type { Category, Goal, Occurrence, OccurrenceList, SaveOccurrenceListBody } from './types'
 
-export type WhenBucket = 'overdue' | 'today' | 'planned' | 'upcoming' | 'floating' | 'nodate' | 'done'
+export type WhenBucket = 'overdue' | 'past' | 'today' | 'planned' | 'upcoming' | 'floating' | 'nodate' | 'done'
 
-export const WHEN_ORDER: WhenBucket[] = ['overdue', 'today', 'planned', 'upcoming', 'floating', 'nodate', 'done']
+export const WHEN_ORDER: WhenBucket[] = ['overdue', 'past', 'today', 'planned', 'upcoming', 'floating', 'nodate', 'done']
 
 export const WHEN_LABELS: Record<WhenBucket, string> = {
   overdue: 'Overdue',
+  past: 'Past',
   today: 'Today',
   planned: 'Planned',
   upcoming: 'Upcoming',
@@ -135,7 +136,7 @@ export function formatOccurrenceDate(o: Occurrence, now: Date = new Date()): str
   const ref = o.startAt ?? o.endAt
   if (!ref) return ''
   const day = dayLabel(ref, now)
-  if (o.isAllDay) return `${day}, Date only`
+  if (o.isAllDay) return day
   if (o.startAt && o.endAt) return `${day}, ${formatTime(o.startAt)} - ${formatTime(o.endAt)}`
   if (o.startAt) return `${day}, ${formatTime(o.startAt)}`
   return `${day}, Due ${formatTime(o.endAt!)}`
@@ -152,6 +153,7 @@ export function classify(o: Occurrence, now: Date = new Date()): WhenBucket {
   if (!ref) return 'upcoming'
   const todayStart = startOfDay(now)
   const tomorrowStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), todayStart.getDate() + 1)
+  if (new Date(ref) < todayStart) return 'past'
   return new Date(ref) < tomorrowStart ? 'today' : 'upcoming'
 }
 

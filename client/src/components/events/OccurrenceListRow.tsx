@@ -113,6 +113,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, on
     ...(onEditActivity && occurrence.activity.kind === 'activity'
       ? [{ icon: Layers, label: 'Edit activity', onClick: () => onEditActivity(occurrence.activity) }]
       : []),
+    'separator',
     { icon: Trash2, label: 'Delete', onClick: () => setConfirmDelete(true), destructive: true },
   ]
 

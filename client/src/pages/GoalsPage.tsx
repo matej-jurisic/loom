@@ -169,6 +169,7 @@ function CheckpointChip({ goalId, cp, tierColor, onEdit }: { goalId: string; cp:
         iconClassName="h-3 w-3"
         items={[
           { icon: Pencil, label: 'Edit', onClick: () => onEdit(cp) },
+          'separator',
           { icon: Trash2, label: 'Delete', onClick: () => setConfirmDelete(true), destructive: true },
         ]}
       />
@@ -201,6 +202,7 @@ function CheckpointListRow({ goalId, cp, tierColor, onEdit }: { goalId: string; 
         iconClassName="h-3.5 w-3.5"
         items={[
           { icon: Pencil, label: 'Edit', onClick: () => onEdit(cp) },
+          'separator',
           { icon: Trash2, label: 'Delete', onClick: () => setConfirmDelete(true), destructive: true },
         ]}
       />
@@ -342,14 +344,14 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, 
           triggerClassName="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50"
           iconClassName="h-3.5 w-3.5"
           items={[
-            { icon: Pencil, label: 'Edit goal', onClick: () => onEdit(goal) },
             { icon: History, label: 'History', onClick: () => onHistory(goal) },
             { icon: ListChecks, label: 'Activities', onClick: () => onActivities(goal) },
             { icon: Plus, label: 'Add checkpoint', onClick: () => onAddCheckpoint(goal.id) },
+            { icon: Pencil, label: 'Edit', onClick: () => onEdit(goal) },
             ...(transitions.length > 0 ? ['separator' as const] : []),
             ...transitions.map((t): ActionMenuEntry => ({ label: t.label, onClick: () => statusMutation.mutate(t.value) })),
             'separator',
-            { icon: Trash2, label: 'Delete goal', onClick: () => setConfirmDelete(true), destructive: true },
+            { icon: Trash2, label: 'Delete', onClick: () => setConfirmDelete(true), destructive: true },
           ]}
         />
       </div>
