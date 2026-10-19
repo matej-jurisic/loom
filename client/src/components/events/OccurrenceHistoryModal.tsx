@@ -52,9 +52,11 @@ export function OccurrenceHistoryModal({
       {meta}
 
       {/*
-        Every section below is rendered on the first frame, loaded or not: the tiles and the strip have
-        a data-independent shape, and the list is a fixed-height box that scrolls. The request lands
-        while the panel is still animating in, so a shell that grows into the answer reads as a stutter.
+        Every section down to the recent list is rendered on the first frame, loaded or not: the tiles
+        and the strip have a data-independent shape, and the list is a fixed-height box that scrolls.
+        The request lands while the panel is still animating in, so a shell that grows into the answer
+        reads as a stutter. "Time by activity" only exists once loaded, so it sits last, where its
+        arrival pushes nothing that is already on screen.
       */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="Last done" value={summary.lastDoneLabel} loading={loading} />
@@ -64,15 +66,6 @@ export function OccurrenceHistoryModal({
       </div>
 
       <HistoryHeatmap occurrences={occurrences ?? []} color={color} loading={loading} />
-
-      {!loading && timeByActivity.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Time by activity
-          </h3>
-          <ActivityList activities={timeByActivity} />
-        </div>
-      )}
 
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
@@ -99,6 +92,15 @@ export function OccurrenceHistoryModal({
           </ul>
         )}
       </div>
+
+      {!loading && timeByActivity.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Time by activity
+          </h3>
+          <ActivityList activities={timeByActivity} />
+        </div>
+      )}
     </Modal>
   )
 }
