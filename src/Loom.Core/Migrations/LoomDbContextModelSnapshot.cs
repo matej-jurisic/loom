@@ -66,6 +66,9 @@ namespace Loom.Core.Migrations
                     b.Property<int?>("RepeatAfterDays")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("ShowAsOverdue")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("TEXT");

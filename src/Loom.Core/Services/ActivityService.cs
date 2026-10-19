@@ -74,7 +74,7 @@ public class ActivityService(LoomDbContext db)
             ?? Validators.ValidateRepeatAfterDays(req.RepeatAfterDays);
         if (err is not null) return Result<ActivityDto>.Fail(err);
 
-        var a = new Activity { UserId = userId, Title = req.Title.Trim(), RepeatAfterDays = req.RepeatAfterDays };
+        var a = new Activity { UserId = userId, Title = req.Title.Trim(), RepeatAfterDays = req.RepeatAfterDays, ShowAsOverdue = req.ShowAsOverdue };
 
         if (req.CategoryId.HasValue)
         {
@@ -114,6 +114,7 @@ public class ActivityService(LoomDbContext db)
 
         a.Title = req.Title.Trim();
         a.RepeatAfterDays = req.RepeatAfterDays;
+        a.ShowAsOverdue = req.ShowAsOverdue;
 
         if (req.CategoryId.HasValue)
         {

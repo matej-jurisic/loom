@@ -10,6 +10,7 @@ public class Activity
     public Guid? CategoryId { get; set; }
     public ActivityKind Kind { get; set; } = ActivityKind.activity;
     public int? RepeatAfterDays { get; set; }
+    public bool ShowAsOverdue { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public User User { get; set; } = null!;
