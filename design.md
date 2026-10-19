@@ -1,351 +1,159 @@
-## Visual Reference
+# Loom — Design
 
-The target aesthetic is a clean, minimal, flat B2B productivity dashboard — white panels, 1px borders, no drop shadows on internal elements, generous whitespace, strict typographic hierarchy. The reference screenshot is Aloplanner (https://aloplanner.com/todos). Match the *feel* and *design language*, not the content.
+Visual and UX rules. Behaviour and domain rules live in `spec.md`; code navigation in `CLAUDE.md`.
+Colours, spacing and radii come from the semantic tokens in `client/src/index.css`; use them, never raw values.
 
----
+## Aesthetic
 
-## Overall Aesthetic
+Clean, minimal, flat productivity dashboard: white panels, 1px borders, generous whitespace, strict
+typographic hierarchy. Hierarchy comes from colour, weight and spacing alone. **No shadows on internal
+elements**; `shadow-pop` is only for floating things (modals, menus, popovers, toasts).
 
-Modern, clean, minimalist web-based dashboard. Spacious, organized, strictly professional. Relies on subtle 1px borders and whitespace. Flat design — no shadows on internal elements. The hierarchy is established through color, weight, and spacing alone.
+## Colour
 
----
+- **Canvas** `#F3F4F6`, **panels/cards** white, **borders** `#E5E7EB`. Primary text `#111827`, secondary `#6B7280`.
+- **Primary brand:** Slate Blue `#8499B1` for the logo tile, active nav icons, primary buttons, checked
+  checkboxes and progress.
+- **Goal status tones** (status dot, ring, checkpoints, heatmap): Focus is primary, Active is teal, Bench and
+  Closed are neutral gray. A track has no tier and draws in its own colour, or the Active tone without one.
+- **Occurrence colour** is the activity's **category** colour by default: a low-opacity fill with a solid left
+  border. With the "Calendar colours: Goal" setting it is the goal's colour, falling back to the category when
+  the activity's coloured goals don't agree. Neither: neutral gray.
+- **Badges:** `rounded-full px-2 py-0.5 text-xs font-medium`, tint and text via `color-mix`; tones
+  `neutral | red | blue | amber | green`. Goal badges use the goal's own colour, else their status tone.
+- **Dark mode:** `.dark` on `<html>`, preference in `lib/theme.ts`. Style with tokens only; never branch on the theme in components.
 
-## Color Palette
+### Brand mark
 
-### Base Colors
-
-- **Canvas (app background):** Light Gray `#F3F4F6`. The outer shell — visible between panels.
-- **Panel / Card background:** Pure White `#FFFFFF`. Sidebar, cards.
-- **Borders & Dividers:** Very Light Gray `#E5E7EB`. All column separators, card borders, list dividers.
-
-### Text Colors
-
-- **Primary Text:** Dark Charcoal `#111827`. Event titles, goal names, nav labels (active).
-- **Secondary / Metadata Text:** Medium Gray `#6B7280`. Datetimes, durations, statuses, nav labels (inactive).
-
-### Accent & Brand Colors
-
-- **Primary Brand:** Slate Blue `#8499B1`. Logo text, active nav icons, primary action buttons, checkboxes (checked state), active progress bars.
-- **Goal Status Colors (Goals page: status dot, progress ring, checkpoints, heatmap):**
-  - Focus Goals: Primary/blue tones
-  - Active Goals: Teal/Light Blue tones
-  - Bench Goals: Neutral Gray (Closed goals share it)
-  - Tracks have no tier: they draw in their own colour, or the Active tone without one.
-- Event blocks take their activity's **category** colour by default: a low-opacity background of it with a solid left border in the same colour. With the "Calendar colours: Goal" setting they take the goal's colour instead, falling back to the category when the activity's coloured goals don't agree on one. Occurrences with neither use neutral gray (`bg-muted`, `border`).
-
-### Brand Mark
-
-A plain weave: two strands crossing, each alternately over and under the other, drawn as eight
-rounded bars on a 24x24 grid (`client/src/components/layout/LoomMark.tsx`). Filled, not stroked -
-it reads as a mark, not a UI icon, and stays legible down to a 16px favicon. White on the primary
-Slate Blue `#8499B1`, inside an `h-8 w-8 rounded-lg` tile, next to the wordmark in the sidebar and
-both auth pages. The same mark backs `public/favicon.svg` and the native app icon/splash sources in
-`client/assets/` (`icon-only`, `icon-foreground` + `icon-background` for Android's adaptive icon,
-`splash` + `splash-dark`) - one shape everywhere the app identifies itself.
-
----
+A plain weave: two strands crossing, alternately over and under, as eight rounded bars on a 24x24 grid
+(`LoomMark.tsx`). Filled, not stroked, so it stays legible at 16px. White on the primary colour in an
+`h-8 w-8 rounded-lg` tile beside the wordmark. The same geometry backs the favicon and native icons.
 
 ## Typography
 
-- **Font Family:** Inter (primary), then `system-ui, sans-serif`.
-- **Hierarchy:**
-  - Section/Page headers: semibold, 18-20px
-  - Nav labels, event titles, goal names: regular weight, 14px
-  - Metadata (times, tags, durations): 11-12px, `text-muted-foreground`
-- **Strikethrough:** Done events show strikethrough with faded `text-muted-foreground`. Skipped ones never do, so the two read apart.
-- **Do not bold** body text, nav labels (inactive), metadata, or button labels.
-- **Active nav label only:** `font-semibold`, `text-foreground`.
-
----
-
-## Layout & Structure
-
-### Two-Pane Layout
-
-```
-[Left Sidebar 240px] | [Right Canvas — fluid]
-```
-
-The panes are separated by a 1px `border-[var(--border)]` vertical divider. No gap, no padding between them. The canvas is full width on every page; no view reserves a fixed side panel.
-
-### 1. Left Sidebar (240px fixed)
-
-- White background (`--card`).
-- **Top:** Brand mark (see below) + name "Loom" in `text-primary`, semibold. Bottom border.
-- **Middle:** Vertical nav. Items: icon + label. Gap `gap-0.5` between items. Padding `px-3 py-4`.
-- **Active nav item:** `bg-accent` (gray tint) pill. Icon in `text-primary`. Label in `text-foreground font-semibold`.
-- **Inactive nav item:** Icon and label both in `text-muted-foreground`. Hover: `bg-accent`.
-- **Groups:** the main items (Daily Plan, Calendar, Occurrences, Goals, Activities, Categories, Tags, Insights), then a `border-t` and a "By category" label (`text-[11px] uppercase tracking-wide text-muted-foreground`) over a scrollable list of category links (the category's icon, lit in its colour when active, then "No category"), each opening `/occurrences/all?category=<id>`. The plain Occurrences item is lit on every `/occurrences` route unless a category is selected. The list is navigation only; adding and editing categories lives on the Categories page.
-- **Bottom (pinned):** Settings item, separated by `border-t`.
-- Sidebar is `sticky top-0 h-screen` — does not scroll.
-
-### 2. Right Canvas (fluid)
-
-- White background.
-- **Top bar:** Current date, prev/next arrows, view toggle, zoom in/out controls (adjusts pixel-per-hour scale).
-- **View toggle, desktop (`sm` and up):** Day / 3 days / Week as three segments in one `h-8 rounded-md border border-border` shell, matching the other header buttons - no track fill, the active segment is just `bg-muted`, which is also the header buttons' hover state. Only colour changes between states - never the font weight, which would resize the segment and shift the whole control on every switch. All three sit on the bar at every width, with full labels, so the current range is readable without opening anything.
-- **View toggle, mobile (below `sm`):** three labelled segments don't fit next to the fold toggle and `+` on a phone header, so this is a single dial button instead: a small circular needle icon (pointing up/right/down for Day/3 days/Week, clockwise as the range grows) plus the current range's label as text, in the same `h-8 rounded-md border border-border` shell as the other header buttons. Fixed width (sized to the longest label, "3 days"), for the same reason the desktop segments never change font weight: a button that resizes on every tap is distracting. Tapping steps forward through the three ranges (wrapping from Week back to Day); the needle rotates to its new position with a 200ms transition. One tap target instead of three, and the label still makes the state unambiguous.
-- **Floating row:** All-day row pinned above the time grid — shows floating occurrences as compact chips. Overdue occurrences are rendered in a separate sticky band at the top of the scroll container so they stay visible while scrolling.
-- **The tray** (`.calendar-tray`): the DUE / SOON / FLOAT / all-day rows as one band, each labelled in the gutter, divided by `--calendar-line` hairlines. It stays on the page surface - it is not a separate panel - and closes with `--calendar-edge`, which doubles as the grid's 00:00 rule. That edge separates by colour alone, at the same hairline width as every other rule, so the band reads as closed without a divider thick enough to make it look like its own panel. Those rows are drop targets whenever something is being dragged, and on the grid's own hairlines they otherwise read as more grid. The band renders only when one of its rows has content or a drag is in progress. The DUE row is the exception: it lists what is already overdue and nothing can be dropped on it, so it is withdrawn for the length of a drag - otherwise it pushes the live drop targets down into the grid's edge-scroll zone, and the grid starts scrolling while the pointer is still over a row that cannot take the drop.
-- **Due pins row:** the same band treatment upside down, pinned to the bottom of the scroll container: chips for occurrences due today, closed off the grid by `--calendar-edge` on its top side. Both bands are chips rather than time, so both are fenced off from the grid the same way.
-- **Content:** Time-based vertical grid. Hours listed on the far left. Event blocks placed in their time slots.
-- **Event blocks:** Light-tinted background + solid 1px colored left border, matching the activity's category color. Title + time range inside.
-- **Clicking empty grid creates** a 30-minute occurrence there, pre-filled in the create modal. The calendar's job is to show what you decided and to make adding something cheap, so the cheapest gesture does the most common thing. A drag still sets an exact span, and a long press does it on touch, for when the length matters.
-- **Hover guide (mouse hover, and the long-press drag that creates on touch):** a hairline in `primary` at the 15-minute slot a click would create, with an `HH:mm` tab on its left edge in `primary-foreground` on `primary` mixed 50% with black (plain `primary` is light in dark mode and the near-white text would vanish on it). Hidden over event blocks and during event move or resize drags; it stays visible while dragging out a new occurrence, so the end can be matched to a time. Placed through the column's own scale, so it also works in compact mode.
-- Nothing is drawn on empty grid: no availability overlay, no suggested slots. An empty hour means nothing in particular, because the calendar is not assumed to be complete.
-- On touch the bar for "a tap" is high, because a scrolling finger keeps producing near-taps: under 250ms, no latched swipe direction, not landed on a still-gliding view, and the scroll position unchanged while it was down. A press that misses any of those does nothing at all - creating something by accident while reading the day is far worse than a tap that does not register.
-
----
-
-## UI Components
-
-### Nav Items
-
-- 14px text, `gap-3`, `px-3 py-2`, `rounded-[var(--radius-md)]`.
-- Active: `bg-accent`, icon `text-primary`, label `text-foreground font-semibold`.
-- Inactive: icon + label both `text-muted-foreground`. Hover: `bg-accent`.
-- A sidebar item stays active on its sub-routes (an activity, a goal), so drilling in never leaves the sidebar looking like nowhere is selected.
-
-### Buttons
-
-- Primary: `bg-primary text-primary-foreground`, `rounded-[var(--radius-md)]`, no shadow.
-- Outlined: `border border-border bg-transparent text-foreground`, hover `bg-accent`.
-- Ghost: transparent bg, `hover:bg-accent`.
-- Height: `h-9` (md), `h-8` (sm). Font: regular weight (not semibold or bold).
-- Border radius: 6-8px.
-- **Delete is an icon-only square button**, never a labelled one: `Trash2` in `text-destructive` on a transparent ground, hover `bg-destructive/10`, sized to the row it sits in (`h-9 w-9` beside md buttons, `h-8 w-8` beside sm). It carries the name in `aria-label`, swaps the icon for an inline spinner while the delete is in flight, and always opens a `ConfirmDialog` rather than acting. Where the same footer holds Cancel and Save it gets `mr-auto`, so the full width separates it from the button the user actually meant to press. Used by `EventDetailModal`.
-- The `Button` component sets no gap between its children, so **never give a `Button` an icon and a label together** - they render flush and read as one glyph. Icon plus label is a hand-rolled `flex ... gap-1.5` button (see the empty-state "New Activity" button).
-
-### History dialog
-
-- Shared by activities and goals (`OccurrenceHistoryModal`). Titled `<name> - history`, opened from a row's or goal card's action menu. Activities get a meta line first (category, one badge per goal); goals have none, then four stat tiles, then the day strip, then "Time by activity" (the Insights rows, shown only when some completed occurrence has a measured length), then the recent list. Widest-to-narrowest: the tiles answer the question in one glance, the strip shows the shape, the list is the detail you only sometimes want.
-- **Stat tiles:** `grid-cols-2 sm:grid-cols-4`, each `rounded-lg border border-border bg-muted/40 px-2.5 py-2` with a `text-[10px] uppercase tracking-wide` label over a `text-sm` value. A tile with nothing to show reads `Unknown` in muted text rather than vanishing: a missing figure is itself an answer, and four tiles that come and go make the dialog resize between activities.
-- **Day strip:** centered, laid out the way a calendar is - seven weekday columns under their `Mon`-`Sun` names, eight week rows, current week last. Eight is two months: enough to read a rhythm, not so much that the grid outweighs the tiles above it. Cells are `h-7 w-7 rounded-[4px]` with `gap-1`, sized so a three-letter weekday fits above the column rather than being abbreviated to an initial. Done is solid `bg-primary`, skipped `bg-muted-foreground/60`, pending an outlined `border-primary/50 bg-primary/10`, an empty day flat `bg-muted`, and a day that has not happened yet nothing at all. Each cell carries its date as a `title`; the legend, also centered, spells out the three fills and the window.
-- **Recent list:** an occurrence row at ten rows: status dot, date with `HH:mm` in mono when the occurrence has a time, status word on the right. The list is styled like the Edit Activity subtask list (bordered `divide-y` `ul`, so the last row closes cleanly) with a `max-h-60` that scrolls; each row shows the occurrence title over its date.
-- **While loading**, the whole shell renders at its final height: tiles with a pulsing bar where the value goes, the strip empty (its size does not depend on the data), and five placeholder rows in the same bordered shape. The panel is animating in as the request lands, so it must already be its final height - a shell that grows into the answer reads as a stutter, and the first open is exactly when it happens.
-- **Read-only**: the footer holds a single `Close` button.
-
-### Checkboxes (events)
-
-- Square, `rounded-[4px]`. Unchecked: `border border-border bg-transparent`.
-- Checked (done): `bg-primary` fill, white checkmark SVG.
-- Skipped: gray outline, gray "×" or dashed style.
-
-### Deadline link
-
-Quiet metadata, never a badge or progress bar. On a list row's meta line a linked session shows a
-`Flag` icon and the deadline's title in `text-muted-foreground`, truncated; the deadline itself shows
-"3 sessions, 4h 30m" in the same tone. The detail modal repeats both as icon + text lines. The edit
-modal's "Deadline (optional)" select sits first in "More options", for both kinds.
-
-### Occurrence notes
-
-A `Notes` section in the occurrence detail modal, after the subtasks and before the time split, for
-both kinds and every status. Same section heading as Subtasks (`text-xs font-semibold uppercase
-tracking-wide text-muted-foreground`) over a three-row, non-resizable textarea in the standard input
-treatment. There is no save button: the text saves when the field loses focus or the modal closes, and
-a failed save keeps what was typed and raises a toast. Notes show nowhere else - no icon on list rows
-or calendar blocks.
-
-### Time split
-
-A section at the bottom of the occurrence detail modal, for activity-kind occurrences that have a
-start and an end. It says where the block's time went without adding blocks to the calendar.
-
-- **Chips** list the activity's work types: selected `bg-primary text-primary-foreground`, unselected
-  `bg-muted text-muted-foreground`, all `rounded-full px-2.5 py-1 text-xs`. Tapping toggles the type
-  into the split. A dashed `+ Work type` chip turns into an inline input that creates a type on Enter.
-- **Bar:** one `h-3 rounded-full` track on `bg-muted`, a segment per row sized by its share of the
-  block. Segments are shades of one colour - the category's, else `--primary` - mixed toward
-  `--background` in a fixed sequence, so the bar reads as one occurrence divided, not as several
-  things. Unallocated time is the bare track. From `sm:` each segment edge carries a thin
-  `bg-foreground/50` handle; dragging it moves time between the two neighbours in 15-minute steps
-  (5 for a block under an hour) and pins both. The trailing edge has a handle only when no row is
-  auto, since that is the only case where there is unallocated time for it to trade with.
-- **Rows:** shade dot, title, a right-aligned `tabular-nums` time field, and a trailing slot. The
-  field reads `1h 30m` and accepts `90`, `1h 30m`, `1:30` or `1.5h`; committing a value pins the row.
-  An auto row shows its share in `text-muted-foreground` with a small `AUTO` label in the slot; a
-  pinned row shows `text-foreground` and a `RotateCcw` button there that hands it back to auto.
-  Below `sm` the field is flanked by -15 / +15 steppers, because the bar's handles are hidden there.
-- The heading's right side reads `45m not split` when pinned rows leave a remainder, and nothing
-  otherwise. No percentages anywhere.
-- Every change saves immediately; a failed save restores the last saved rows and raises a toast.
-
-**Tags** appear as a chip picker in the activity dialog (between Goals/Category and Do again after), styled like the goal chips: `rounded-full` toggles, `border-primary bg-primary/10 text-primary` when selected, with a `New tag...` input and `+` button below that creates the tag and selects it. On an activity row a tag is plain `text-xs text-muted-foreground` text prefixed with `#`, no badge, so goals stay the only coloured chips. The occurrence dialog has the same picker as a "Tags (optional)" field above More options, shown on create as well as edit so a course can be set while placing an entry; tags the activity already carries are listed beneath it as a muted "Also from the activity" line. An occurrence row and the detail modal show its effective tags as the same `#name` text. On the calendar, a timed block shows them as a last `text-[10px]` line when it is tall enough (after the time line), and the all-day, floating and agenda pills append them to the title.
-
-The same list is editable in the Edit Activity dialog (below Subtasks, existing activities only) as a bordered `divide-y` list: click a title to rename it in place, `X` to remove.
-
-Under the Edit Activity subtask list, an `outline` `sm` button "Add to N pending occurrences" appears only while some pending occurrence lacks a template title, and disappears once applied. No confirmation: it only appends.
-
-### Cards
-
-- `border border-border bg-card rounded-[var(--radius-lg)]`. **No shadow.**
-- Internal padding: `px-6 py-6`.
-
-### Badges / Tags
-
-- Small pill: `px-2 py-0.5`, `rounded-full`, `text-xs font-medium`.
-- Colors via `color-mix`: soft tinted bg + saturated text. Tones: `neutral | red | blue | amber | green`.
-- Goal pills (`GoalBadge`) take the goal's own colour for text, border and tinted fill; a goal with no colour falls back to its status tone.
-
-### Modals
-
-- White card, centered overlay, `backdrop-blur-sm` backdrop at `bg-black/40`.
-- `shadow-[var(--shadow-pop)]` — the ONE place drop shadows are used.
-- `rounded-[var(--radius-xl)]`, `border border-border`.
-- Escape closes only the topmost open modal (modal stack in `Modal.tsx`).
-- A create dialog focuses its first text field. An edit dialog focuses nothing, since it is usually opened to change some other field. The exception is the tag dialog: its name is its only field, so it focuses the name on edit too.
-
-### Confirmation dialogs
-
-- Every destructive action (delete occurrence / activity / goal / checkpoint / category) goes through `ConfirmDialog` — a small modal with the item name in the message, a ghost Cancel, and a destructive confirm button. Never inline confirms, never immediate deletes.
-- The dialog stays open with a loading state until the mutation succeeds; the caller closes it.
-
-### Toasts
-
-- `Toasts` viewport (bottom-center, above the mobile bottom nav) + `useToastStore` / `toastError` in `store/toasts.ts`.
-- Card-style pill: `border border-border bg-card shadow-pop`, tone icon (destructive alert / primary check), auto-dismiss after 5s, manual dismiss X.
-- Used for mutation failures that have no inline error display (status toggles, deletes, calendar drag reschedules).
-- A toast may carry **one action**: a text button in `text-primary` (`h-7 px-2.5 rounded-md`, hover `bg-primary/10`) between the message and the X. Pressing it dismisses the toast. The only user is the confirmation after completing an occurrence of a repeating activity ("Next one added for Wed, Oct 14." with `Undo`). The app never asks whether to add it: the question was answered when the interval was set.
-
-### Repeat interval
-
-- **Edit / New Activity dialog:** "Do again after (optional)" under Category: a `w-20` numeric input with a muted `days` suffix and placeholder `Off`. Empty means off; an invalid value turns the border destructive and shows the error below in `text-xs text-destructive`.
-- **Occurrence detail modal:** while the occurrence is pending and its activity has an interval, a checkbox sits directly left of `Done` in the footer: the standard `h-4 w-4 rounded-[4px]` box (primary fill and check when on) with "Again Wed, Oct 14" in `text-xs text-muted-foreground`. Ticked by default every time the modal opens on an occurrence.
-- **Edit / New Activity dialog, overdue:** a "Show as overdue" checkbox (default ticked) below the repeat field, with a `text-xs text-muted-foreground` hint line.
-- **Activity row:** a `Repeat` icon and "again after 7 days" in the meta line, `text-xs text-muted-foreground`, before the goal badges.
-
-### Failure states
-
-- **Render error:** `ErrorBoundary` shows a centred "Something went wrong" with Try again (outline) and Reload (primary). One wraps the routes inside `AppShell`, so the sidebar and bottom nav stay usable and navigating clears it; a full-screen one wraps the whole app in `main.tsx`.
-- **Offline:** `OfflineBanner` is a slim `bg-muted` strip above the page content while `navigator.onLine` is false. Muted, not destructive: being offline is a state, not a mistake.
-- **Server unreachable at startup:** `ConnectionLost` is a full-screen centred message with a Try again button, shown instead of the login page.
-- Copy follows the app rule: no em dashes, plain sentences, no blame.
-
-### Dropdown menus
-
-- Row action menus use `ActionMenu`: `MoreHorizontal` trigger, menu rendered in a portal with fixed positioning so it is never clipped by overflow containers; flips above the trigger when there is no room below. Closes on outside press and Escape. Entry order is the same in every menu: view / navigate items (History, Activities, View ...), then actions (Skip, Schedule, Duplicate, Add ...), then Edit, then a separator and the destructive Delete. Labels are plain "Edit" / "Delete" unless a second edit target needs naming (the occurrence row's "Edit activity").
-
-### Shadows — strictly flat
-
-- **No `shadow-card`** on any internal element (cards, list rows, panels, sidebar).
-- **Only `shadow-pop`** on floating elements: modals, dropdowns, popovers.
-- `shadow-pop: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.06)`.
-
-### Scrollbars
-
-- Internal scroll areas (calendar grid, the history dialog's recent list) use the `.scroll-slim` utility from `index.css`: a thin scrollbar whose thumb is invisible until the container is hovered, tinted from `--muted-foreground`. Never leave a default OS scrollbar visible inside a panel.
-
----
-
-## Dark Mode
-
-- Toggled by adding `.dark` to `<html>`; all colors flow from the CSS variables in `index.css`.
-- User preference (light / dark / system) lives on the Settings page, persisted in localStorage (`loom-theme`), default system. Implementation: `client/src/lib/theme.ts`.
-- Calendar colours (Category / Goal) sit under Theme in the Appearance section as the same segmented control, saved to the server on tap.
-- Never branch on the theme in components — style with semantic tokens only.
-
----
-
-## Daily Plan Page
-
-The `/plan` view is a single canvas holding (top to bottom):
-
-1. **Day header** — 57px bar: prev/next chevrons, day title (full on `sm+`, compact below), jump-to-today button (only when the viewed day is not today), date input (`sm+` only), and a `+`. Same pattern as the calendar header.
-2. **Overdue** — `border-destructive/30 bg-destructive/5` card: the count, a "Move to tomorrow" button (`bg-foreground text-background`), then the rows in a plain card list.
-3. **Timeline agenda** — all-day occurrences render first as a plain bordered list (no gutter, no "All day" label), then a three-column grid (content-sized time gutter, 0.75rem spine, fluid rows) so every row shares one time column. The spine is a 1px `border` line with a 2px dot per row, ringed in `background`; the current time is a primary label, dot, and hairline splitting past from upcoming. Relative labels ("now", "in 40m") sit under the gutter time. No hour grid: this is a checklist, not a scheduling surface. A pending **planned** row reads as soft rather than fixed: its gutter time carries a `~` and its spine dot is hollow (`border-2 bg-background`), the flat echo of the calendar's dashed block. A pending row that is overdue today stays in the agenda with a `bg-destructive/10` row and a `bg-destructive` spine dot; only things dated before today move up to the Overdue card.
-4. **Deadlines** — the same uppercase section label, but as a full-width button: label, the count in mono `text-muted-foreground/70`, and a `ChevronDown` pushed to the right edge that rotates 180° when open. Collapsed, only that header row remains. Open, a bordered card list whose meta line reads date, time, then the distance ("Oct 12, 14:00 · in 6 days"). No urgency colouring: nearness is said in words, and late ones live in the Overdue card.
-5. **Planned** and **Floating** — uppercase section labels over bordered card lists. These are the holding places: something can live here indefinitely without a time, which is the point. Planned holds only what has no hour (all-day, or a window with no start) - anything with a start time is on the timeline above.
-6. **No date** — the Deadlines header pattern (label, mono count, rotating `ChevronDown`), but collapsed by default; expanded it is a bordered card list with no meta time text.
-7. **Focus goal chips** and **Goal activity** — closing the page under a `border-t` rule: one bordered chip per Focus goal in a 1-up / `sm:`2-up grid (status dot, title, last-session recency, and the checkpoint percentage in mono when it has checkpoints, and the occurrence bar when it has linked occurrences), then the summed goal heatmap. **The day's own lists open the page; goals are the standing context under them, not a gate in front of them.** There is deliberately no completion ring and no done/left/planned stat row: those score how much of a day was executed, which turns the page into a report card for a schedule the app never asked you to keep.
-
-Mobile: single column.
-
----
-
-## Goals Page
-
-Sections run Focus, Active, Bench, Tracks, Closed; the Focus count chip reads used/limit. A goal with an icon or colour shows a `GoalTile` (`components/goals/GoalIcon.tsx`, the list-tile treatment, `Target` when it has a colour but no icon) in place of the status dot, or as a small 24px tile before the title beside a progress ring; the Plan page's focus chips swap their dot for the small tile the same way. The end date is a meta-line note after the recency ("ends in 12 days"), in foreground weight once it reads "ended". The goal dialog has a Goal / Track segmented control and an End date field under the title. Focus goals are full cards (ring, checkpoints, notes, heatmap). The rest are compact rows with a smaller ring and a chevron that expands the same body; Closed omits the heatmap. A compact goal with nothing to reveal has no chevron. The goal menu's "Activities" item opens a modal listing the linked activities (category tile, title, category name); a row opens that activity's history. A stale Focus goal shows its recency in foreground weight instead of muted, with no colour change. Tapping the title block opens History; editing lives in the menu.
-
-## Calendar Grid
-
-The grid runs on its own line colour, `--calendar-line`, lighter than the app's `border` because these
-rules sit under content for the whole visible day. Every rule of the grid is that one shade - half hours,
-full hours, the column borders and the header's bottom rule alike - so the grid is a single flat texture
-and nothing inside it competes with the blocks for attention. Hours are told apart by the gutter labels,
-not by line weight. The only line that breaks from it is the one meaning something other than "time
-passes here": `--calendar-edge`, which fences off the chip bands at either end of the grid. The current
-time is a `destructive` hairline with a dot in the gutter. Blocks carry their category's colour; the grid
-itself stays neutral so colour means category and nothing else.
-
-**Done and skipped stay on the grid and read differently.** Done keeps its category colour, faded, with a
-struck-through title: finished. Skipped is an empty outline where the block was meant to go: no fill, no
-category stripe, a solid 1px `muted-foreground/40` border, and a muted title led by `×`, with no
-strikethrough. It is solid rather than dashed because dashed means planned. All-day pills follow the same
-rule. A skipped block packs into columns like any other, so a same-day reschedule sits beside it.
-
-**Compact mode** drops empty stretches of the day rather than shrinking them: a day's events sit in a
-straight stack, each block keeping its real duration-proportional height, with nothing between one item
-and the next but the 2px gutter every block carries. Nothing states the size of the gap that was
-dropped; the point of compact mode is that the gap isn't shown at all.
-
-**Compact mode draws no grid lines at all** - no hour rules, no half hours, and no seam at the joins.
-The stack is exactly the blocks, so every rule would either land on a block's edge or run through the
-block itself, and the blocks' own edges already say where one thing ends and the next begins.
-
-In expanded mode the hour and half-hour lines are drawn at absolute positions rather than stepped from a
-segment's own start, so the rhythm stays on the clock.
-
-The left gutter carries the hour labels whenever one scale can speak for the whole grid — always in
-day view, and in every view while expanded, since expanded columns share the linear scale. **Only
-compact multi-day blanks it**, where each column drops its own empty stretches independently and no
-single set of labels would be true. Nothing replaces them there: each block carries its own time, so
-per-column hour labels would only be clutter in a narrow column.
-
-The compact toggle sits left of the range switch in the toolbar: `FoldVertical` when the grid is full,
-`UnfoldVertical` when it is collapsed, tinted `bg-muted` while active.
-
----
-
-## Mobile Navigation
-
-- **Bottom tab bar is capped at 5 slots**, icon-only: Plan, Activities, Calendar, Occurrences, and a "More" button (`Ellipsis` icon). New pages go in the More sheet, never a 6th tab.
-- **More sheet:** bottom sheet (same overlay + slide-up animation as mobile modals: `bg-black/40 backdrop-blur-sm`, `rounded-t-2xl`, drag handle) listing secondary destinations — Goals, Categories, Tags, Insights, Guide, Settings — as icon + label rows styled like sidebar nav items. Closes on backdrop tap, Escape, or navigation. The More button shows the active (primary) tint when the current route is one of its items.
-- **Management pages** (Categories, Tags) are one screen at every width: a bordered `divide-y` list, each row a `h-8 w-8 rounded-lg` tile (the category's tinted colour and icon, or a `Hash` on `bg-muted` for a tag), the name with a muted `N activities, M occurrences` line under it, and an `ActionMenu` (View activities, View occurrences, Edit, Delete). The header `+` adds. Neither page lists activities or occurrences; "View activities" opens `/activities` and "View occurrences" opens `/occurrences/all`, each with that category or tag filtered. On the Activities page the URL filter is a `rounded-full bg-muted` chip (name, `X`) at the left of the grouping row; pressing it clears the filter.
-- **Occurrences page:** below the header, a toolbar outside the scroll area. It is one row at every width, the search field and a `Filters` button (`SlidersHorizontal`, `border-primary text-primary` with a small count pill when any filter is active) that expands the rest beneath it, collapsed by default. The expandable part is `OccurrenceFilterFields`: a `grid-cols-2 sm:grid-cols-3` of `Select`s, each with a leading muted icon (`icon` prop): status (`CircleCheck`; Open / Done / Skipped / All), category (`Shapes`), tag (`Hash`), goal (`Target`) and grouping (`Layers`, `Group: When`); below `sm:` the category select moves to a full-width last row so the five fill three rows evenly; the same icons the sidebar uses for those pages. Under it, a `justify-between` row of text actions shows only when it has something to offer: on All occurrences, "Save as list" (`ListPlus`, `text-primary`) and "Reset filters" when something is narrowed; in a list, "Save to list" and "Revert" when the filters differ from the saved ones. Both views carry a `ChevronLeft` back link to the Lists screen in the header; a list adds an `ActionMenu` (Edit, Delete) beside `+`.
-- **Icon picker** (`IconPicker` in `CategoryModal.tsx`, used by the category and goal modals): a wrapping row of `h-7 rounded-full` group chips (`ICON_GROUPS` in `categoryIcons.tsx`: Health, Work, Money, Learning, People, Home, Food, Shopping, Travel, Fun, Nature, Tech, General), the active one `border-primary bg-primary/10 text-primary`, and the chip of the group holding the current icon carrying a small dot in the picked colour. Under it, the none/default tile then only the active group's `h-8 w-8` icon tiles; every group is stacked in one grid cell with the inactive ones `invisible`, so the panel keeps the tallest group's height and switching tabs never shifts the modal. It opens on the current icon's group. New icons go into a group, never a flat list.
-- **Lists screen** (`/occurrences`): a "Lists" section label over a management-style bordered `divide-y` list (`ListTile`: the icon and colour borrowed from the list's goal filter, else its category filter, tinted like a category tile; `ListFilter` when the borrowed look has no icon, muted on `bg-muted` when it has no colour or there is nothing to borrow; the name over a muted, truncated summary of its filters, the live match count, `ActionMenu` Edit / Delete), or a dashed empty card ("No lists yet", "New List"). Below it, a standalone bordered row for "All occurrences" (`ListTodo` on `bg-primary/10`, the label alone, open count, `ChevronRight`). The header `+` makes a new list. The list modal is, in order: a name field, Filters (the same `OccurrenceFilterFields` and a search text field, both in one `gap-2` stack so the search sits at the selects' spacing). Sections use the Activities page's collapsible header; an Overdue section's label is `text-destructive`.
-
----
-
-## Insights Page
-
-One `max-w-2xl` column of sections, each an uppercase label over a bordered card with `divide-y` rows. No chart: every stat here is a duration, and a labelled row with a bar reads better than a column per day.
-
-Everything on this page is a **sum of what was logged**. Nothing is a percentage of a day and nothing counts what is missing, so the page stays honest however sparse the calendar is.
-
-- **Period select:** the shared `Select` with a `CalendarDays` icon ("Last 7 days" ... "Last 1 year"), full width on mobile and `sm:w-56` above, left-aligned above the summary.
-- **Summary:** three bordered tiles (Time, Done, Active days): `text-xs` muted label over a `text-lg font-semibold tabular-nums` value, and a muted "+/-x vs previous" line when the previous window had data. No good/bad colouring.
-- **Time by activity / category / goal / tag:** rows with title (category rows lead with the category icon, goal rows with a small `GoalTile`, tag rows with `Hash`; never colored text), duration right-aligned (`tabular-nums`), and a 4px proportional bar underneath in the category's own color on a `bg-muted` track. Uncategorized uses `CircleDashed` + muted tones.
-- **Work type breakdown:** under an activity's bar, when it has split time: indented `text-xs text-muted-foreground` lines of type and duration, largest first, closing with an italic `Not split` line for the remainder. No bars of their own - they are a footnote to the activity's total, not competing rows.
-
----
-
-## Spacing & Sizing
-
-- Border radius: buttons/tags `6px`, cards/modals `8-12px`, avatars fully round.
-- Column dividers: `border-r border-[var(--border)]` (1px, `#E5E7EB`).
-- Sidebar: `w-60` (240px).
-- List row hover: `hover:bg-accent` (light gray tint), `rounded-[var(--radius-md)]`.
-- Section group labels: `text-xs font-medium text-muted-foreground uppercase tracking-wide`.
-
----
+Inter, then `system-ui, sans-serif`. Page headers semibold 18-20px; nav labels, titles and goal names regular
+14px; metadata 11-12px `text-muted-foreground`.
+
+- **Do not bold** body text, inactive nav labels, metadata or button labels. Only the active nav label is `font-semibold`.
+- Done shows strikethrough and faded text. Skipped never strikes through, so the two read apart.
+- Section group labels: `text-xs font-medium uppercase tracking-wide text-muted-foreground`.
+
+## Layout
+
+A 240px sidebar (`w-60`, sticky, white, 1px right border) beside a fluid white canvas. No view reserves a fixed side panel.
+
+- **Sidebar:** brand tile and "Loom" on top; the main page items; then a `border-t` "By category" list of links
+  (category icon lit in its colour when active, then "No category") that open `/occurrences/all?category=<id>`;
+  Guide and Settings pinned at the bottom. Navigation only: category management is the Categories page.
+- **Nav items:** 14px, `gap-3 px-3 py-2`, `rounded-[var(--radius-md)]`. Active is `bg-accent` with a primary icon and
+  `font-semibold` label; inactive is all `text-muted-foreground`; hover `bg-accent`. An item stays active on its sub-routes.
+- **Mobile:** a bottom bar capped at **5 slots**, icon-only (Plan, Activities, Calendar, Occurrences, More). New pages go in the
+  More sheet (bottom sheet, `rounded-t-2xl`, drag handle, closes on backdrop, Escape or navigation), never a 6th tab.
+  The More button takes the primary tint when the current route is one of its items.
+- **Page header:** a 57px bar with prev/next, title, a jump-to-today button when off today, a date input (`sm+`) and `+`.
+  Plan and Calendar share the pattern.
+
+## Components
+
+- **Buttons:** primary (`bg-primary text-primary-foreground`), outlined (`border border-border`, hover `bg-accent`),
+  ghost. `h-9` md, `h-8` sm, regular weight, 6-8px radius, no shadow. `Button` sets no gap between children, so **never put an
+  icon and a label in one `Button`**; use a hand-rolled `flex gap-1.5` button.
+- **Delete** is an icon-only square button (`Trash2`, `text-destructive`, hover `bg-destructive/10`, sized to its row),
+  named by `aria-label`, spinner while in flight, always through `ConfirmDialog`. In a footer with Cancel and Save it gets `mr-auto`.
+- **Cards:** `border border-border bg-card rounded-[var(--radius-lg)]`, `px-6 py-6`, no shadow.
+- **Checkboxes:** square `rounded-[4px]`; checked is `bg-primary` with a white check; skipped is a gray outline with "×".
+- **Modals:** centred, `backdrop-blur-sm` over `bg-black/40`, `shadow-pop`, `rounded-[var(--radius-xl)]`. Escape closes only the
+  topmost. A create dialog focuses its first text field; an edit dialog focuses nothing (the tag dialog focuses its name, its only field).
+- **ConfirmDialog:** item name in the message, ghost Cancel, destructive confirm. Stays open with a loading state until the mutation succeeds.
+- **Toasts:** bottom-centre above the mobile bottom nav, card-style pill with a tone icon, auto-dismiss after 5s, X to dismiss. May
+  carry **one text action** in `text-primary` (the Undo after completing a repeating activity). Used for failures with no inline display.
+- **ActionMenu:** `MoreHorizontal` trigger, portal with fixed positioning, flips above when there is no room. Entry order everywhere:
+  view / navigate, then actions (Skip, Schedule, Duplicate, Add), then Edit, then a separator and Delete. Labels are plain "Edit" /
+  "Delete" unless a second edit target needs naming.
+- **Scrollbars:** internal scroll areas use `.scroll-slim` (thin, invisible until hover). Never leave a default OS scrollbar inside a panel.
+- **Failure states:** `ErrorBoundary` ("Something went wrong", Try again, Reload) wraps the routes inside `AppShell` and the whole app;
+  `OfflineBanner` is a slim muted strip (offline is a state, not a mistake); `ConnectionLost` is a full-screen retry shown instead of login.
+- **Icon picker** (`IconPicker` in `CategoryModal.tsx`): a row of group chips (`ICON_GROUPS`), then the none tile and only the active
+  group's icons. Every group is stacked in one grid cell with inactive ones `invisible`, so switching tabs never resizes the modal. New icons go into a group.
+
+## Occurrence presentation
+
+- **Calendar blocks:** solid for scheduled, **dashed and diagonally striped for planned**. Done keeps its category colour, faded, with a struck
+  title. Skipped is an empty outline (no fill, no stripe, solid 1px `muted-foreground/40` border), muted title led by `×`, no strikethrough;
+  solid rather than dashed because dashed means planned. All-day pills follow the same rules.
+- **Deadline link:** quiet metadata, never a badge or progress bar. A linked session's meta line shows a `Flag` icon and the deadline's
+  title; the deadline shows "3 sessions, 4h 30m". The "Deadline (optional)" select sits first in "More options".
+- **Notes:** a `Notes` section in the detail modal after subtasks, before the time split, as a three-row non-resizable textarea. No
+  save button (saves on blur and on close; a failed save keeps the text and toasts). Notes show nowhere else.
+- **Tags:** a chip picker in the activity dialog (`rounded-full` toggles, `border-primary bg-primary/10 text-primary` when selected,
+  `New tag...` input below). On rows and the detail modal a tag is plain muted `#name` text, so goals stay the only coloured chips. The
+  occurrence dialog has the same picker, with the activity's own tags listed beneath as "Also from the activity".
+- **Repeat ("do again"):** the activity dialog has "Do again after (optional)", a `w-20` numeric input with a `days` suffix and placeholder `Off`
+  (invalid turns the border destructive with an error below), and a "Show as overdue" checkbox. The detail modal footer has an "Again <date>"
+  checkbox left of Done, ticked every time it opens. Activity rows show a `Repeat` icon and "again after 7 days".
+- **Time split** (bottom of the detail modal): work-type chips (selected `bg-primary`, unselected `bg-muted`, dashed `+ Work type` to create);
+  a `h-3` bar with one segment per row in shades of one colour (the category's, else primary), with draggable edge handles from `sm:`
+  (15-minute steps, 5 under an hour) that pin both neighbours; rows of shade dot, title and a `tabular-nums` time field accepting `90`,
+  `1h 30m`, `1:30` or `1.5h`. Auto rows show a muted share and `AUTO`; pinned rows show `RotateCcw` to hand back. Below `sm` the field gets
+  -15 / +15 steppers. The heading says `45m not split` when there is a remainder. No percentages. Every change saves immediately.
+- **History dialog** (`OccurrenceHistoryModal`): titled `<name> - history`; widest to narrowest: four stat tiles
+  (`grid-cols-2 sm:grid-cols-4`, a missing figure reads `Unknown`), the day strip (seven weekday columns, eight week rows, `h-7 w-7`
+  cells: done `bg-primary`, skipped `bg-muted-foreground/60`, pending outlined, empty `bg-muted`, future nothing), "Time by activity", then the
+  recent list (`max-h-60`, scrolling). While loading, the shell renders at its final height with pulsing placeholders so it never grows into the answer.
+  Read-only: the footer is a single Close.
+
+## Calendar
+
+- **Grid lines:** one flat shade, `--calendar-line`, lighter than `border`, for every rule (half hours, hours, column borders, header bottom).
+  Hours are told apart by gutter labels, not line weight. The only exception is `--calendar-edge`, which closes the tray and doubles as the
+  00:00 rule. The grid stays neutral so colour means category and nothing else. Now is a `destructive` hairline with a gutter dot.
+- **Tray** (`.calendar-tray`): the DUE / SOON / FLOAT / all-day rows as one band on the page surface, each labelled in the gutter, divided by
+  `--calendar-line` and closed by `--calendar-edge` at the same hairline width. Rendered only when a row has content or a drag is in progress.
+  DUE and SOON are withdrawn during a drag since neither accepts a drop and their height would push real targets into the autoscroll zone.
+- **Nothing is drawn on empty grid:** no availability overlay, no suggested slots.
+- **View toggle:** from `sm`, Day / 3 days / Week as segments in one `h-8 rounded-md border` shell where only the active segment gets
+  `bg-muted`; never change font weight between states. Below `sm`, a single fixed-width dial button (needle icon rotating 200ms plus the
+  range label) that steps through the ranges.
+- **Compact toggle:** left of the range switch, `FoldVertical` when full and `UnfoldVertical` when collapsed, `bg-muted` while active.
+- **Compact mode draws no grid lines, no now line**, and the stack is exactly the blocks with the 2px gutter between them. Hour labels
+  show whenever one scale speaks for the whole grid (day view, or any expanded view) and are blank only in compact multi-day.
+- **Hover guide:** a `primary` hairline at the quarter hour a click would create, with an `HH:mm` tab (`primary-foreground` on `primary`
+  mixed 50% with black, since plain primary is light in dark mode). Hidden over blocks and during move/resize drags, visible while dragging out a new one.
+- **Touch** has a high bar for "a tap" (see `CLAUDE.md` Gotchas). A press that misses it does nothing: creating something by accident while reading is worse than a missed tap.
+
+## Pages
+
+- **Daily Plan:** top to bottom: day header; the **Unfinished** card (`border-destructive/30 bg-destructive/5`, count, "Move to tomorrow",
+  rows); the timeline agenda; Deadlines; Planned; Floating; No date; then under a `border-t` the focus-goal chips and the Goal activity heatmap.
+  The agenda is a three-column grid (content-sized time gutter, 0.75rem spine, fluid rows) with all-day items in a plain bordered list above
+  it. The spine is a 1px `border` line with a ringed 2px dot per row; the current time is a primary label, dot and hairline splitting past from
+  upcoming; relative labels ("now", "in 40m") sit under the gutter time. A pending **planned** row is soft: `~` on the gutter time and a hollow
+  dot. An overdue row today keeps its place with `bg-destructive/10` and a `bg-destructive` dot. Deadlines and No date use a full-width
+  header button (label, mono count, `ChevronDown` that rotates when open); Deadlines is open by default, No date collapsed. No urgency colouring:
+  nearness is said in words. **There is deliberately no completion ring and no done/left stat row.**
+- **Goals:** sections Focus, Active, Bench, Tracks, Closed; the Focus chip reads used/limit. A goal with an icon or colour shows a `GoalTile`
+  in place of the status dot (small 24px beside a ring on compact rows). Focus goals are full cards; the rest are compact rows with a chevron
+  (none when there is nothing to reveal). A stale Focus goal shows recency in foreground weight, with no colour change. Tapping the title opens History.
+- **Categories / Tags:** one screen at every width: a bordered `divide-y` list, each row a `h-8 w-8 rounded-lg` tile (category icon and tint, or `Hash` on
+  `bg-muted`), the name over a muted `N activities, M occurrences`, and an `ActionMenu` (View activities, View occurrences, Edit, Delete). The
+  Activities page shows the URL filter as a `rounded-full bg-muted` chip with an `X`.
+- **Occurrences:** a toolbar outside the scroll area, one row at every width: search and a `Filters` button (`SlidersHorizontal`, primary with a count
+  pill when active) that expands `OccurrenceFilterFields` (a `grid-cols-2 sm:grid-cols-3` of `Select`s with leading muted icons, the same ones
+  the sidebar uses). Text actions below show only when useful ("Save as list" / "Reset filters"; in a list "Save to list" / "Revert"). Sections
+  collapse; an Overdue label is `text-destructive`. A back `ChevronLeft` returns to the Lists screen.
+- **Lists screen:** a "Lists" label over a management-style bordered list (`ListTile`, name over a muted filter summary, live match count,
+  `ActionMenu`), or a dashed empty card; then a standalone "All occurrences" row.
+- **Insights:** one `max-w-2xl` column of uppercase-labelled bordered cards with `divide-y` rows, no chart. Period `Select` on top; three summary
+  tiles (Time, Done, Active days) with a muted "+/-x vs previous" line and no good/bad colouring; then rows with title, right-aligned
+  `tabular-nums` duration and a 4px bar in the category colour on `bg-muted`. Work-type lines are indented muted footnotes under an activity,
+  closing with an italic `Not split`. Everything is a sum of what was logged.
 
 ## Copy
 
-Single-user app: the user designed the domain, so the UI never explains it back to them.
+The user designed the domain, so the UI never explains it back to them.
 
-- **No concept explainers.** Empty states are a title and a CTA, never a paragraph defining what an activity, goal, or occurrence is.
-- **No restating the controls.** A helper line under a field is only worth its space if it says something the field itself does not.
-- **Generated data summaries are fine** (`describeProfile`/`profileHint`: the type's actual numbers), because they show values that are not otherwise on screen. Keep them to one terse line.
+- **No concept explainers.** Empty states are a title and a CTA, not a paragraph defining a term.
+- **No restating the controls.** A helper line is only worth its space if it says something the field does not.
 - **Field labels are labels, not sentences.** "Assumed cadence", not "Before I've learned from your history, assume this happens".
+- Generated data summaries are fine when they show numbers not otherwise on screen; one terse line.
+- No em dashes, plain sentences, no blame.

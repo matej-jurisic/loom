@@ -199,9 +199,7 @@ surrounding whitespace is trimmed). Create does not take notes, so copies (skip-
 duplicate) start without them, and editing an event through its full-replace `PUT` leaves them alone.
 
 `effectiveTitle` on the DTO is `title ?? activity.title`. The DTO also carries the full activity
-(with its category and goal), which is why occurrence lists are invalidated after an activity write. Legacy `windowStart`/`windowEnd`/`windowDurationMinutes` columns remain on the row
-and are honoured by range filtering; nothing in the UI writes them.
-
+(with its category and goal), which is why occurrence lists are invalidated after an activity write.
 ### Scheduling states
 
 **Scheduled** — a start datetime and `IsPlanned = false`. Participates in overdue detection and is
@@ -409,8 +407,6 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 
 ---
 
----
-
 ## Views
 
 | Route | Purpose |
@@ -503,8 +499,8 @@ expects you to complete. Empty grid means nothing in particular.
   it stops when its bottom edge reaches midnight, however deep into the block it was grabbed. So an
   occurrence cannot be dragged across midnight - the model and the grid both still handle ones that
   do, they are just made in the edit modal.
-- **Done and skipped occurrences stay on the calendar**, styled apart (see `design.md`), so a skipped
-  slot still shows where it was meant to be. Both can be opened, moved and resized like any block.
+- **Done and skipped occurrences stay on the calendar**, styled apart (see `design.md`), and can be
+  opened, moved and resized like any block.
 - **Dropping a pending occurrence on a different date asks first**, since that gesture reads two ways:
   *Move* changes the occurrence's date, and *Skip & reschedule* marks the original day skipped and puts
   a new pending copy on the new date. Dismissing the dialog leaves it where it was. A same-day drag is
@@ -517,24 +513,13 @@ expects you to complete. Empty grid means nothing in particular.
 - The header's **DUE** and **SOON** rows are anchored to *today*, not to the view: DUE lists every
   occurrence still pending and dated before today - all-day or timed, planned or not - so nothing
   unfinished can scroll out of reach; SOON lists due pins from today onward. DUE is deliberately not
-  the overdue rule: a planned occurrence is never *overdue*, but it is still listed here, because not
-  being late is not a reason to become invisible. Both
-  drop anything the visible range already draws, so a row only ever adds what is off-screen. Paging
-  forward a week therefore does not mark that week's untouched tasks overdue, and paging backwards
-  does not hide the ones that really are. Both rows disappear for the length of a drag, since neither
-  accepts a drop and their height alone pushes the real targets into the autoscroll zone.
+  the overdue rule: a planned occurrence is never *overdue* but is still listed. Both drop anything the
+  visible range already draws, so paging weeks never changes what they hold.
 - Adjustable slot height (zoom controls and pinch, persisted).
-- **Compact mode** (toolbar toggle, persisted) drops each day's empty stretches entirely rather than
-  shrinking them, leaving the day's actual content at the same scale it always had. However long the
-  emptiness between two items, it costs no grid at all: the day's events sit in a straight stack,
-  each block keeping its real duration-proportional height and sitting directly against the one
-  before it. Only events that genuinely overlap or touch keep their relative position within a run.
-  The grid draws no hour lines in this mode - there is no continuous axis for them to sit on.
-  In a multi-day view **every column collapses its own emptiness**, so hours do not line up across
-  columns - two days with nothing in common have nothing to align on, and a shared scale could only
-  collapse what every visible day agreed was empty. The **now line is not drawn in compact mode**:
-  between two stacked blocks the grid jumps forward by however long the dropped gap was, so a marker
-  at "now" would sit at a position that means nothing. Elided time is elided, marker included.
+- **Compact mode** (toolbar toggle, persisted) drops each day's empty stretches entirely: the day's
+  events sit in a straight stack, each block keeping its real duration-proportional height, with no
+  grid lines and no now line (the axis is discontinuous, so neither would mean anything). In a
+  multi-day view every column collapses its own emptiness, so hours do not line up across columns.
 - **Any drag restores the full 0-24 grid** for the length of the gesture, so moving, resizing,
   creating and dropping in from the header rows all address real times. The grid re-collapses on
   release. Whatever was under the pointer holds its position across both switches, and across zoom.
