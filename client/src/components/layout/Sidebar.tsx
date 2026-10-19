@@ -1,9 +1,9 @@
 import { NavLink, useLocation } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { BookOpen, CalendarRange, CalendarDays, ChartColumn, CircleDashed, Hash, Layers, ListTodo, Settings, Shapes, Target } from 'lucide-react'
-import { categoriesApi } from '@/lib/api'
-import { CategoryIcon } from '@/components/categories/categoryIcons'
-import { NONE_FILTER } from '@/lib/occurrenceView'
+import { BookOpen, CalendarRange, CalendarDays, ChartColumn, Hash, Layers, ListFilter, ListTodo, Settings, Shapes, Target } from 'lucide-react'
+import { categoriesApi, goalsApi, listsApi } from '@/lib/api'
+import { ICON_MAP } from '@/components/categories/categoryIcons'
+import { listLook } from '@/lib/occurrenceView'
 import { LoomMark } from './LoomMark'
 
 function NavItem({
@@ -41,19 +41,19 @@ function NavItem({
   )
 }
 
-function CategoryLink({
-  categoryId,
+function ListLink({
+  to,
   label,
   active,
   children,
 }: {
-  categoryId: string
+  to: string
   label: string
   active: boolean
   children: React.ReactNode
 }) {
   return (
-    <NavLink to={`/occurrences/all?category=${categoryId}`} className="block">
+    <NavLink to={to} className="block">
       <span
         className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
           active
@@ -71,13 +71,11 @@ function CategoryLink({
 export function Sidebar() {
   const location = useLocation()
   const onOccurrences = location.pathname.startsWith('/occurrences')
-  const activeCategory =
-    location.pathname === '/occurrences/all' ? new URLSearchParams(location.search).get('category') : null
+  const activeListId = location.pathname.match(/^\/occurrences\/lists\/([^/]+)/)?.[1] ?? null
 
-  const { data: categories = [] } = useQuery({
-    queryKey: ['categories'],
-    queryFn: categoriesApi.list,
-  })
+  const { data: lists = [] } = useQuery({ queryKey: ['lists'], queryFn: listsApi.list })
+  const { data: goals = [] } = useQuery({ queryKey: ['goals'], queryFn: () => goalsApi.list() })
+  const { data: categories = [] } = useQuery({ queryKey: ['categories'], queryFn: categoriesApi.list })
 
   return (
     <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-border bg-background">
@@ -92,7 +90,7 @@ export function Sidebar() {
         <ul className="flex flex-col gap-0.5 shrink-0">
           <li><NavItem to="/plan"        label="Daily Plan"  Icon={CalendarRange} /></li>
           <li><NavItem to="/calendar"    label="Calendar"    Icon={CalendarDays} /></li>
-          <li><NavItem to="/occurrences" label="Occurrences" Icon={ListTodo} isActive={onOccurrences && !activeCategory} /></li>
+          <li><NavItem to="/occurrences" label="Occurrences" Icon={ListTodo} isActive={onOccurrences && !activeListId} /></li>
           <li><NavItem to="/goals"       label="Goals"       Icon={Target} /></li>
           <li><NavItem to="/activities"  label="Activities"  Icon={Layers} /></li>
           <li><NavItem to="/categories"  label="Categories"  Icon={Shapes} /></li>
@@ -100,31 +98,30 @@ export function Sidebar() {
           <li><NavItem to="/insights"    label="Insights"    Icon={ChartColumn} /></li>
         </ul>
 
-        {categories.length > 0 && (
+        {lists.length > 0 && (
           <>
             <div className="my-2 border-t border-border shrink-0" />
 
             <p className="shrink-0 px-3 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-              By category
+              Lists
             </p>
             <ul className="scroll-slim flex min-h-0 flex-col gap-0.5 overflow-y-auto">
-              {categories.map((cat) => (
-                <li key={cat.id}>
-                  <CategoryLink categoryId={cat.id} label={cat.name} active={activeCategory === cat.id}>
-                    <CategoryIcon
-                      icon={cat.icon}
-                      color={activeCategory === cat.id ? cat.color : 'currentColor'}
-                      size={15}
-                      strokeWidth={2}
-                    />
-                  </CategoryLink>
-                </li>
-              ))}
-              <li>
-                <CategoryLink categoryId={NONE_FILTER} label="No category" active={activeCategory === NONE_FILTER}>
-                  <CircleDashed className="h-[15px] w-[15px]" strokeWidth={2} />
-                </CategoryLink>
-              </li>
+              {lists.map((l) => {
+                const look = listLook(l, goals, categories)
+                const active = activeListId === l.id
+                const Icon = (look?.icon && ICON_MAP[look.icon]) || ListFilter
+                return (
+                  <li key={l.id}>
+                    <ListLink to={`/occurrences/lists/${l.id}`} label={l.name} active={active}>
+                      <Icon
+                        className="h-[15px] w-[15px]"
+                        strokeWidth={2}
+                        style={active && look?.color ? { color: look.color } : undefined}
+                      />
+                    </ListLink>
+                  </li>
+                )
+              })}
             </ul>
           </>
         )}

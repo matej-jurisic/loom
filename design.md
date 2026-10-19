@@ -42,9 +42,9 @@ Inter, then `system-ui, sans-serif`. Page headers semibold 18-20px; nav labels, 
 
 A 240px sidebar (`w-60`, sticky, white, 1px right border) beside a fluid white canvas. No view reserves a fixed side panel.
 
-- **Sidebar:** brand tile and "Loom" on top; the main page items; then a `border-t` "By category" list of links
-  (category icon lit in its colour when active, then "No category") that open `/occurrences/all?category=<id>`;
-  Guide and Settings pinned at the bottom. Navigation only: category management is the Categories page.
+- **Sidebar:** brand tile and "Loom" on top; the main page items; then a `border-t` "Lists" section of links, one
+  per saved occurrence list (its borrowed icon, lit in its colour when active) that open `/occurrences/lists/<id>`;
+  Guide and Settings pinned at the bottom. Navigation only: lists are managed on the Occurrences page.
 - **Nav items:** 14px, `gap-3 px-3 py-2`, `rounded-[var(--radius-md)]`. Active is `bg-accent` with a primary icon and
   `font-semibold` label; inactive is all `text-muted-foreground`; hover `bg-accent`. An item stays active on its sub-routes.
 - **Mobile:** a bottom bar capped at **5 slots**, icon-only (Plan, Activities, Calendar, Occurrences, More). New pages go in the

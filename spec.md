@@ -426,8 +426,8 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 `/inbox` redirects to `/occurrences`.
 
 Navigation: a 240px desktop sidebar (Daily Plan, Calendar, Occurrences, Goals, Activities, Categories, Tags,
-Insights, then a "By category" list - one link per category plus No category - that opens
-`/occurrences/all` filtered to it, and Guide and Settings pinned at the bottom); on mobile a
+Insights, then a "Lists" section - one link per saved occurrence list - that opens
+its list view, and Guide and Settings pinned at the bottom); on mobile a
 5-slot bottom bar (Plan, Activities, Calendar, Occurrences) plus a "More" sheet holding Goals,
 Categories, Tags, Insights, Guide and Settings. `/guide` is an in-app guide to using Loom; it
 currently defines activity, occurrence, category, tag, goal, work type and subtask and how they relate. Nav items are not `end`-matched, so drilling into a goal or activity keeps the parent item
@@ -568,7 +568,7 @@ activity tagged per course per entry reads the same way under Group: Tag.
 
 ### Activities
 
-One flat list: title search and a grouping toggle over **Goal / Category / Tag / None** (persisted in
+One flat list: title search and a grouping select (beside the search) over **Goal / Category / Tag / None** (persisted in
 `localStorage`). Sections collapse and carry counts; rows sort by title within a section. Grouped by
 goal, an activity with several goals is listed under each of them, and its row still shows the other
 goals. Grouped by tag works the same way, with a "No tag" section last. Search also matches tag names.

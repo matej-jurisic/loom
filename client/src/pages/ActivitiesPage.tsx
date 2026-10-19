@@ -294,67 +294,58 @@ export function ActivitiesPage() {
       {!isLoading && activities.length > 0 && (
         <div className="shrink-0 border-b border-border px-4 py-3 md:px-6">
           <div className="mx-auto flex max-w-2xl flex-col gap-2.5">
-            <div className="relative">
-              <Search
-                className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-                strokeWidth={2}
-              />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search title, category, goal, tag..."
-                className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch("")}
-                  aria-label="Clear search"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" strokeWidth={2} />
-                </button>
-              )}
+            <div className="flex items-center gap-2">
+              <div className="relative min-w-0 flex-1">
+                <Search
+                  className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                  strokeWidth={2}
+                />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search title, category, goal, tag..."
+                  className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-9 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+                {search && (
+                  <button
+                    onClick={() => setSearch("")}
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-3.5 w-3.5" strokeWidth={2} />
+                  </button>
+                )}
+              </div>
+              <select
+                value={group}
+                onChange={(e) => chooseGroupBy(e.target.value as GroupBy)}
+                aria-label="Group by"
+                className="h-9 shrink-0 rounded-md border border-input bg-background px-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              >
+                {GROUPS.map(({ value, label }) => (
+                  <option key={value} value={value}>
+                    Group: {label}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {filterChips.length > 0 && (
-                <div className="mr-auto flex flex-wrap items-center gap-1.5">
-                  {filterChips.map((chip) => (
-                    <button
-                      key={chip.key}
-                      onClick={() => clearFilter(chip.key)}
-                      aria-label={`Clear ${chip.key} filter`}
-                      className="flex h-7 max-w-[12rem] items-center gap-1 rounded-full border border-border bg-muted px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/60"
-                    >
-                      <span className="truncate">{chip.label}</span>
-                      <X className="h-3 w-3 shrink-0" strokeWidth={2} />
-                    </button>
-                  ))}
-                </div>
-              )}
-              <div className="flex overflow-hidden rounded-md border border-border">
-                <span className="hidden items-center border-r border-border px-2.5 text-xs text-muted-foreground sm:flex">
-                  Group
-                </span>
-                {GROUPS.map(({ value, label }) => (
+            {filterChips.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {filterChips.map((chip) => (
                   <button
-                    key={value}
-                    onClick={() => chooseGroupBy(value)}
-                    aria-pressed={group === value}
-                    // The "Group" label already draws the seam before the first button,
-                    // so it keeps border-l-0 at every width or the two stack into 2px.
-                    className={`border-l border-border px-2.5 py-1.5 text-xs font-medium transition-colors first:border-l-0 ${
-                      group === value
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted"
-                    }`}
+                    key={chip.key}
+                    onClick={() => clearFilter(chip.key)}
+                    aria-label={`Clear ${chip.key} filter`}
+                    className="flex h-7 max-w-[12rem] items-center gap-1 rounded-full border border-border bg-muted px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/60"
                   >
-                    {label}
+                    <span className="truncate">{chip.label}</span>
+                    <X className="h-3 w-3 shrink-0" strokeWidth={2} />
                   </button>
                 ))}
               </div>
-            </div>
+            )}
           </div>
         </div>
       )}
