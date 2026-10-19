@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -7,6 +7,7 @@ import {
   type HeatmapDayCounts, type HeatmapWindow,
 } from '@/components/events/OccurrenceHeatmap'
 import { ActivityList, activitiesFromOccurrences } from '@/components/insights/TimeByActivityList'
+import { toastError } from '@/store/toasts'
 import type { Occurrence } from '@/lib/types'
 
 /** Columns in the heatmap, one per week. Both are suffixes of the same window, with counts picked so
@@ -32,57 +33,50 @@ export function OccurrenceHistoryModal({
   color?: string
   onClose: () => void
 }) {
-  const { data: occurrences, isLoading } = useQuery({
+  const { data: occurrences, isError, error } = useQuery({
     queryKey,
     queryFn,
     enabled: open,
   })
 
+  useEffect(() => {
+    if (open && isError) {
+      toastError(error)
+      onClose()
+    }
+  }, [open, isError, error, onClose])
+
   const summary = useMemo(() => summarise(occurrences ?? []), [occurrences])
   const timeByActivity = useMemo(() => activitiesFromOccurrences(occurrences ?? []), [occurrences])
-  const loading = isLoading || !occurrences
 
   return (
     <Modal
-      open={open}
+      open={open && !!occurrences}
       onClose={onClose}
       title={`${title} - history`}
       footer={<Button variant="ghost" onClick={onClose}>Close</Button>}
     >
       {meta}
 
-      {/*
-        Every section down to the recent list is rendered on the first frame, loaded or not: the tiles
-        and the strip have a data-independent shape, and the list is a fixed-height box that scrolls.
-        The request lands while the panel is still animating in, so a shell that grows into the answer
-        reads as a stutter. "Time by activity" only exists once loaded, so it sits last, where its
-        arrival pushes nothing that is already on screen.
-      */}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat label="Last done" value={summary.lastDoneLabel} loading={loading} />
-        <Stat label="Cadence" value={cadenceLabel(summary)} loading={loading} />
-        <Stat label="Usual time" value={summary.usualStartTime} loading={loading} />
-        <Stat label="Usual length" value={durationLabel(summary.usualDurationMinutes)} loading={loading} />
+        <Stat label="Last done" value={summary.lastDoneLabel} />
+        <Stat label="Cadence" value={cadenceLabel(summary)} />
+        <Stat label="Usual time" value={summary.usualStartTime} />
+        <Stat label="Usual length" value={durationLabel(summary.usualDurationMinutes)} />
       </div>
 
-      <HistoryHeatmap occurrences={occurrences ?? []} color={color} loading={loading} />
+      <HistoryHeatmap occurrences={occurrences ?? []} color={color} />
 
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Recent
           </h3>
-          {loading ? (
-            <span className="h-3 w-32 animate-pulse rounded bg-border" />
-          ) : (
-            <span className="text-[11px] text-muted-foreground">
-              {summary.done} done, {summary.skipped} skipped, {summary.pending} pending
-            </span>
-          )}
+          <span className="text-[11px] text-muted-foreground">
+            {summary.done} done, {summary.skipped} skipped, {summary.pending} pending
+          </span>
         </div>
-        {loading ? (
-          <RecentSkeleton />
-        ) : summary.recent.length === 0 ? (
+        {summary.recent.length === 0 ? (
           <p className="flex h-24 items-center justify-center rounded-lg border border-border px-3 text-center text-sm text-muted-foreground">
             Nothing recorded yet.
           </p>
@@ -93,7 +87,7 @@ export function OccurrenceHistoryModal({
         )}
       </div>
 
-      {!loading && timeByActivity.length > 0 && (
+      {timeByActivity.length > 0 && (
         <div className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Time by activity
@@ -105,34 +99,13 @@ export function OccurrenceHistoryModal({
   )
 }
 
-function Stat({ label, value, loading }: { label: string; value: string | null; loading?: boolean }) {
+function Stat({ label, value }: { label: string; value: string | null }) {
   return (
     <div className="rounded-lg border border-border bg-muted/40 px-2.5 py-2">
       <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-      {loading ? (
-        <span className="mt-0.5 flex h-5 items-center" aria-hidden="true">
-          <span className="h-3 w-12 animate-pulse rounded bg-border" />
-        </span>
-      ) : (
-        <p className={`mt-0.5 text-sm ${value ? 'text-foreground' : 'text-muted-foreground'}`}>
-          {value ?? 'Unknown'}
-        </p>
-      )}
-    </div>
-  )
-}
-
-/** Fills the recent box while the occurrences load; the box owns the height, these own the shape. */
-function RecentSkeleton() {
-  return (
-    <div className="max-h-60 animate-pulse divide-y divide-border overflow-hidden rounded-lg border border-border" aria-busy="true" aria-label="Loading history">
-      {Array.from({ length: 5 }, (_, i) => (
-        <div key={i} className="flex h-[3.25rem] items-center gap-3 px-3">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-border" />
-          <span className="h-3 flex-1 rounded bg-border" />
-          <span className="h-3 w-10 shrink-0 rounded bg-border" />
-        </div>
-      ))}
+      <p className={`mt-0.5 text-sm ${value ? 'text-foreground' : 'text-muted-foreground'}`}>
+        {value ?? 'Unknown'}
+      </p>
     </div>
   )
 }
@@ -144,22 +117,19 @@ function RecentSkeleton() {
  * activities page cannot do: a flat list makes you reconstruct the rhythm yourself.
  *
  * Goals get their window from the server; this one is built here, like every other figure in the
- * dialog, so any caller can open it with just an activity. The grid is the same size empty as full,
- * so it renders while loading too - only the fills wait.
+ * dialog, so any caller can open it with just an activity.
  */
 function HistoryHeatmap({
   occurrences,
   color,
-  loading,
 }: {
   occurrences: Occurrence[]
   color: string
-  loading?: boolean
 }) {
-  const heatmap = useMemo(() => buildHeatmap(loading ? [] : occurrences), [occurrences, loading])
+  const heatmap = useMemo(() => buildHeatmap(occurrences), [occurrences])
 
   return (
-    <div className={loading ? 'animate-pulse' : undefined}>
+    <div>
       <div className="sm:hidden">
         <OccurrenceHeatmap heatmap={heatmap} color={color} weeks={HEATMAP_WEEKS_NARROW} showWeekdays />
       </div>
