@@ -13,10 +13,10 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { listsApi, occurrencesApi } from '@/lib/api'
+import { categoriesApi, goalsApi, listsApi, occurrencesApi, tagsApi } from '@/lib/api'
 import { invalidateLists } from '@/lib/invalidate'
 import { toastError } from '@/store/toasts'
-import type { Occurrence, OccurrenceList } from '@/lib/types'
+import type { Activity, Occurrence, OccurrenceList } from '@/lib/types'
 import {
   DEFAULT_GROUP,
   GROUP_OPTIONS,
@@ -32,6 +32,7 @@ import {
   type OccurrenceView,
   type StatusFilter,
 } from '@/lib/occurrenceView'
+import { ActivityModal } from '@/components/activities/ActivityModal'
 import { EventModal } from '@/components/events/EventModal'
 import { OccurrenceFilterFields } from '@/components/events/OccurrenceFilterFields'
 import { OccurrenceListRow } from '@/components/events/OccurrenceListRow'
@@ -272,6 +273,28 @@ function OccurrencesView({ title, view, onChange, menu, footer, emptyMessage }: 
     queryFn: () => occurrencesApi.list(),
   })
 
+  const [editingActivity, setEditingActivity] = useState<Activity | undefined>()
+
+  const { data: goals = [] } = useQuery({
+    queryKey: ['goals'],
+    queryFn: () => goalsApi.list(),
+    enabled: editingActivity !== undefined,
+  })
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories'],
+    queryFn: () => categoriesApi.list(),
+    enabled: editingActivity !== undefined,
+  })
+  const { data: tags = [] } = useQuery({
+    queryKey: ['tags'],
+    queryFn: () => tagsApi.list(),
+    enabled: editingActivity !== undefined,
+  })
+
+  function openEditActivity(a: Activity) {
+    setEditingActivity(a)
+  }
+
   function toggleCollapsed(key: string) {
     setCollapsed((prev) => {
       const next = new Set(prev)
@@ -451,6 +474,7 @@ function OccurrencesView({ title, view, onChange, menu, footer, emptyMessage }: 
                               onEdit={openEdit}
                               onSchedule={openSchedule}
                               onDuplicate={openDuplicate}
+                              onEditActivity={openEditActivity}
                             />
                           ))}
                         </ul>
@@ -472,6 +496,16 @@ function OccurrencesView({ title, view, onChange, menu, footer, emptyMessage }: 
         duplicateFrom={duplicating}
         focusStartAt={scheduleMode}
         scheduleOnly={scheduleMode}
+      />
+
+      <ActivityModal
+        key={editingActivity?.id ?? 'none'}
+        open={editingActivity !== undefined}
+        onClose={() => setEditingActivity(undefined)}
+        activity={editingActivity}
+        goals={goals}
+        categories={categories}
+        tags={tags}
       />
     </div>
   )

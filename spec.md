@@ -65,6 +65,7 @@ time. Activities are managed at `/activities`.
 | Subtasks | Ordered checklist template, copied onto every new occurrence. |
 | Work types | Labels for the kinds of work a session can be split into. Not copied anywhere. |
 | Repeat after days | Optional, 1 to 365. The gap offered for the next occurrence when one is completed or skipped. Activity kind only. |
+| Show as overdue | Default on. When off, the activity's occurrences are never `isOverdue` or `isBehind`: they stay out of the Daily Plan's Unfinished section and the Overdue group of the occurrence lists. |
 
 Deleting an activity cascades to its occurrences. Deleting a category set-nulls the link and deleting
 a goal or a tag removes only that link; either way the activity stays alive, with its other goals and tags.

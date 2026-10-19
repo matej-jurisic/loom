@@ -61,6 +61,7 @@ export function BulkAssignModal({
               categoryId === KEEP ? a.categoryId : categoryId === CLEAR ? null : categoryId,
             tagIds: a.tags.map((t) => t.id),
             repeatAfterDays: a.repeatAfterDays,
+            showAsOverdue: a.showAsOverdue,
           }),
         ),
       ),

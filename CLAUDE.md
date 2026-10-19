@@ -227,7 +227,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   and `EventModal` (the occurrence's own tags).
   `TagModal.tsx` adds / renames from the Tags page. `BulkAssignModal` resends each
   activity's `tagIds` (the PUT would otherwise wipe them).
-- `components/goals/GoalPicker.tsx` — toggle chips for an activity's goal set, used by `ActivityModal`,
+- `components/goals/GoalPicker.tsx` — selected-goal list (remove with X) plus a searchable "Add a goal" combobox of the rest (arrow keys, Enter, Escape), for an activity's goal set, used by `ActivityModal`,
   `BulkAssignModal` and `EventModal`. Options come from `pickableGoals` (`lib/goals.ts`): closed goals are
   offered only when already linked, so an edit never drops one silently.
 - `components/events/TimeSplitEditor.tsx` — the time split section of `EventDetailModal` (chips,

@@ -158,6 +158,7 @@ export interface Activity {
   subtasks: ActivitySubtask[]
   workTypes: ActivityWorkType[]
   repeatAfterDays: number | null
+  showAsOverdue: boolean
   /** Occurrences in the last year. Only the list endpoint fills it; single-activity responses send 0. */
   recentOccurrenceCount: number
 }

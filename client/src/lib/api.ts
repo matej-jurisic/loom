@@ -93,10 +93,10 @@ export const activitiesApi = {
     return request<Activity[]>(`/api/activities${q.size ? `?${q}` : ''}`)
   },
 
-  create: (body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds?: string[]; repeatAfterDays?: number | null }) =>
+  create: (body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds?: string[]; repeatAfterDays?: number | null; showAsOverdue?: boolean }) =>
     request<Activity>('/api/activities', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds: string[]; repeatAfterDays: number | null }) =>
+  update: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds: string[]; repeatAfterDays: number | null; showAsOverdue: boolean }) =>
     request<Activity>(`/api/activities/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 
   duplicate: (id: string) => request<Activity>(`/api/activities/${id}/duplicate`, { method: 'POST' }),

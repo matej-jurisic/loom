@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, X, Pencil, Trash2, CalendarPlus, Copy, Clock, History, ListChecks, Flag } from 'lucide-react'
+import { Check, X, Pencil, Trash2, CalendarPlus, Copy, Clock, History, ListChecks, Flag, Layers } from 'lucide-react'
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
-import type { Occurrence, EventStatus } from '@/lib/types'
+import type { Activity, Occurrence, EventStatus } from '@/lib/types'
 import { Badge } from '@/components/ui/Badge'
 import { ActionMenu, type ActionMenuEntry } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -35,9 +35,10 @@ interface OccurrenceListRowProps {
   onEdit: (o: Occurrence) => void
   onSchedule?: (o: Occurrence) => void
   onDuplicate?: (o: Occurrence) => void
+  onEditActivity?: (a: Activity) => void
 }
 
-export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, onDuplicate }: OccurrenceListRowProps) {
+export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, onDuplicate, onEditActivity }: OccurrenceListRowProps) {
   const qc = useQueryClient()
   const [subtasksOpen, setSubtasksOpen] = useState(false)
   const [skipOpen, setSkipOpen] = useState(false)
@@ -109,6 +110,9 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, on
     { icon: History, label: 'History', onClick: () => setHistoryOpen(true) },
     ...(onDuplicate ? [{ icon: Copy, label: 'Duplicate', onClick: () => onDuplicate(occurrence) }] : []),
     { icon: Pencil, label: 'Edit', onClick: () => onEdit(occurrence) },
+    ...(onEditActivity && occurrence.activity.kind === 'activity'
+      ? [{ icon: Layers, label: 'Edit activity', onClick: () => onEditActivity(occurrence.activity) }]
+      : []),
     { icon: Trash2, label: 'Delete', onClick: () => setConfirmDelete(true), destructive: true },
   ]
 

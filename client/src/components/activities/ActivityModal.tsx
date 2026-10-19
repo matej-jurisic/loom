@@ -32,6 +32,7 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
   const [titleError, setTitleError] = useState('')
   const [repeatDays, setRepeatDays] = useState(activity?.repeatAfterDays?.toString() ?? '')
   const [repeatError, setRepeatError] = useState('')
+  const [showAsOverdue, setShowAsOverdue] = useState(activity?.showAsOverdue ?? true)
   const [subtasks, setSubtasks] = useState(activity?.subtasks ?? [])
   const [newSubtask, setNewSubtask] = useState('')
   const newSubtaskRef = useRef<HTMLInputElement>(null)
@@ -44,6 +45,7 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
         tagIds,
         categoryId: categoryId || null,
         repeatAfterDays: parseRepeatAfterDays(repeatDays) ?? null,
+        showAsOverdue,
       }
       return isEdit ? activitiesApi.update(activity!.id, body) : activitiesApi.create(body)
     },
@@ -178,6 +180,21 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
         </div>
         {repeatError && <p className="text-xs text-destructive">{repeatError}</p>}
       </div>
+
+      <label className="flex items-start gap-2.5 text-sm text-foreground">
+        <input
+          type="checkbox"
+          checked={showAsOverdue}
+          onChange={(e) => setShowAsOverdue(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-primary"
+        />
+        <span>
+          Show as overdue
+          <span className="block text-xs text-muted-foreground">
+            When off, late occurrences stay out of Unfinished and are not marked overdue.
+          </span>
+        </span>
+      </label>
 
       {isEdit && (
         <div className="flex flex-col gap-2">

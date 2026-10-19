@@ -32,6 +32,7 @@ function activity(over: Partial<Activity> = {}): Activity {
     subtasks: [],
     workTypes: [],
     repeatAfterDays: null,
+    showAsOverdue: true,
     recentOccurrenceCount: 0,
     ...over,
   }

@@ -211,6 +211,7 @@ Under the Edit Activity subtask list, an `outline` `sm` button "Add to N pending
 
 - **Edit / New Activity dialog:** "Do again after (optional)" under Category: a `w-20` numeric input with a muted `days` suffix and placeholder `Off`. Empty means off; an invalid value turns the border destructive and shows the error below in `text-xs text-destructive`.
 - **Occurrence detail modal:** while the occurrence is pending and its activity has an interval, a checkbox sits directly left of `Done` in the footer: the standard `h-4 w-4 rounded-[4px]` box (primary fill and check when on) with "Again Wed, Oct 14" in `text-xs text-muted-foreground`. Ticked by default every time the modal opens on an occurrence.
+- **Edit / New Activity dialog, overdue:** a "Show as overdue" checkbox (default ticked) below the repeat field, with a `text-xs text-muted-foreground` hint line.
 - **Activity row:** a `Repeat` icon and "again after 7 days" in the meta line, `text-xs text-muted-foreground`, before the goal badges.
 
 ### Failure states

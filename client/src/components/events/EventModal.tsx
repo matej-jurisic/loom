@@ -163,6 +163,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   const [showNewActivity, setShowNewActivity] = useState(false)
   const [newActivityTitle, setNewActivityTitle] = useState('')
   const [newActivityCategoryId, setNewActivityCategoryId] = useState('')
+  const [newActivityGoalId, setNewActivityGoalId] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [subtasks, setSubtasks] = useState<DraftSubtask[]>(
     () => (occurrence?.subtasks ?? []).map((s) => ({ id: s.id, title: s.title })),
@@ -195,7 +196,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   const { data: goals = [] } = useQuery({
     queryKey: ['goals'],
     queryFn: () => goalsApi.list(),
-    enabled: open && kind === 'event',
+    enabled: open && (showNewActivity || kind === 'event'),
   })
 
   const { data: tags = [] } = useQuery({
@@ -211,14 +212,15 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   })
 
   const createActivityMutation = useMutation({
-    mutationFn: ({ title, categoryId }: { title: string; categoryId: string | null }) =>
-      activitiesApi.create({ title, categoryId }),
+    mutationFn: ({ title, categoryId, goalIds }: { title: string; categoryId: string | null; goalIds: string[] }) =>
+      activitiesApi.create({ title, categoryId, goalIds }),
     onSuccess: (activity) => {
       qc.invalidateQueries({ queryKey: ['activities'] })
       setForm((f) => ({ ...f, activityId: activity.id }))
       setShowNewActivity(false)
       setNewActivityTitle('')
       setNewActivityCategoryId('')
+      setNewActivityGoalId('')
     },
   })
 
@@ -360,6 +362,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   )
 
   const goalOptions = pickableGoals(goals, source?.activity.goals.map((g) => g.id) ?? [])
+  const newActivityGoalOptions = pickableGoals(goals, [])
 
   const deadlineOptions = useMemo(() => {
     const dateLabel = (iso: string | null) =>
@@ -506,8 +509,8 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
                 value={newActivityTitle}
                 onChange={(e) => setNewActivityTitle(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newActivityTitle.trim()) createActivityMutation.mutate({ title: newActivityTitle.trim(), categoryId: newActivityCategoryId || null })
-                  if (e.key === 'Escape') { setShowNewActivity(false); setNewActivityTitle(''); setNewActivityCategoryId('') }
+                  if (e.key === 'Enter' && newActivityTitle.trim()) createActivityMutation.mutate({ title: newActivityTitle.trim(), categoryId: newActivityCategoryId || null, goalIds: newActivityGoalId ? [newActivityGoalId] : [] })
+                  if (e.key === 'Escape') { setShowNewActivity(false); setNewActivityTitle(''); setNewActivityCategoryId(''); setNewActivityGoalId('') }
                 }}
                 autoFocus
                 className="h-8 min-w-0 w-full rounded-md border border-input bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
@@ -520,10 +523,20 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
                   ...categories.map((c) => ({ value: c.id, label: c.name })),
                 ]}
               />
+              {newActivityGoalOptions.length > 0 && (
+                <Select
+                  value={newActivityGoalId}
+                  onChange={setNewActivityGoalId}
+                  options={[
+                    { value: '', label: 'No goal' },
+                    ...newActivityGoalOptions.map((g) => ({ value: g.id, label: g.title })),
+                  ]}
+                />
+              )}
               <div className="flex gap-2">
                 <Button
                   size="sm"
-                  onClick={() => { if (newActivityTitle.trim()) createActivityMutation.mutate({ title: newActivityTitle.trim(), categoryId: newActivityCategoryId || null }) }}
+                  onClick={() => { if (newActivityTitle.trim()) createActivityMutation.mutate({ title: newActivityTitle.trim(), categoryId: newActivityCategoryId || null, goalIds: newActivityGoalId ? [newActivityGoalId] : [] }) }}
                   loading={createActivityMutation.isPending}
                 >
                   Add
@@ -531,7 +544,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => { setShowNewActivity(false); setNewActivityTitle(''); setNewActivityCategoryId('') }}
+                  onClick={() => { setShowNewActivity(false); setNewActivityTitle(''); setNewActivityCategoryId(''); setNewActivityGoalId('') }}
                 >
                   Cancel
                 </Button>
