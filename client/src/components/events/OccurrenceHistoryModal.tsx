@@ -125,7 +125,7 @@ function Stat({ label, value, loading }: { label: string; value: string | null; 
 /** Fills the recent box while the occurrences load; the box owns the height, these own the shape. */
 function RecentSkeleton() {
   return (
-    <div className="animate-pulse divide-y divide-border rounded-lg border border-border" aria-busy="true" aria-label="Loading history">
+    <div className="max-h-60 animate-pulse divide-y divide-border overflow-hidden rounded-lg border border-border" aria-busy="true" aria-label="Loading history">
       {Array.from({ length: 5 }, (_, i) => (
         <div key={i} className="flex h-[3.25rem] items-center gap-3 px-3">
           <span className="h-2 w-2 shrink-0 rounded-full bg-border" />
