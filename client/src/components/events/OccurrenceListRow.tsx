@@ -4,7 +4,7 @@ import { Check, X, Pencil, Trash2, CalendarPlus, Copy, Clock, History, ListCheck
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Activity, Occurrence, EventStatus } from '@/lib/types'
-import { Badge } from '@/components/ui/Badge'
+import { GoalBadge } from '@/components/goals/GoalBadge'
 import { ActionMenu, type ActionMenuEntry } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
@@ -13,13 +13,6 @@ import { SkipRescheduleModal } from '@/components/events/SkipRescheduleModal'
 import { ActivityHistoryModal } from '@/components/activities/ActivityHistoryModal'
 import { invalidateOccurrences } from '@/lib/invalidate'
 import { addNextOccurrence } from '@/lib/repeat'
-
-const GOAL_TONE: Record<string, 'focus' | 'active' | 'bench' | 'neutral'> = {
-  focus: 'focus',
-  active: 'active',
-  bench: 'bench',
-  closed: 'neutral',
-}
 
 function formatMinutes(minutes: number): string {
   const h = Math.floor(minutes / 60)
@@ -145,7 +138,7 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, on
           <span className={`text-sm ${!isPending ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
             {occurrence.effectiveTitle}
           </span>
-          {goals.map((g) => <Badge key={g.id} tone={GOAL_TONE[g.status] ?? 'neutral'}>{g.title}</Badge>)}
+          {goals.map((g) => <GoalBadge key={g.id} goal={g} />)}
         </div>
         {(timeText || cat || hasSubtasks || deadline || linkedLabel || occurrence.effectiveTags.length > 0) && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">

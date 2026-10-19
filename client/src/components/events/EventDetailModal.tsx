@@ -5,6 +5,7 @@ import { Check, X, Pencil, Trash2, Clock, CalendarPlus, Copy, History, MoreHoriz
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
+import { GoalBadge } from '@/components/goals/GoalBadge'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
 import { SkipRescheduleModal } from '@/components/events/SkipRescheduleModal'
@@ -68,13 +69,6 @@ function formatOccurrenceTime(o: Occurrence): string {
 
   if (o.startAt) return `${dateLabel}, ${formatTime(o.startAt)}`
   return `${dateLabel}, Due ${formatTime(o.endAt!)}`
-}
-
-const GOAL_TONE: Record<string, 'focus' | 'active' | 'bench' | 'neutral'> = {
-  focus: 'focus',
-  active: 'active',
-  bench: 'bench',
-  closed: 'neutral',
 }
 
 interface EventDetailModalProps {
@@ -436,7 +430,7 @@ const statusMutation = useMutation({
 
         {goals.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {goals.map((g) => <Badge key={g.id} tone={GOAL_TONE[g.status] ?? 'neutral'}>{g.title}</Badge>)}
+            {goals.map((g) => <GoalBadge key={g.id} goal={g} />)}
           </div>
         )}
 

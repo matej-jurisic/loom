@@ -1,17 +1,9 @@
 import { Check, Copy, History, Pencil, Repeat, Trash2 } from 'lucide-react'
 import type { Activity } from '@/lib/types'
-import { Badge } from '@/components/ui/Badge'
+import { GoalBadge } from '@/components/goals/GoalBadge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
 import { daysLabel } from '@/lib/repeat'
-
-const GOAL_TONE: Record<string, 'focus' | 'active' | 'bench' | 'neutral'> = {
-  focus: 'focus',
-  active: 'active',
-  bench: 'bench',
-  neutral: 'neutral',
-  closed: 'neutral',
-}
 
 interface ActivityListRowProps {
   activity: Activity
@@ -125,9 +117,7 @@ export function ActivityListRow({
               </span>
             ))}
             {goals.map((g) => (
-              <Badge key={g.id} tone={GOAL_TONE[g.status] ?? 'neutral'}>
-                {g.title}
-              </Badge>
+              <GoalBadge key={g.id} goal={g} />
             ))}
           </span>
         )}

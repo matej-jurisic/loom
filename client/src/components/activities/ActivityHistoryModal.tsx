@@ -1,12 +1,8 @@
 import { OccurrenceHistoryModal } from '@/components/events/OccurrenceHistoryModal'
-import { Badge } from '@/components/ui/Badge'
+import { GoalBadge } from '@/components/goals/GoalBadge'
 import { CategoryIcon } from '@/components/categories/categoryIcons'
 import { occurrencesApi } from '@/lib/api'
 import type { Activity } from '@/lib/types'
-
-const GOAL_TONE: Record<string, 'focus' | 'active' | 'bench' | 'neutral'> = {
-  focus: 'focus', active: 'active', bench: 'bench', closed: 'neutral',
-}
 
 export function ActivityHistoryModal({
   open,
@@ -35,7 +31,7 @@ export function ActivityHistoryModal({
             </span>
           )}
           {activity.goals.map((g) => (
-            <Badge key={g.id} tone={GOAL_TONE[g.status] ?? 'neutral'}>{g.title}</Badge>
+            <GoalBadge key={g.id} goal={g} />
           ))}
         </div>
       }

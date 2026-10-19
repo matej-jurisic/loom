@@ -186,6 +186,7 @@ Under the Edit Activity subtask list, an `outline` `sm` button "Add to N pending
 
 - Small pill: `px-2 py-0.5`, `rounded-full`, `text-xs font-medium`.
 - Colors via `color-mix`: soft tinted bg + saturated text. Tones: `neutral | red | blue | amber | green`.
+- Goal pills (`GoalBadge`) take the goal's own colour for text, border and tinted fill; a goal with no colour falls back to its status tone.
 
 ### Modals
 
