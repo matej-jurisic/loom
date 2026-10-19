@@ -126,7 +126,7 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   is display only: `GoalDto.DaysUntilEnd` (via `DayMath`) drives the card note and sort, and nothing
   ever closes a goal on its own. `Color`/`Icon` ride on `GoalSummaryDto` too, for the calendar.
 - `Services/*Service.cs` — ctor-inject `LoomDbContext`; return `Result`/`Result<T>`. Registered in `AddLoomCore`.
-- `Services/InsightsService.cs` — totals over completed occurrences only. **Never add a stat whose
+- `Services/InsightsService.cs` — totals over completed occurrences only (summary with previous-window comparison, by activity / category / goal / tag; goal and tag rows overlap, like per-goal figures elsewhere). **Never add a stat whose
   denominator is the length of a day**; see the boundary above.
 - `Occurrence.DeadlineOccurrenceId` — self-reference (set-null) to a pending event-kind occurrence.
   `OccurrenceService.ValidateDeadlineAsync` owns the rules (own user, event kind, pending unless

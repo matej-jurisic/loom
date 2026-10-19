@@ -166,5 +166,57 @@ public class InsightsServiceTests : IDisposable
         Assert.Equal(60, insights.Categories[1].TimeMinutes);
     }
 
+    [Fact]
+    public async Task GetAsync_summary_counts_done_active_days_and_previous_window()
+    {
+        var userId = await CreateUserAsync();
+        var run = await AddActivityAsync(userId, "run");
+        await AddOccurrenceAsync(userId, run, At(7, 9), At(7, 9, 30));   // 30 min
+        await AddOccurrenceAsync(userId, run, At(7, 18));                 // done, untimed, same day
+        await AddOccurrenceAsync(userId, run, At(5, 9), At(5, 10));      // 60 min
+        await AddOccurrenceAsync(userId, run, new DateTimeOffset(2026, 6, 28, 9, 0, 0, TimeSpan.Zero),
+            new DateTimeOffset(2026, 6, 28, 10, 0, 0, TimeSpan.Zero));   // 60 min, previous window
+
+        var summary = (await _ctx.InsightsService.GetAsync(userId, 7, Now)).Summary;
+
+        Assert.Equal(90, summary.TimeMinutes);
+        Assert.Equal(3, summary.Done);
+        Assert.Equal(2, summary.ActiveDays);
+        Assert.Equal(60, summary.PreviousTimeMinutes);
+        Assert.Equal(1, summary.PreviousDone);
+    }
+
+    [Fact]
+    public async Task GetAsync_goals_and_tags_group_timed_occurrences()
+    {
+        var userId = await CreateUserAsync();
+        var goal = new Goal { UserId = userId, Title = "Fitness" };
+        var activityTag = new Tag { UserId = userId, Name = "outdoor" };
+        var ownTag = new Tag { UserId = userId, Name = "morning" };
+        _ctx.Db.AddRange(goal, activityTag, ownTag);
+        await _ctx.Db.SaveChangesAsync();
+        var run = await AddActivityAsync(userId, "run");
+        run.Goals.Add(goal);
+        run.Tags.Add(activityTag);
+        _ctx.Db.Occurrences.Add(new Occurrence
+        {
+            UserId = userId,
+            ActivityId = run.Id,
+            StartAt = At(7, 9),
+            EndAt = At(7, 9, 30),
+            Status = EventStatus.done,
+            Tags = [activityTag, ownTag],
+        });
+        await _ctx.Db.SaveChangesAsync();
+
+        var insights = await _ctx.InsightsService.GetAsync(userId, 7, Now);
+
+        var g = Assert.Single(insights.Goals);
+        Assert.Equal(30, g.TimeMinutes);
+        Assert.Equal(1, g.Done);
+        Assert.Equal(2, insights.Tags.Count);
+        Assert.All(insights.Tags, t => Assert.Equal(30, t.TimeMinutes));
+    }
+
     // Now (2026-07-07) is a Tuesday; Mondays in the lookback window include Jun 22, Jun 29, Jul 6.
 }

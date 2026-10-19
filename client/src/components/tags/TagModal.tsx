@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useSeedOnOpen } from '@/lib/useSeedOnOpen'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { ApiError } from '@/lib/api'
@@ -16,12 +17,10 @@ export function TagModal({ open, onClose, tag, onSave }: TagModalProps) {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    if (open) {
-      setName(tag?.name ?? '')
-      setError('')
-    }
-  }, [open, tag])
+  useSeedOnOpen(open, tag, () => {
+    setName(tag?.name ?? '')
+    setError('')
+  })
 
   async function handleSave() {
     if (!name.trim()) { setError('Name is required.'); return }

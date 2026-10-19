@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useSeedOnOpen } from '@/lib/useSeedOnOpen'
 import { Check, type LucideIcon } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -163,14 +164,12 @@ export function CategoryModal({ open, onClose, category, onSave }: CategoryModal
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    if (open) {
-      setName(category?.name ?? '')
-      setColor(category?.color ?? PALETTE[6])
-      setIcon(category?.icon ?? null)
-      setError('')
-    }
-  }, [open, category])
+  useSeedOnOpen(open, category, () => {
+    setName(category?.name ?? '')
+    setColor(category?.color ?? PALETTE[6])
+    setIcon(category?.icon ?? null)
+    setError('')
+  })
 
   async function handleSave() {
     if (!name.trim()) { setError('Name is required.'); return }

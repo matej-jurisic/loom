@@ -26,22 +26,30 @@ public class InsightsService(LoomDbContext db, UserSettingsService settings)
         var completed = await db.Occurrences
             .AsNoTracking()
             .Include(o => o.Activity).ThenInclude(a => a.Category)
+            .Include(o => o.Activity).ThenInclude(a => a.Goals)
+            .Include(o => o.Activity).ThenInclude(a => a.Tags)
+            .Include(o => o.Tags)
             .Include(o => o.TimeSplits).ThenInclude(t => t.WorkType)
             .AsSplitQuery()
             .Where(o => o.UserId == userId && o.Status == EventStatus.done && o.StartAt != null)
             .ToListAsync();
 
-        var inWindow = completed
-            .Where(o => { var day = DayMath.DayOf(o.StartAt!.Value, ctx); return day >= windowStart && day <= today; })
+        var windowDone = completed
+            .Select(o => (Occurrence: o, Day: DayMath.DayOf(o.StartAt!.Value, ctx)))
             .ToList();
 
-        // Only occurrences with both timestamps and positive elapsed time contribute: a duration has
-        // to have actually been measured for a total to mean anything.
-        var timed = inWindow
-            .Where(o => o.StartAt.HasValue && o.EndAt.HasValue)
-            .Select(o => (Occurrence: o, Minutes: (int)(o.EndAt!.Value - o.StartAt!.Value).TotalMinutes))
-            .Where(x => x.Minutes > 0)
+        var inWindow = windowDone
+            .Where(x => x.Day >= windowStart && x.Day <= today)
+            .Select(x => x.Occurrence)
             .ToList();
+
+        var previousStart = windowStart.AddDays(-windowDays);
+        var previous = windowDone
+            .Where(x => x.Day >= previousStart && x.Day < windowStart)
+            .Select(x => x.Occurrence)
+            .ToList();
+
+        var timed = Timed(inWindow);
 
         var activities = timed
             .GroupBy(x => x.Occurrence.ActivityId)
@@ -74,8 +82,42 @@ public class InsightsService(LoomDbContext db, UserSettingsService settings)
             .ThenBy(c => c.Name)
             .ToList();
 
-        return new InsightsDto(activities, categories);
+        var goals = timed
+            .SelectMany(x => x.Occurrence.Activity.Goals.Select(g => (Goal: g, x.Minutes)))
+            .GroupBy(x => x.Goal.Id)
+            .Select(g =>
+            {
+                var goal = g.First().Goal;
+                return new InsightsGoalDto(goal.Id, goal.Title, goal.Color, goal.Icon, g.Count(), g.Sum(x => x.Minutes));
+            })
+            .OrderByDescending(g => g.TimeMinutes)
+            .ThenBy(g => g.Title)
+            .ToList();
+
+        var tags = timed
+            .SelectMany(x => x.Occurrence.Activity.Tags.Concat(x.Occurrence.Tags).DistinctBy(t => t.Id).Select(t => (Tag: t, x.Minutes)))
+            .GroupBy(x => x.Tag.Id)
+            .Select(g => new InsightsTagDto(g.Key, g.First().Tag.Name, g.Count(), g.Sum(x => x.Minutes)))
+            .OrderByDescending(t => t.TimeMinutes)
+            .ThenBy(t => t.Name)
+            .ToList();
+
+        var summary = new InsightsSummaryDto(
+            timed.Sum(x => x.Minutes),
+            inWindow.Count,
+            inWindow.Select(o => DayMath.DayOf(o.StartAt!.Value, ctx)).Distinct().Count(),
+            Timed(previous).Sum(x => x.Minutes),
+            previous.Count);
+
+        return new InsightsDto(summary, activities, categories, goals, tags);
     }
+
+    private static List<(Entities.Occurrence Occurrence, int Minutes)> Timed(IEnumerable<Entities.Occurrence> occurrences) =>
+        occurrences
+            .Where(o => o.StartAt.HasValue && o.EndAt.HasValue)
+            .Select(o => (Occurrence: o, Minutes: (int)(o.EndAt!.Value - o.StartAt!.Value).TotalMinutes))
+            .Where(x => x.Minutes > 0)
+            .ToList();
 
     private static List<InsightsWorkTypeDto> WorkTypeTotals(IEnumerable<Entities.Occurrence> occurrences) =>
         occurrences

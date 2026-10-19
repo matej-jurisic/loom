@@ -323,8 +323,9 @@ One `max-w-2xl` column of sections, each an uppercase label over a bordered card
 
 Everything on this page is a **sum of what was logged**. Nothing is a percentage of a day and nothing counts what is missing, so the page stays honest however sparse the calendar is.
 
-- **Period toggle:** segmented control (7 days / 30 days / 90 days / 1 year) on a `bg-muted` track with a `p-0.5` inset; the active option is a raised `bg-card` chip. Sits above the first section, left-aligned.
-- **Time by activity / by category:** rows with title (category rows lead with the category icon; never colored text), duration right-aligned (`tabular-nums`), and a 4px proportional bar underneath in the category's own color on a `bg-muted` track. Uncategorized uses `CircleDashed` + muted tones.
+- **Period select:** the shared `Select` with a `CalendarDays` icon ("Last 7 days" ... "Last 1 year"), full width on mobile and `sm:w-56` above, left-aligned above the summary.
+- **Summary:** three bordered tiles (Time, Done, Active days): `text-xs` muted label over a `text-lg font-semibold tabular-nums` value, and a muted "+/-x vs previous" line when the previous window had data. No good/bad colouring.
+- **Time by activity / category / goal / tag:** rows with title (category rows lead with the category icon, goal rows with a small `GoalTile`, tag rows with `Hash`; never colored text), duration right-aligned (`tabular-nums`), and a 4px proportional bar underneath in the category's own color on a `bg-muted` track. Uncategorized uses `CircleDashed` + muted tones.
 - **Work type breakdown:** under an activity's bar, when it has split time: indented `text-xs text-muted-foreground` lines of type and duration, largest first, closing with an italic `Not split` line for the remainder. No bars of their own - they are a footnote to the activity's total, not competing rows.
 
 ---

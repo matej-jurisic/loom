@@ -619,9 +619,12 @@ excluded - they have no day to count on.
 
 | Stat | Rule |
 |---|---|
+| Summary | Total timed minutes, done count (timed or not) and number of distinct days with something done, over the window. Time and done also carry the difference against the previous window of the same length, shown only when that window had something to compare. |
 | Time by activity | Per activity over the window: summed minutes and count, from occurrences with both timestamps and positive elapsed time. Sorted by time. Bars in the activity's category colour. |
 | Time by work type | Under each activity, its time split summed per work type (resolved minutes, archived types included), largest first, with whatever was not split shown as "Not split". Absent when the activity has no split time in the window. |
 | Time by category | Same set grouped by the activity's category; uncategorized completions form a "No category" bucket. |
+| Time by goal | Same set grouped by each goal the activity is linked to, so an occurrence counts once per goal; the rows do not add up to the total. Absent when no goal-linked time. |
+| Time by tag | Same set grouped by effective tag (the activity's tags plus the occurrence's own, once each); same overlap as goals. Absent when no tagged time. |
 
 All are sums over what the user chose to log. **There is deliberately no stat whose denominator is
 the length of a day** - no unaccounted time, no gap analysis, no "usually free" profile. Those all

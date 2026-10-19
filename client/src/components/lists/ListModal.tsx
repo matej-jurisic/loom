@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useSeedOnOpen } from '@/lib/useSeedOnOpen'
 import { useQueryClient } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
@@ -35,14 +36,11 @@ export function ListModal({ open, onClose, list, initial, onSaved }: ListModalPr
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    if (!open) return
+  useSeedOnOpen(open, list, () => {
     setName(list?.name ?? '')
     setView(list ? viewFromList(list) : (initial ?? EMPTY_VIEW))
     setError('')
-    // Reinitialise only when the modal opens; `initial` is rebuilt on every page render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, list])
+  })
 
   async function handleSave() {
     if (!name.trim()) { setError('Name is required.'); return }

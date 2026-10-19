@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useSeedOnOpen } from '@/lib/useSeedOnOpen'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -45,17 +46,15 @@ export function CheckpointModal({ open, onClose, goalId, checkpoint }: Checkpoin
   const [errors, setErrors] = useState<Errors>({})
   const [apiError, setApiError] = useState('')
 
-  useEffect(() => {
-    if (open) {
-      setForm({
-        title: checkpoint?.title ?? '',
-        size: checkpoint?.size ?? 'normal',
-        targetDate: checkpoint?.targetDate ? checkpoint.targetDate.slice(0, 10) : '',
-      })
-      setErrors({})
-      setApiError('')
-    }
-  }, [open, checkpoint])
+  useSeedOnOpen(open, checkpoint, () => {
+    setForm({
+      title: checkpoint?.title ?? '',
+      size: checkpoint?.size ?? 'normal',
+      targetDate: checkpoint?.targetDate ? checkpoint.targetDate.slice(0, 10) : '',
+    })
+    setErrors({})
+    setApiError('')
+  })
 
   const mutation = useMutation({
     mutationFn: () => {

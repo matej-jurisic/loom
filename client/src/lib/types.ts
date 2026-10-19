@@ -223,9 +223,36 @@ export interface InsightsCategory {
   timeMinutes: number
 }
 
+export interface InsightsGoal {
+  goalId: string
+  title: string
+  color: string | null
+  icon: string | null
+  done: number
+  timeMinutes: number
+}
+
+export interface InsightsTag {
+  tagId: string
+  name: string
+  done: number
+  timeMinutes: number
+}
+
+export interface InsightsSummary {
+  timeMinutes: number
+  done: number
+  activeDays: number
+  previousTimeMinutes: number
+  previousDone: number
+}
+
 export interface Insights {
+  summary: InsightsSummary
   activities: InsightsActivity[]
   categories: InsightsCategory[]
+  goals: InsightsGoal[]
+  tags: InsightsTag[]
 }
 
 export interface UserSettings {

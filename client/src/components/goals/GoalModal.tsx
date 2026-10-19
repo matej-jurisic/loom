@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useSeedOnOpen } from '@/lib/useSeedOnOpen'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
@@ -50,21 +51,19 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
   const [errors, setErrors] = useState<Errors>({})
   const [apiError, setApiError] = useState('')
 
-  useEffect(() => {
-    if (open) {
-      setForm({
-        title: goal?.title ?? '',
-        description: goal?.description ?? '',
-        notes: goal?.notes ?? '',
-        kind: goal?.kind ?? 'goal',
-        endDate: goal?.endDate ?? '',
-        color: goal?.color ?? null,
-        icon: goal?.icon ?? null,
-      })
-      setErrors({})
-      setApiError('')
-    }
-  }, [open, goal])
+  useSeedOnOpen(open, goal, () => {
+    setForm({
+      title: goal?.title ?? '',
+      description: goal?.description ?? '',
+      notes: goal?.notes ?? '',
+      kind: goal?.kind ?? 'goal',
+      endDate: goal?.endDate ?? '',
+      color: goal?.color ?? null,
+      icon: goal?.icon ?? null,
+    })
+    setErrors({})
+    setApiError('')
+  })
 
   const mutation = useMutation({
     mutationFn: () => {

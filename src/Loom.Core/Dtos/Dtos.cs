@@ -346,9 +346,18 @@ public sealed record InsightsActivityDto(Guid ActivityId, string Title, string? 
 
 public sealed record InsightsCategoryDto(Guid? CategoryId, string? Name, string? Color, string? Icon, int Done, int TimeMinutes);
 
+public sealed record InsightsGoalDto(Guid GoalId, string Title, string? Color, string? Icon, int Done, int TimeMinutes);
+
+public sealed record InsightsTagDto(Guid TagId, string Name, int Done, int TimeMinutes);
+
+public sealed record InsightsSummaryDto(int TimeMinutes, int Done, int ActiveDays, int PreviousTimeMinutes, int PreviousDone);
+
 public sealed record InsightsDto(
+    InsightsSummaryDto Summary,
     List<InsightsActivityDto> Activities,
-    List<InsightsCategoryDto> Categories);
+    List<InsightsCategoryDto> Categories,
+    List<InsightsGoalDto> Goals,
+    List<InsightsTagDto> Tags);
 
 // Export — flat JSON snapshot of all user data, meant for external analysis.
 // Not a backup format: there is no import path and the shape may change freely.
