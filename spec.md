@@ -83,8 +83,10 @@ user ignoring case; a clash is a 409. Activity tags exist only on activities of 
 `GET /api/activities` takes an optional `tagId` filter beside `goalId`.
 A tag has no status, colour or archive: it groups and searches, nothing more.
 
-An occurrence can carry tags of its own (`OccurrenceTags`), so one "Lecture" activity can be tagged
-with the course per calendar entry. Create, patch and the event endpoints take the full set as
+An occurrence can carry tags of its own (`OccurrenceTags`), meant for light variants of one activity,
+such as "Remote" or "Office" on the same work. What a thing is belongs on the activity: lectures for
+different classes or homework for different labs are separate activities, not one activity tagged per
+course. Create, patch and the event endpoints take the full set as
 `tagIds` (on patch and event update an absent `tagIds` leaves the set alone, an empty list clears it)
 and responses carry `tags` (the occurrence's own) and `effectiveTags` (the activity's tags plus the
 occurrence's, by name, each once). The two layers are additive and independent: retagging the

@@ -1,4 +1,4 @@
-import { Hash, Layers, ListChecks, ListTodo, Route, Shapes, Target, Timer } from 'lucide-react'
+import { Hash, Layers, Lightbulb, ListChecks, ListTodo, Route, Shapes, Target, Timer } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 
@@ -75,6 +75,23 @@ const detail: Term[] = [
   },
 ]
 
+const rules: Term[] = [
+  {
+    name: 'Split by activity',
+    Icon: Lightbulb,
+    what: 'Different things are different activities, even if they look alike.',
+    relation: 'Lectures for each class and homework for each lab are separate activities, so category, goals and history stay accurate.',
+    example: 'Algebra lecture, Physics lecture',
+  },
+  {
+    name: 'Vary by tag',
+    Icon: Hash,
+    what: 'A tag on an occurrence marks how you did it, not what it was.',
+    relation: 'One activity stays one activity; tag the occurrence with a light variant.',
+    example: 'Remote, Office',
+  },
+]
+
 function Group({ title, terms }: { title: string; terms: Term[] }) {
   return (
     <section className="mt-6">
@@ -107,6 +124,7 @@ export function GuidePage() {
 
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
         <div className="mx-auto max-w-2xl">
+          <Group title="Rule of thumb" terms={rules} />
           <Group title="The core" terms={core} />
           <Group title="Ways to organise" terms={organise} />
           <Group title="Inside an occurrence" terms={detail} />
