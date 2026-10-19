@@ -60,6 +60,7 @@ public sealed record ActivityDto(
     List<ActivityWorkTypeDto> WorkTypes,
     int? RepeatAfterDays,
     bool ShowAsOverdue,
+    List<int> Reminders,
     // How many occurrences this activity has in the recent window (see ActivityService.RecentWindowDays).
     // Only the list endpoint fills it; single-activity responses leave it at 0.
     int RecentOccurrenceCount = 0)
@@ -73,11 +74,12 @@ public sealed record ActivityDto(
         a.WorkTypes.Where(w => !w.IsArchived).OrderBy(w => w.CreatedAt).Select(ActivityWorkTypeDto.FromEntity).ToList(),
         a.RepeatAfterDays,
         a.ShowAsOverdue,
+        a.Reminders,
         recentOccurrenceCount);
 }
 
-public sealed record CreateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null, List<Guid>? TagIds = null, bool ShowAsOverdue = true);
-public sealed record UpdateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null, List<Guid>? TagIds = null, bool ShowAsOverdue = true);
+public sealed record CreateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null, List<Guid>? TagIds = null, bool ShowAsOverdue = true, List<int>? Reminders = null);
+public sealed record UpdateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null, List<Guid>? TagIds = null, bool ShowAsOverdue = true, List<int>? Reminders = null);
 
 // Activity subtasks (template)
 public sealed record ActivitySubtaskDto(Guid Id, Guid ActivityId, string Title, DateTimeOffset CreatedAt)
@@ -138,7 +140,8 @@ public sealed record CreateEventRequest(
     bool IsPlanned,
     Guid? DeadlineOccurrenceId = null,
     bool IsNoDate = false,
-    List<Guid>? TagIds = null);
+    List<Guid>? TagIds = null,
+    List<int>? Reminders = null);
 
 public sealed record UpdateEventRequest(
     string Title,
@@ -152,7 +155,8 @@ public sealed record UpdateEventRequest(
     Guid? DeadlineOccurrenceId = null,
     bool ClearDeadline = false,
     bool IsNoDate = false,
-    List<Guid>? TagIds = null);
+    List<Guid>? TagIds = null,
+    List<int>? Reminders = null);
 
 // Occurrences
 public sealed record OccurrenceDto(
@@ -182,7 +186,10 @@ public sealed record OccurrenceDto(
     int LinkedDoneCount = 0,
     int LinkedDoneMinutes = 0,
     bool IsBehind = false,
-    bool IsNoDate = false)
+    bool IsNoDate = false,
+    // The occurrence's own reminders: null inherits the activity's. EffectiveReminders is what fires.
+    List<int>? Reminders = null,
+    List<int>? EffectiveReminders = null)
 {
     public static OccurrenceDto FromEntity(Occurrence o, DayContext ctx, DateTimeOffset nowUtc) => new(
         o.Id, o.UserId, o.ActivityId, o.Title, o.Notes,
@@ -200,7 +207,9 @@ public sealed record OccurrenceDto(
         ActivityDto.FromEntity(o.Activity),
         o.DeadlineOccurrenceId,
         IsBehind: o.Activity.ShowAsOverdue && DayMath.IsBehind(o, ctx, nowUtc),
-        IsNoDate: o.IsNoDate);
+        IsNoDate: o.IsNoDate,
+        Reminders: o.Reminders,
+        EffectiveReminders: ReminderMath.Effective(o));
 
     public static List<TagDto> UnionTags(Occurrence o) =>
         o.Activity.Tags.Concat(o.Tags)
@@ -234,7 +243,8 @@ public sealed record CreateOccurrenceRequest(
     int? WindowDurationMinutes,
     Guid? DeadlineOccurrenceId = null,
     bool IsNoDate = false,
-    List<Guid>? TagIds = null);
+    List<Guid>? TagIds = null,
+    List<int>? Reminders = null);
 
 public sealed record PatchOccurrenceRequest(
     Optional<Guid?> ActivityId = default,
@@ -247,7 +257,10 @@ public sealed record PatchOccurrenceRequest(
     List<OccurrenceSubtaskInput>? Subtasks = null,
     Optional<string?> Notes = default,
     Optional<bool> IsNoDate = default,
-    List<Guid>? TagIds = null);
+    List<Guid>? TagIds = null,
+    Optional<List<int>?> Reminders = default);
+
+public sealed record RegisterPushDeviceRequest(string Token);
 
 public sealed record SetOccurrenceStatusRequest(EventStatus Status);
 public sealed record RepeatOccurrenceRequest(bool IsPlanned = false);

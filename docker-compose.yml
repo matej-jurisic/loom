@@ -11,8 +11,12 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__Default: "Data Source=/data/loom.db"
       Database__MigrateOnStartup: "true"
+      # Reminder push via Firebase Cloud Messaging: path to a mounted service-account JSON.
+      # Blank leaves push off.
+      Fcm__CredentialsPath: ${FCM_CREDENTIALS_PATH:-}
     volumes:
       - loom_data:/data
+      # - ./firebase.json:/run/secrets/firebase.json:ro
     restart: unless-stopped
 
 volumes:

@@ -7,6 +7,12 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: 'https',
   },
+  plugins: {
+    // Android drops a push that arrives while the app is open unless this asks for it to be shown.
+    PushNotifications: {
+      presentationOptions: ['sound', 'alert'],
+    },
+  },
 }
 
 export default config

@@ -25,6 +25,7 @@ Set these in `.env`:
 |---|---|
 | `JWT_SECRET` | **Required.** A random string of at least 32 bytes, e.g. `openssl rand -base64 48`. The app refuses to start without it. Changing it signs everyone out. |
 | `COOKIE_SECURE` | `true` (default) when the app is served over HTTPS. Set `false` only for plain-HTTP local use, otherwise the browser drops the refresh cookie and you are signed out after 15 minutes. |
+| `FCM_CREDENTIALS_PATH` | Optional. Path, inside the container, to a mounted Firebase service-account JSON. Turns on reminder push to the Android app; blank leaves it off. |
 | `BEHIND_PROXY` | `true` when a reverse proxy in front of the app sets `X-Forwarded-For` and `X-Forwarded-Proto`. Leave `false` when the port is exposed directly, because the headers can then be forged. |
 
 The database is a single SQLite file at `/data/loom.db`, on the `loom_data` volume. Migrations are applied
@@ -76,6 +77,7 @@ Standard ASP.NET configuration: environment variables use `__` for `:`.
 | `Auth:RefreshCookie:Secure` | `true` | `Secure` flag on the refresh cookie. |
 | `ConnectionStrings:Default` | `Data Source=loom.db` | SQLite file. |
 | `Database:MigrateOnStartup` | off unless set | Apply EF migrations when the API starts. Docker sets it to `true`. |
+| `Fcm:CredentialsPath` / `Fcm:CredentialsJson` | none | Firebase service-account credential (file or inline JSON) for reminder push. Unset: no push, scheduler idle. |
 | `Cors:Origins` | none | Origins allowed to call the API cross-origin (the Android app and the Vite dev server). |
 | `RateLimit:Auth:PermitLimit` | `10` | Login/register attempts per window, per IP. |
 | `RateLimit:Auth:WindowSeconds` | `60` | Length of that window. |
@@ -85,6 +87,20 @@ Standard ASP.NET configuration: environment variables use `__` for `:`.
 ```bash
 dotnet ef migrations add <Name> --project src/Loom.Core --startup-project src/Loom.Api --output-dir Migrations
 ```
+
+## Push notifications
+
+Reminders reach the Android app through Firebase Cloud Messaging. Both halves are optional; without them
+the app works and nothing is pushed.
+
+1. In the Firebase console, add an Android app with package name `dev.loom.app` and download its
+   `google-services.json` into `client/android/app/` (gitignored; `loom-build.sh` refuses to build without it).
+2. Give the server a service-account key of the same Firebase project: mount it and set
+   `FCM_CREDENTIALS_PATH` (Docker) or `Fcm:CredentialsPath`.
+
+On the homeserver, Loom shares turnly's Firebase project and service-account key (see
+`/opt/homeserver/apps/loom/compose.yml`). The app asks for notification permission after sign-in;
+Settings has a "Send test" button to check the whole path.
 
 ## Data
 

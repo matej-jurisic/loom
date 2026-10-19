@@ -51,8 +51,10 @@ public static class DayMath
     public static DateOnly LocalDate(DateTimeOffset instant, DayContext ctx) =>
         DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(instant, ctx.TimeZone).DateTime);
 
-    public static DateTimeOffset Midnight(DateOnly date, DayContext ctx) =>
-        LocalToInstant(date.ToDateTime(TimeOnly.MinValue), ctx.TimeZone);
+    public static DateTimeOffset Midnight(DateOnly date, DayContext ctx) => AtLocalTime(date, TimeOnly.MinValue, ctx);
+
+    public static DateTimeOffset AtLocalTime(DateOnly date, TimeOnly time, DayContext ctx) =>
+        LocalToInstant(date.ToDateTime(time), ctx.TimeZone);
 
     public static DateTimeOffset AddLocalDays(DateTimeOffset instant, int days, DayContext ctx) =>
         LocalToInstant(TimeZoneInfo.ConvertTime(instant, ctx.TimeZone).DateTime.AddDays(days), ctx.TimeZone);

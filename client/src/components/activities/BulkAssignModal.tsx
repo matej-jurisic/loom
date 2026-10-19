@@ -62,6 +62,7 @@ export function BulkAssignModal({
             tagIds: a.tags.map((t) => t.id),
             repeatAfterDays: a.repeatAfterDays,
             showAsOverdue: a.showAsOverdue,
+            reminders: a.reminders,
           }),
         ),
       ),

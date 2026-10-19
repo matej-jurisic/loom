@@ -87,6 +87,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   `DayBoundaryTime`. Get a `DayContext` via `UserSettingsService.GetDayContextAsync`.
 - `Common/TimeSplitMath.cs` — the only place resolved time-split minutes are computed server-side.
   `client/src/lib/timeSplit.ts` mirrors it; both run `tests/fixtures/time-split-cases.json`, so drift fails a test.
+- `Common/ReminderMath.cs` — reminder anchor and fire times. `Services/NotificationService.cs` sends due
+  reminders (driven by `Loom.Api/ReminderScheduler.cs`) through `Notifications/IPushSender` (`FcmSender`; tests fake it).
 - `Common/Optional.cs` — `Optional<T>` for partial-update requests (absent vs explicit null).
 - `Dtos/Dtos.cs` — request/response records with `FromEntity` static factory. Never leak entities.
 - `Services/*Service.cs` — ctor-inject `LoomDbContext`; return `Result`/`Result<T>`. Registered in `AddLoomCore`.
@@ -107,6 +109,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `lib/types.ts` — mirrors backend DTOs.
 - `lib/invalidate.ts` — the query-invalidation helpers; every mutation goes through them.
 - `lib/repeat.ts` — `addNextOccurrence` (the "do again" call plus Undo toast), and the repeat-days parse/label helpers.
+- `lib/nativePush.ts` — FCM registration and tap routing (native only). A tap lands on `?occurrence=<id>`, which
+  `events/OccurrenceLinkModal.tsx` (mounted in `AppShell`) opens on any page. `lib/reminders.ts` + `components/reminders/ReminderPicker.tsx`.
 - `lib/goals.ts`, `lib/theme.ts`, `lib/useMediaQuery.ts`, `lib/useOnline.ts` — small shared helpers.
 - `store/auth.ts` — Zustand; access token in memory only. `store/toasts.ts` — toast store; `toastError(err)`.
 - `components/ui/` — `Button, Badge, Card, Modal, Field, ConfirmDialog, ActionMenu, Toasts`, plus `input.ts` (`inputCls`).
@@ -142,8 +146,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   row is the one exception: `dueRowRef` in the client.)
 - **`PATCH /api/occurrences/{id}` is a partial update** via `Optional<T>`: an absent field is kept, an
   explicit `null` clears it. Send only what changes (`occurrencesApi.patch`). The activity `PUT` is a
-  full replace: a caller that omits `tagIds` or `repeatAfterDays` clears them. Event-kind edits go
-  through `PUT /{id}/event`, also a full replace.
+  full replace: a caller that omits `tagIds`, `repeatAfterDays` or `reminders` clears them. Event-kind edits go
+  through `PUT /{id}/event`, also a full replace (send `reminders` every time).
 - **Tags on occurrences:** filters, grouping and counts use `effectiveTags`, never `activity.tags`. Any query
   that builds an `ActivityDto` must `.Include(a => a.Tags)`; one that builds an `OccurrenceDto` must
   `.Include(o => o.Tags)` beside the activity's (`WithFullIncludes`).
@@ -186,6 +190,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   (`expandForDrag`) and scroll position is held by `captureAnchor` + the anchor layout effect, captured
   *before* any state is queued. The `.calendar-tray` bottom edge doubles as the grid's 00:00 line when the
   tray shows, so restyle it but don't remove it.
+- ⚠️ **Android drops a push that arrives while the app is open** unless `capacitor.config.ts` keeps
+  `PushNotifications.presentationOptions` with `alert`. Nothing errors; "Send test" from Settings just never shows.
 - **`dotnet ef database update` does not touch the app's database.** `LoomDbContextFactory` points
   design-time tooling at `loom-design.db`; `src/Loom.Api/loom.db` is migrated by the API on startup
   (`Database:MigrateOnStartup`), so restart the API to apply a new migration to dev data. If `dotnet ef`

@@ -14,7 +14,8 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         var err = ValidateOptionalTitle(req.Title)
             ?? ValidateWindowAndStartAt(req.StartAt, req.WindowStart)
             ?? Validators.ValidateDateRange(req.StartAt, req.EndAt)
-            ?? ValidateNoDate(req.IsNoDate, req.StartAt ?? req.WindowStart, req.EndAt, req.IsAllDay, req.IsPlanned);
+            ?? ValidateNoDate(req.IsNoDate, req.StartAt ?? req.WindowStart, req.EndAt, req.IsAllDay, req.IsPlanned)
+            ?? Validators.ValidateReminders(req.Reminders);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
         var activity = await FindActivityAsync(req.ActivityId, userId);
@@ -48,6 +49,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             WindowEnd = req.WindowEnd,
             WindowDurationMinutes = req.WindowDurationMinutes,
             DeadlineOccurrenceId = req.DeadlineOccurrenceId,
+            Reminders = ReminderMath.NormalizeOrNull(req.Reminders),
             Tags = tags.Value!,
         };
 
@@ -144,7 +146,8 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     {
         var err = (req.Title.IsSet ? ValidateOptionalTitle(req.Title.Value) : null)
             ?? (req.Notes.IsSet ? Validators.ValidateNotes(req.Notes.Value) : null)
-            ?? ValidateSubtaskInputs(req.Subtasks);
+            ?? ValidateSubtaskInputs(req.Subtasks)
+            ?? (req.Reminders.IsSet ? Validators.ValidateReminders(req.Reminders.Value) : null);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
         var o = await WithFullIncludes()
@@ -182,6 +185,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
 
         if (req.Title.IsSet) o.Title = string.IsNullOrWhiteSpace(req.Title.Value) ? null : req.Title.Value.Trim();
         if (req.Notes.IsSet) o.Notes = string.IsNullOrWhiteSpace(req.Notes.Value) ? null : req.Notes.Value.Trim();
+        if (req.Reminders.IsSet) o.Reminders = ReminderMath.NormalizeOrNull(req.Reminders.Value);
         o.StartAt = startAt;
         o.EndAt = endAt;
         if (req.IsAllDay.IsSet) o.IsAllDay = req.IsAllDay.Value;
@@ -242,6 +246,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         {
             await db.OccurrenceSubtasks.Where(s => chunk.Contains(s.OccurrenceId)).ExecuteDeleteAsync();
             await db.OccurrenceTimeSplits.Where(t => chunk.Contains(t.OccurrenceId)).ExecuteDeleteAsync();
+            await db.ReminderDeliveries.Where(d => chunk.Contains(d.OccurrenceId)).ExecuteDeleteAsync();
             await db.Occurrences.Where(o => chunk.Contains(o.Id)).ExecuteDeleteAsync();
         }
         await tx.CommitAsync();
@@ -269,7 +274,8 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     {
         var err = Validators.ValidateTitle(req.Title, "Title")
             ?? Validators.ValidateDateRange(req.StartAt, req.EndAt)
-            ?? ValidateNoDate(req.IsNoDate, req.StartAt, req.EndAt, req.IsAllDay, req.IsPlanned);
+            ?? ValidateNoDate(req.IsNoDate, req.StartAt, req.EndAt, req.IsAllDay, req.IsPlanned)
+            ?? Validators.ValidateReminders(req.Reminders);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
         var a = new Activity
@@ -313,6 +319,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             IsPlanned = req.IsPlanned,
             IsNoDate = req.IsNoDate,
             DeadlineOccurrenceId = req.DeadlineOccurrenceId,
+            Reminders = ReminderMath.NormalizeOrNull(req.Reminders),
             Tags = tags.Value!,
         };
         db.Occurrences.Add(o);
@@ -325,7 +332,8 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         var err = Validators.ValidateTitle(req.Title, "Title")
             ?? Validators.ValidateDateRange(req.StartAt, req.EndAt)
             ?? ValidateNoDate(req.IsNoDate, req.StartAt, req.EndAt, req.IsAllDay, req.IsPlanned)
-            ?? ValidateSubtaskInputs(req.Subtasks);
+            ?? ValidateSubtaskInputs(req.Subtasks)
+            ?? Validators.ValidateReminders(req.Reminders);
         if (err is not null) return Result<OccurrenceDto>.Fail(err);
 
         var o = await WithFullIncludes()
@@ -358,6 +366,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         o.IsAllDay = req.IsAllDay;
         o.IsPlanned = req.IsPlanned;
         o.IsNoDate = req.IsNoDate;
+        o.Reminders = ReminderMath.NormalizeOrNull(req.Reminders);
 
         var splitErr = ValidateTimeSplitFits(o);
         if (splitErr is not null) return Result<OccurrenceDto>.Fail(splitErr);
@@ -495,7 +504,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
 
         return await CreateAsync(userId, new CreateOccurrenceRequest(
             source.ActivityId, source.Title, startAt, endAt, isAllDay, isPlanned, null, null, null, deadlineId,
-            TagIds: source.Tags.Select(t => t.Id).ToList()));
+            TagIds: source.Tags.Select(t => t.Id).ToList(), Reminders: source.Reminders));
     }
 
     private static DateOnly AnchorDay(DateTimeOffset at, bool isAllDay, DayContext ctx) =>

@@ -65,6 +65,7 @@ time. Activities are managed at `/activities`.
 | Subtasks | Ordered checklist template, copied onto every new occurrence. |
 | Work types | Labels for the kinds of work a session can be split into. Not copied anywhere. |
 | Repeat after days | Optional, 1 to 365. The gap offered for the next occurrence when one is completed or skipped. Activity kind only. |
+| Reminders | Optional, up to 5 offsets in minutes before an occurrence (0 to 30 days). Inherited by its occurrences; see Reminders. |
 | Show as overdue | Default on. When off, the activity's occurrences are never `isOverdue` or `isBehind`: they stay out of the Daily Plan's Unfinished section and the Overdue group of the occurrence lists; on the Occurrences page a dated pending one before today lands in a neutral Past group instead. |
 
 Deleting an activity cascades to its occurrences. Deleting a category set-nulls the link and deleting
@@ -159,6 +160,7 @@ onto an occurrence, and an occurrence only references the ones it actually used.
 | Subtasks | Per-occurrence checklist with `IsDone`, seeded from the activity's template. |
 | Time split | Optional rows of work type + time, saying where this occurrence's time went. |
 | Deadline | Optional link to a pending event-kind occurrence (`DeadlineOccurrenceId`). Any occurrence may point at one, including another event, so a draft can feed a final. |
+| Reminders | Optional override of the activity's reminders. Null inherits them; a list, even an empty one, replaces them. |
 
 **Deadline link.** A "Lab work" session can point at the "Lab 3 report" event it is working toward.
 It is a plain optional reference, so nothing depends on it being filled in: an unlinked occurrence
@@ -240,6 +242,34 @@ extra step.
 **All-day planned** is the other holding state: a date with no time, for something that belongs to a
 day without belonging to an hour of it.
 
+### Reminders
+
+A reminder is a push notification to the native app, a number of minutes before an occurrence. It
+reminds about something the user already put on the calendar and creates nothing.
+
+- **Where they are set.** The activity carries the list (`reminders`, full set on create and update) and
+  every occurrence of it inherits it. An occurrence may override it with its own list (`reminders` on
+  create, patch and the event endpoints): on patch an absent field keeps the current state, `null`
+  returns to inheriting, a list overrides. The event `PUT` is a full replace, so an omitted list clears
+  it. Events have no activity reminders, so their own list is the only one. The DTO carries
+  `reminders` (the occurrence's own, or null) and `effectiveReminders` (what fires). Lists are stored
+  distinct and ascending; at most 5, each from 0 to 30 days.
+- **The anchor.** A timed occurrence counts back from its start (a deadline-only one from its end), an
+  all-day one from 09:00 on its date in the user's timezone. Planned, floating and no-date occurrences
+  have no anchor and never fire, and neither does anything done or skipped.
+- **Sending** (`NotificationService.SendDueRemindersAsync`, every 30 seconds). A reminder goes out once
+  per fire time (`ReminderDelivery`), when that time has passed by less than 10 minutes and is not before
+  the occurrence was created, so adding something that starts soon does not set off its earlier
+  reminders and a long outage does not release a burst. Moving the occurrence gives it new fire times,
+  which fire again. Several reminders of one occurrence due together send one notification. The title
+  is the effective title, the body the time in the user's timezone ("Today, 10:00 - 11:00", "Tomorrow,
+  due 17:00", or the date alone for all-day), and a tap opens `/plan?occurrence=<id>`, which shows the
+  occurrence's edit dialog on top of the Daily Plan.
+- **Devices.** The native app registers its FCM token after sign-in (`POST /api/notifications/devices`)
+  and drops it on sign-out (`POST /api/notifications/devices/remove`); a token FCM reports as gone is
+  pruned on the next send. Without a Firebase credential on the server nothing is sent and the
+  scheduler stays idle. `POST /api/notifications/test` sends a test notification to the caller's devices.
+
 ### Overdue
 
 An occurrence is overdue when it is pending, not planned, has a start, and:
@@ -280,7 +310,7 @@ there is no series and no backlog to catch up on.
   today. A weekly occurrence due Monday therefore lands on next Monday whether it is done on Monday,
   on Thursday, or three weeks late, and one done ahead of its date lands N days after that date. The
   copy is never on today or in the past.
-- The copy keeps the title, the clock time and length, all-day, the planned flag the occurrence had
+- The copy keeps the title, the reminder override, the clock time and length, all-day, the planned flag the occurrence had
   before it was completed, and the deadline link while its target is still pending. An all-day
   occurrence moves by calendar date. One with no date at all has nothing to step from, so it becomes
   an all-day planned occurrence on today + N. Subtasks come fresh from the activity's template; notes and the time split are not
@@ -629,6 +659,7 @@ averaged over days.
 | Theme | Light / dark / system. Client-side preference in `localStorage`, defaults to system. |
 | Calendar colours | `category` (default) or `goal`, saved on its own when picked. By goal, an occurrence takes its activity's goal colour when its coloured goals agree on one colour; none, or two different ones, falls back to the category colour (`occurrenceColor` in `lib/calendarLayout.ts`). Only the calendar follows it. A PUT without `calendarColorBy` keeps the stored value. |
 | Server URL | Native shells only: where the app points its API calls. |
+| Notifications | Native shells only: sends a test notification to this account's devices. |
 | Export data | Downloads `loom-export-<date>.json`. |
 | Delete history | Confirmed, permanent; the user picks "only the past" (dated before today, by `DayMath`; today, upcoming and undated stay) or "everything" (`DELETE /api/occurrences[?pastOnly=true]`). Deletes occurrences and events; activities, categories, goals and checkpoints are kept, for a fresh start after a break. |
 | Account | Username and sign out. |

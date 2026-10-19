@@ -71,10 +71,11 @@ public class ActivityService(LoomDbContext db)
     public async Task<Result<ActivityDto>> CreateAsync(Guid userId, CreateActivityRequest req)
     {
         var err = Validators.ValidateTitle(req.Title, "Title")
-            ?? Validators.ValidateRepeatAfterDays(req.RepeatAfterDays);
+            ?? Validators.ValidateRepeatAfterDays(req.RepeatAfterDays)
+            ?? Validators.ValidateReminders(req.Reminders);
         if (err is not null) return Result<ActivityDto>.Fail(err);
 
-        var a = new Activity { UserId = userId, Title = req.Title.Trim(), RepeatAfterDays = req.RepeatAfterDays, ShowAsOverdue = req.ShowAsOverdue };
+        var a = new Activity { UserId = userId, Title = req.Title.Trim(), RepeatAfterDays = req.RepeatAfterDays, ShowAsOverdue = req.ShowAsOverdue, Reminders = ReminderMath.Normalize(req.Reminders ?? []) };
 
         if (req.CategoryId.HasValue)
         {
@@ -100,7 +101,8 @@ public class ActivityService(LoomDbContext db)
     public async Task<Result<ActivityDto>> UpdateAsync(Guid id, Guid userId, UpdateActivityRequest req)
     {
         var err = Validators.ValidateTitle(req.Title, "Title")
-            ?? Validators.ValidateRepeatAfterDays(req.RepeatAfterDays);
+            ?? Validators.ValidateRepeatAfterDays(req.RepeatAfterDays)
+            ?? Validators.ValidateReminders(req.Reminders);
         if (err is not null) return Result<ActivityDto>.Fail(err);
 
         var a = await db.Activities
@@ -115,6 +117,7 @@ public class ActivityService(LoomDbContext db)
         a.Title = req.Title.Trim();
         a.RepeatAfterDays = req.RepeatAfterDays;
         a.ShowAsOverdue = req.ShowAsOverdue;
+        a.Reminders = ReminderMath.Normalize(req.Reminders ?? []);
 
         if (req.CategoryId.HasValue)
         {
@@ -145,7 +148,7 @@ public class ActivityService(LoomDbContext db)
     }
 
     /// <summary>
-    /// A new activity with the source's category, goals, tags, repeat gap, subtask template and live
+    /// A new activity with the source's category, goals, tags, repeat gap, reminders, subtask template and live
     /// work types. Occurrences stay with the source: the copy starts with no history.
     /// </summary>
     public async Task<Result<ActivityDto>> DuplicateAsync(Guid id, Guid userId)
@@ -169,6 +172,7 @@ public class ActivityService(LoomDbContext db)
             CategoryId = src.CategoryId,
             Category = src.Category,
             RepeatAfterDays = src.RepeatAfterDays,
+            Reminders = [.. src.Reminders],
             Goals = [.. src.Goals],
             Tags = [.. src.Tags],
             Subtasks = src.Subtasks.OrderBy(s => s.CreatedAt)

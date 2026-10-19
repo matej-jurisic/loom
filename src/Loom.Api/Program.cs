@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Loom.Api;
 using Loom.Api.Auth;
 using Loom.Api.Endpoints;
 using Loom.Core;
@@ -13,6 +14,7 @@ using System.Text.Json.Serialization;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddLoomCore(builder.Configuration);
+builder.Services.AddHostedService<ReminderScheduler>();
 
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));
@@ -132,6 +134,7 @@ app.MapTagEndpoints();
 app.MapOccurrenceListEndpoints();
 app.MapInsightsEndpoints();
 app.MapExportEndpoints();
+app.MapNotificationEndpoints();
 
 app.MapFallbackToFile("index.html");
 

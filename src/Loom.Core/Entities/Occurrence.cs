@@ -21,6 +21,8 @@ public class Occurrence
     public DateTimeOffset? WindowEnd { get; set; }
     public int? WindowDurationMinutes { get; set; }
     public Guid? DeadlineOccurrenceId { get; set; }
+    // Null inherits Activity.Reminders; a list, even an empty one, replaces them for this occurrence.
+    public List<int>? Reminders { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public Activity Activity { get; set; } = null!;

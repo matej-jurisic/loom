@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Loom.Core.Auth;
 using Loom.Core.Data;
+using Loom.Core.Notifications;
 using Loom.Core.Services;
 
 namespace Loom.Core;
@@ -15,6 +16,7 @@ public static class ServiceCollectionExtensions
             options.UseSqlite(config.GetConnectionString("Default") ?? "Data Source=loom.db"));
 
         services.Configure<JwtOptions>(config.GetSection(JwtOptions.SectionName));
+        services.Configure<FcmOptions>(config.GetSection(FcmOptions.SectionName));
 
         services.AddSingleton<TokenService>();
         services.AddScoped<PasswordHasher>();
@@ -31,6 +33,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<OccurrenceListService>();
         services.AddScoped<InsightsService>();
         services.AddScoped<ExportService>();
+        services.AddScoped<NotificationService>();
+        services.AddSingleton<IPushSender, FcmSender>();
 
         return services;
     }

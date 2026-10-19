@@ -3,6 +3,7 @@ import { Sidebar } from './Sidebar'
 import { BottomNav } from './BottomNav'
 import { OfflineBanner } from './OfflineBanner'
 import { Toasts } from '@/components/ui/Toasts'
+import { OccurrenceLinkModal } from '@/components/events/OccurrenceLinkModal'
 
 interface AppShellProps {
   children: ReactNode
@@ -17,6 +18,7 @@ export function AppShell({ children }: AppShellProps) {
         {children}
         <BottomNav />
       </div>
+      <OccurrenceLinkModal />
       <Toasts />
     </div>
   )

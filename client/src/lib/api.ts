@@ -93,10 +93,10 @@ export const activitiesApi = {
     return request<Activity[]>(`/api/activities${q.size ? `?${q}` : ''}`)
   },
 
-  create: (body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds?: string[]; repeatAfterDays?: number | null; showAsOverdue?: boolean }) =>
+  create: (body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds?: string[]; repeatAfterDays?: number | null; showAsOverdue?: boolean; reminders?: number[] }) =>
     request<Activity>('/api/activities', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds: string[]; repeatAfterDays: number | null; showAsOverdue: boolean }) =>
+  update: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds: string[]; repeatAfterDays: number | null; showAsOverdue: boolean; reminders: number[] }) =>
     request<Activity>(`/api/activities/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 
   duplicate: (id: string) => request<Activity>(`/api/activities/${id}/duplicate`, { method: 'POST' }),
@@ -170,10 +170,10 @@ export const occurrencesApi = {
 
   get: (id: string) => request<Occurrence>(`/api/occurrences/${id}`),
 
-  create: (body: { activityId: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; deadlineOccurrenceId?: string | null; tagIds?: string[] }) =>
+  create: (body: { activityId: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; deadlineOccurrenceId?: string | null; tagIds?: string[]; reminders?: number[] | null }) =>
     request<Occurrence>('/api/occurrences', { method: 'POST', body: JSON.stringify(body) }),
 
-  patch: (id: string, body: { activityId?: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; notes?: string | null; tagIds?: string[] }) =>
+  patch: (id: string, body: { activityId?: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; notes?: string | null; tagIds?: string[]; reminders?: number[] | null }) =>
     request<Occurrence>(`/api/occurrences/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   delete: (id: string) => request<void>(`/api/occurrences/${id}`, { method: 'DELETE' }),
@@ -194,10 +194,10 @@ export const occurrencesApi = {
   setTimeSplit: (id: string, rows: TimeSplitInput[]) =>
     request<Occurrence>(`/api/occurrences/${id}/time-split`, { method: 'PUT', body: JSON.stringify({ rows }) }),
 
-  createEvent: (body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; deadlineOccurrenceId?: string | null; tagIds?: string[] }) =>
+  createEvent: (body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; deadlineOccurrenceId?: string | null; tagIds?: string[]; reminders?: number[] | null }) =>
     request<Occurrence>('/api/occurrences/event', { method: 'POST', body: JSON.stringify(body) }),
 
-  updateEvent: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; clearDeadline?: boolean; tagIds?: string[] }) =>
+  updateEvent: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; clearDeadline?: boolean; tagIds?: string[]; reminders?: number[] | null }) =>
     request<Occurrence>(`/api/occurrences/${id}/event`, { method: 'PUT', body: JSON.stringify(body) }),
 }
 
@@ -248,6 +248,16 @@ export const checkpointsApi = {
 
   setStatus: (goalId: string, id: string, status: CheckpointStatus) =>
     request<Checkpoint>(`/api/goals/${goalId}/checkpoints/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+}
+
+export const notificationsApi = {
+  registerDevice: (token: string) =>
+    request<void>('/api/notifications/devices', { method: 'POST', body: JSON.stringify({ token }) }),
+
+  removeDevice: (token: string) =>
+    request<void>('/api/notifications/devices/remove', { method: 'POST', body: JSON.stringify({ token }) }),
+
+  test: () => request<{ sent: number }>('/api/notifications/test', { method: 'POST' }),
 }
 
 export const settingsApi = {

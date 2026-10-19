@@ -11,6 +11,8 @@ public class Activity
     public ActivityKind Kind { get; set; } = ActivityKind.activity;
     public int? RepeatAfterDays { get; set; }
     public bool ShowAsOverdue { get; set; } = true;
+    // Minutes before an occurrence's anchor at which to push a reminder; occurrences inherit it.
+    public List<int> Reminders { get; set; } = [];
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public User User { get; set; } = null!;

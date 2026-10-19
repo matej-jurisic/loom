@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { tryRefresh } from '@/lib/api'
+import { registerNativePush } from '@/lib/nativePush'
 import { useAuthStore } from '@/store/auth'
 import { AppShell } from '@/components/layout/AppShell'
 import { ConnectionLost } from '@/components/ConnectionLost'
@@ -22,6 +23,7 @@ import { GuidePage } from '@/pages/GuidePage'
 function AppRoutes() {
   const { status, setStatus } = useAuthStore()
   const location = useLocation()
+  const navigate = useNavigate()
   const [unreachable, setUnreachable] = useState(false)
   const [attempt, setAttempt] = useState(0)
 
@@ -32,6 +34,11 @@ function AppRoutes() {
       else if (outcome === 'unreachable') setUnreachable(true)
     })
   }, [setStatus, attempt])
+
+  // Native app: once signed in, register for push; a tapped reminder opens its occurrence.
+  useEffect(() => {
+    if (status === 'authenticated') void registerNativePush((url) => navigate(url))
+  }, [status, navigate])
 
   if (status === 'loading' && unreachable) {
     return <ConnectionLost onRetry={() => setAttempt((n) => n + 1)} />

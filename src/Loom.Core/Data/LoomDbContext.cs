@@ -21,6 +21,8 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
     public DbSet<OccurrenceSubtask> OccurrenceSubtasks => Set<OccurrenceSubtask>();
     public DbSet<ActivityWorkType> ActivityWorkTypes => Set<ActivityWorkType>();
     public DbSet<OccurrenceTimeSplit> OccurrenceTimeSplits => Set<OccurrenceTimeSplit>();
+    public DbSet<PushDevice> PushDevices => Set<PushDevice>();
+    public DbSet<ReminderDelivery> ReminderDeliveries => Set<ReminderDelivery>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -167,6 +169,25 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
         modelBuilder.Entity<OccurrenceTimeSplit>()
             .HasIndex(t => new { t.OccurrenceId, t.WorkTypeId })
             .IsUnique();
+
+        modelBuilder.Entity<PushDevice>()
+            .HasOne(d => d.User)
+            .WithMany()
+            .HasForeignKey(d => d.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PushDevice>()
+            .HasIndex(d => d.Token)
+            .IsUnique();
+
+        modelBuilder.Entity<ReminderDelivery>()
+            .HasOne<Occurrence>()
+            .WithMany()
+            .HasForeignKey(d => d.OccurrenceId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ReminderDelivery>()
+            .HasIndex(d => d.OccurrenceId);
     }
 }
 

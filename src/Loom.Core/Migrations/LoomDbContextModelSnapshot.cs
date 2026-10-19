@@ -63,6 +63,10 @@ namespace Loom.Core.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.PrimitiveCollection<string>("Reminders")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("RepeatAfterDays")
                         .HasColumnType("INTEGER");
 
@@ -274,6 +278,9 @@ namespace Loom.Core.Migrations
                     b.Property<string>("Notes")
                         .HasColumnType("TEXT");
 
+                    b.PrimitiveCollection<string>("Reminders")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset?>("StartAt")
                         .HasColumnType("TEXT");
 
@@ -406,6 +413,32 @@ namespace Loom.Core.Migrations
                     b.ToTable("OccurrenceTimeSplits");
                 });
 
+            modelBuilder.Entity("Loom.Core.Entities.PushDevice", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Token")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("PushDevices");
+                });
+
             modelBuilder.Entity("Loom.Core.Entities.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -436,6 +469,28 @@ namespace Loom.Core.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("RefreshTokens");
+                });
+
+            modelBuilder.Entity("Loom.Core.Entities.ReminderDelivery", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("FireAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("OccurrenceId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OccurrenceId");
+
+                    b.ToTable("ReminderDeliveries");
                 });
 
             modelBuilder.Entity("Loom.Core.Entities.Tag", b =>
@@ -674,6 +729,17 @@ namespace Loom.Core.Migrations
                     b.Navigation("WorkType");
                 });
 
+            modelBuilder.Entity("Loom.Core.Entities.PushDevice", b =>
+                {
+                    b.HasOne("Loom.Core.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Loom.Core.Entities.RefreshToken", b =>
                 {
                     b.HasOne("Loom.Core.Entities.User", "User")
@@ -683,6 +749,15 @@ namespace Loom.Core.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Loom.Core.Entities.ReminderDelivery", b =>
+                {
+                    b.HasOne("Loom.Core.Entities.Occurrence", null)
+                        .WithMany()
+                        .HasForeignKey("OccurrenceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Loom.Core.Entities.Tag", b =>

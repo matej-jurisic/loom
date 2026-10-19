@@ -91,6 +91,10 @@ A 240px sidebar (`w-60`, sticky, white, 1px right border) beside a fluid white c
 - **Repeat ("do again"):** the activity dialog has "Do again after (optional)", a `w-20` numeric input with a `days` suffix and placeholder `Off`
   (invalid turns the border destructive with an error below), and a "Show as overdue" checkbox. The detail modal footer has an "Again <date>"
   checkbox left of Done, ticked every time it opens. Activity rows show a `Repeat` icon and "again after 7 days".
+- **Reminders:** the same `rounded-full` toggle chips as tags, one per preset offset (On time, 5 min ... 1 week; a stored non-preset
+  offset gets its own chip), unselected ones dimmed once 5 are picked. "Reminders (optional)" in the activity dialog after "Do again after",
+  and in the occurrence dialog after Tags, showing the activity's set until one is toggled; a muted "Use activity's" link on the right of
+  the label returns to it. Hidden for planned, floating and no-date occurrences.
 - **Time split** (bottom of the detail modal): work-type chips (selected `bg-primary`, unselected `bg-muted`, dashed `+ Work type` to create);
   a `h-3` bar with one segment per row in shades of one colour (the category's, else primary), with draggable edge handles from `sm:`
   (15-minute steps, 5 under an hour) that pin both neighbours; rows of shade dot, title and a `tabular-nums` time field accepting `90`,

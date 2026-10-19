@@ -13,6 +13,7 @@ KEYDIR="$HOME/.loom"
 KEYSTORE="$KEYDIR/loom-release.jks"
 PASSFILE="$KEYDIR/keystore.pass"
 GRADLE="$REPO/client/android/app/build.gradle"
+SERVICES="$REPO/client/android/app/google-services.json"
 IMAGE=loom-android-builder
 
 do_apk=1; do_web=1
@@ -24,6 +25,8 @@ case "${1:-}" in
 esac
 
 if (( do_apk )); then
+  # Without it Gradle still builds, but the APK silently ships with push notifications disabled.
+  [[ -f $SERVICES ]] || { echo "Missing $SERVICES (Firebase console, Android app dev.loom.app)" >&2; exit 1; }
   mkdir -p "$KEYDIR" "$RELEASES" "$HOME/.cache/loom-android"
   chmod 700 "$KEYDIR"
 

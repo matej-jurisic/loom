@@ -159,6 +159,8 @@ export interface Activity {
   workTypes: ActivityWorkType[]
   repeatAfterDays: number | null
   showAsOverdue: boolean
+  /** Minutes before an occurrence's start (09:00 for date-only) at which to push a reminder. */
+  reminders: number[]
   /** Occurrences in the last year. Only the list endpoint fills it; single-activity responses send 0. */
   recentOccurrenceCount: number
 }
@@ -188,6 +190,9 @@ export interface Occurrence {
   deadline: DeadlineRef | null
   linkedDoneCount: number
   linkedDoneMinutes: number
+  /** The occurrence's own reminders; null inherits the activity's. */
+  reminders: number[] | null
+  effectiveReminders: number[]
 }
 
 export interface DeadlineRef {

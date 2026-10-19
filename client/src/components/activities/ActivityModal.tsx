@@ -8,6 +8,7 @@ import { Modal } from '@/components/ui/Modal'
 import { WorkTypesSection } from '@/components/activities/WorkTypesSection'
 import { GoalPicker } from '@/components/goals/GoalPicker'
 import { TagPicker } from '@/components/tags/TagPicker'
+import { ReminderPicker } from '@/components/reminders/ReminderPicker'
 import { pickableGoals } from '@/lib/goals'
 import { invalidateActivities, invalidateOccurrences } from '@/lib/invalidate'
 import { toastError } from '@/store/toasts'
@@ -33,6 +34,7 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
   const [repeatDays, setRepeatDays] = useState(activity?.repeatAfterDays?.toString() ?? '')
   const [repeatError, setRepeatError] = useState('')
   const [showAsOverdue, setShowAsOverdue] = useState(activity?.showAsOverdue ?? true)
+  const [reminders, setReminders] = useState(activity?.reminders ?? [])
   const [subtasks, setSubtasks] = useState(activity?.subtasks ?? [])
   const [newSubtask, setNewSubtask] = useState('')
   const newSubtaskRef = useRef<HTMLInputElement>(null)
@@ -46,6 +48,7 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
         categoryId: categoryId || null,
         repeatAfterDays: parseRepeatAfterDays(repeatDays) ?? null,
         showAsOverdue,
+        reminders,
       }
       return isEdit ? activitiesApi.update(activity!.id, body) : activitiesApi.create(body)
     },
@@ -179,6 +182,13 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
           <span className="text-sm text-muted-foreground">days</span>
         </div>
         {repeatError && <p className="text-xs text-destructive">{repeatError}</p>}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <span className="text-sm font-medium text-foreground">
+          Reminders <span className="font-normal text-muted-foreground">(optional)</span>
+        </span>
+        <ReminderPicker value={reminders} onChange={setReminders} />
       </div>
 
       <label className="flex items-start gap-2.5 text-sm text-foreground">

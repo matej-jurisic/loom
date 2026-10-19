@@ -12,6 +12,7 @@ import type { Activity, ActivityKind, Occurrence } from '@/lib/types'
 import { invalidateOccurrences } from '@/lib/invalidate'
 import { GoalPicker } from '@/components/goals/GoalPicker'
 import { TagPicker } from '@/components/tags/TagPicker'
+import { ReminderPicker } from '@/components/reminders/ReminderPicker'
 import { pickableGoals } from '@/lib/goals'
 
 // Draft subtask row: id present = existing subtask, absent = added in this edit session.
@@ -169,6 +170,8 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     () => (occurrence?.subtasks ?? []).map((s) => ({ id: s.id, title: s.title })),
   )
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('')
+  // null inherits the activity's reminders; a list (even empty) overrides them for this occurrence.
+  const [reminders, setReminders] = useState<number[] | null>(() => source?.reminders ?? null)
 
   useEffect(() => {
     if (open) {
@@ -257,6 +260,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
           goalIds: form.goalIds,
           ...schedulePayload,
           ...linkPayload,
+          reminders,
         }
         return isEdit
           ? occurrencesApi.updateEvent(occurrence!.id, eventPayload)
@@ -267,7 +271,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
         activityId: form.activityId,
         title: form.title.trim() || null,
         ...schedulePayload,
-        ...(scheduleOnly ? {} : { deadlineOccurrenceId: form.deadlineId || null, tagIds: form.tagIds }),
+        ...(scheduleOnly ? {} : { deadlineOccurrenceId: form.deadlineId || null, tagIds: form.tagIds, reminders }),
       }
       return isEdit
         ? occurrencesApi.patch(occurrence!.id, occurrencePayload)
@@ -351,6 +355,10 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   const selectedActivity = activities.find((a) => a.id === form.activityId) ?? defaultActivity ?? duplicateFrom?.activity ?? null
 
   const inheritedTags = (selectedActivity?.tags ?? []).filter((t) => !form.tagIds.includes(t.id))
+
+  const effectiveReminders = reminders ?? (kind === 'activity' ? selectedActivity?.reminders ?? [] : [])
+  // Planned, floating and no-date occurrences have no time to remind about.
+  const canRemind = !isUndated(timeMode) && !isPlanned
 
   // Most-used first (occurrences in the last year, from the server), so the activities the user
   // keeps logging are at the top of the picker. Never-used ones fall to the tail, alphabetically.
@@ -739,6 +747,26 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
               Also from the activity: {inheritedTags.map((t) => t.name).join(', ')}
             </p>
           )}
+        </div>
+      )}
+
+      {!scheduleOnly && canRemind && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-foreground">
+              Reminders <span className="font-normal text-muted-foreground">(optional)</span>
+            </span>
+            {kind === 'activity' && reminders !== null && (
+              <button
+                type="button"
+                onClick={() => setReminders(null)}
+                className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Use activity's
+              </button>
+            )}
+          </div>
+          <ReminderPicker value={effectiveReminders} onChange={setReminders} />
         </div>
       )}
 

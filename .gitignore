@@ -26,3 +26,6 @@ appsettings.Development.json
 /release/
 *.apk
 *.aab
+
+# Firebase client config for the Android app (download from the Firebase console)
+client/android/app/google-services.json

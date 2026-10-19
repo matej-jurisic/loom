@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Download, LogOut, Monitor, Moon, Sun, Trash2 } from 'lucide-react'
+import { Bell, Download, LogOut, Monitor, Moon, Sun, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { SettingSection, SettingRow, SectionFooter, inputCls } from '@/components/settings/SettingSection'
-import { settingsApi, authApi, exportApi, occurrencesApi, ApiError } from '@/lib/api'
+import { settingsApi, authApi, exportApi, occurrencesApi, notificationsApi, ApiError } from '@/lib/api'
+import { unregisterNativePush } from '@/lib/nativePush'
 import { toastError } from '@/store/toasts'
 import { useAuthStore } from '@/store/auth'
 import { getThemePref, setThemePref, type ThemePref } from '@/lib/theme'
@@ -86,8 +87,16 @@ export function SettingsPage() {
   })
 
   async function handleLogout() {
-    try { await authApi.logout() } finally { clear() }
+    try {
+      await unregisterNativePush()
+      await authApi.logout()
+    } finally { clear() }
   }
+
+  const testPushMutation = useMutation({
+    mutationFn: notificationsApi.test,
+    onError: (err) => toastError(err),
+  })
 
   const [exporting, setExporting] = useState(false)
   const [confirmClear, setConfirmClear] = useState(false)
@@ -237,6 +246,12 @@ export function SettingsPage() {
                       onChange={(e) => { setServerUrlSaved(false); setServerUrlState(e.target.value) }}
                       className={`${inputCls} w-52`}
                     />
+                  </SettingRow>
+                  <SettingRow label="Notifications">
+                    <Button variant="outline" size="sm" onClick={() => testPushMutation.mutate()} loading={testPushMutation.isPending}>
+                      <Bell className="mr-1.5 h-3.5 w-3.5" strokeWidth={2} />
+                      Send test
+                    </Button>
                   </SettingRow>
                   <SectionFooter
                     status={serverUrlSaved ? 'Saved.' : undefined}

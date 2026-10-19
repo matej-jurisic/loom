@@ -25,6 +25,16 @@ public static class Validators
             ? new Error(ErrorType.Validation, $"Repeat interval must be between 1 and {MaxRepeatAfterDays} days.")
             : null;
 
+    public static Error? ValidateReminders(List<int>? minutes)
+    {
+        if (minutes is null) return null;
+        if (minutes.Distinct().Count() > ReminderMath.MaxReminders)
+            return new Error(ErrorType.Validation, $"An occurrence can have at most {ReminderMath.MaxReminders} reminders.");
+        return minutes.Any(m => m is < 0 or > ReminderMath.MaxOffsetMinutes)
+            ? new Error(ErrorType.Validation, "A reminder must be between 0 minutes and 30 days before.")
+            : null;
+    }
+
     public static Error? ValidateColor(string? color)
     {
         if (string.IsNullOrWhiteSpace(color))
