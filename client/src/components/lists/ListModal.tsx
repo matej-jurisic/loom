@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { ListFilter, Search } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
-import { ColorPicker, IconPicker } from '@/components/categories/CategoryModal'
 import { OccurrenceFilterFields } from '@/components/events/OccurrenceFilterFields'
 import { ApiError, listsApi } from '@/lib/api'
 import { invalidateLists } from '@/lib/invalidate'
@@ -32,8 +31,6 @@ interface ListModalProps {
 export function ListModal({ open, onClose, list, initial, onSaved }: ListModalProps) {
   const qc = useQueryClient()
   const [name, setName] = useState('')
-  const [icon, setIcon] = useState<string | null>(null)
-  const [color, setColor] = useState<string | null>(null)
   const [view, setView] = useState<OccurrenceView>(EMPTY_VIEW)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -41,8 +38,6 @@ export function ListModal({ open, onClose, list, initial, onSaved }: ListModalPr
   useEffect(() => {
     if (!open) return
     setName(list?.name ?? '')
-    setIcon(list?.icon ?? null)
-    setColor(list?.color ?? null)
     setView(list ? viewFromList(list) : (initial ?? EMPTY_VIEW))
     setError('')
     // Reinitialise only when the modal opens; `initial` is rebuilt on every page render.
@@ -53,7 +48,7 @@ export function ListModal({ open, onClose, list, initial, onSaved }: ListModalPr
     if (!name.trim()) { setError('Name is required.'); return }
     setSaving(true)
     try {
-      const body = listBody({ name, icon, color }, view)
+      const body = listBody(name, view)
       const saved = list ? await listsApi.update(list.id, body) : await listsApi.create(body)
       invalidateLists(qc)
       onClose()
@@ -110,16 +105,6 @@ export function ListModal({ open, onClose, list, initial, onSaved }: ListModalPr
               />
             </div>
           </div>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-foreground">Color</label>
-          <ColorPicker value={color} onChange={setColor} onClear={() => setColor(null)} />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label className="text-sm font-medium text-foreground">Icon</label>
-          <IconPicker value={icon} color={color ?? 'var(--color-primary)'} onChange={setIcon} noneIcon={ListFilter} />
         </div>
       </div>
     </Modal>

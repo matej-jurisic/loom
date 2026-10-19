@@ -331,7 +331,13 @@ A sustained intention with measurable progress.
 | Description | Optional |
 | Notes | Optional free text; edited in the goal dialog, shown on the expanded card |
 | Status | `focus`, `active`, `bench`, `closed` |
+| Kind | `goal` (default) or `track` |
+| End date | Optional day. Display only, see below |
+| Color | Optional 6-digit hex, validated like a category's |
+| Icon | Optional name from the category icon set |
 | Checkpoints | Unordered list of milestones |
+
+The goal PUT is a full replace: kind, end date, colour and icon reset when omitted.
 
 ### Status
 
@@ -340,9 +346,28 @@ A sustained intention with measurable progress.
 - **Bench** — deprioritised. Its activities are hidden from the calendar's float row.
 - **Closed** — archived. Shown dimmed in a Closed section.
 
+### Tracks
+
+A **track** groups activities that belong together without being an outcome: a college course, an
+ongoing area. It differs from a goal in three ways and is otherwise the same (heatmap, history,
+checkpoints, the Occurrences goal filter and grouping):
+- **Only `active` or `closed`.** Setting focus or bench on a track is a 400; turning a focus or bench
+  goal into a track moves it to active. Since staleness only applies to Focus, a track is never stale,
+  so a semester break does not read as neglect.
+- **Its own section** on the Goals page, after the goal tiers and before Closed (a closed track is in Closed).
+- **Not goal work.** The Plan page's Goal activity strip only counts activities linked to at least
+  one `goal`-kind goal; an activity linked only to tracks stays off it.
+
+### End date
+
+`GoalDto.DaysUntilEnd` is the end date minus today by `DayMath` (0 on the last day, negative once
+past), so the card reads "ends in 12 days" / "ends tomorrow" / "ends today" / "ended". Past its end a
+goal sorts last within its status and is never stale. **Passing the end date never closes the goal**:
+the state changes only when the user closes it, from the card menu as always.
+
 The number of simultaneous Focus goals is a user setting and a **hard boundary**: promoting a goal
 past the limit returns 409 with a message naming it. Goals are listed grouped Focus → Active → Bench
-→ Closed, most recently active first within a group (latest completion across its activities; goals with none fall back to creation order, after the active ones). Deleting a goal removes its checkpoints and its links to
+→ Closed (tracks between Bench and Closed), goals past their end date last within a group, otherwise most recently active first (latest completion across its activities; goals with none fall back to creation order, after the active ones). Deleting a goal removes its checkpoints and its links to
 activities; the activities stay, with whatever other goals they have.
 
 ### Checkpoints
@@ -376,7 +401,7 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
   `daysSinceLastOccurrence`, the whole days between that completion's day and today in the user's
   timezone and day boundary (`DayMath`, so a session at 23:00 yesterday is "yesterday" at 08:00).
   Rendered as "active today" / "active 3d ago" / "2w since last"; null reads "no activity yet".
-  A Focus goal whose last completion is 14 or more days back shows its recency in emphasised text,
+  A Focus goal whose last completion is 14 or more days back (and whose end date has not passed) shows its recency in emphasised text,
   a quiet hint rather than an alert. It is derived only from what was logged.
 
 ---
@@ -394,7 +419,7 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 | `/occurrences/lists/{id}` | The same list view, starting from one saved List's filters and grouping. |
 | `/categories` | Category management: add, rename, recolour, delete. |
 | `/tags` | Tag management: add, rename, delete. |
-| `/goals` | Goal list grouped by status. Focus goals are always expanded and their section shows slots used (`2/3`); Active, Bench and Closed goals are one-line rows that a chevron expands to checkpoints, notes and heatmap (Closed has no heatmap). Tapping a goal opens its History; the menu edits, adds a checkpoint, changes status or deletes. |
+| `/goals` | Goal list grouped by status, with tracks in their own section before Closed. Focus goals are always expanded and their section shows slots used (`2/3`); Active, Bench and Closed goals are one-line rows that a chevron expands to checkpoints, notes and heatmap (Closed has no heatmap). Tapping a goal opens its History; the menu edits, adds a checkpoint, changes status or deletes. |
 | `/activities` | Activity list; clicking a title edits, the row menu opens History. |
 | `/insights` | Totals over what was logged. |
 | `/settings` | Preferences, data export, sign out. |
@@ -444,8 +469,8 @@ the goal sections, which are standing context rather than something to clear bef
 - **Focus goals** — one chip per focus goal: title, last-session recency, its checkpoint
   percentage when it has checkpoints, and its occurrence bar when it has linked occurrences.
 - **Goal activity** — a heatmap below the focus chips, same shape and shading as a goal's
-  own grid, but summed across every occurrence on an activity linked to *any* goal, regardless of
-  that goal's status, each occurrence counted once however many goals its activity has: "did I work toward something today", not one goal's own record. Only
+  own grid, but summed across every occurrence on an activity linked to *any* goal of kind `goal`, regardless of
+  that goal's status (tracks don't count), each occurrence counted once however many goals its activity has: "did I work toward something today", not one goal's own record. Only
   completed occurrences count here - a skipped one isn't progress, so it puts no day on this grid
   even though it would on a single goal's own heatmap. Hidden when nothing has ever been logged
   toward a goal.
@@ -532,7 +557,9 @@ Sections collapse and carry counts.
 The toolbar is the search box and a "Filters" button (with a count of the active filters) at every
 width; the status, category, tag and goal filters and the grouping open beneath it on tap.
 
-**Lists** are saved filter presets: a name, an optional icon (from the category icon set), an optional colour (6-digit hex, validated like a category's) plus status, category, tag, goal, search text and grouping.
+**Lists** are saved filter presets: a name plus status, category, tag, goal, search text and grouping.
+A list has no icon or colour of its own: it shows its goal filter's (when that goal has either), else its
+category filter's, else a plain default; "none" and deleted targets lend nothing.
 They hold no occurrences and create none; opening one runs its filters over the same full list.
 `/occurrences` shows them first (each with its filters summarised and a count of what matches now),
 then "All occurrences". Inside a list the filters stay editable; once they differ from what is saved,
@@ -554,13 +581,18 @@ One flat list: title search and a grouping toggle over **Goal / Category / Tag /
 `localStorage`). Sections collapse and carry counts; rows sort by title within a section. Grouped by
 goal, an activity with several goals is listed under each of them, and its row still shows the other
 goals. Grouped by tag works the same way, with a "No tag" section last. Search also matches tag names.
+`?category=<id>` and `?tag=<id>` narrow the list (the Categories and Tags pages link here with
+"View activities"); each shows as a chip in the toolbar that clears it.
 Tags are created from the Tags field of the activity dialog, the Tags field of the occurrence dialog,
 or on the Tags page, which also renames and deletes them and shows, per tag, how many activities
 carry it and how many occurrences it reaches (the activity's tags and its own).
 
 Each row leads with a tile in its **category's colour and icon** - the same colour that draws its
 occurrences everywhere else - then title and a meta line dropping whatever the section header already
-says, then an action menu (history, edit, delete). **Multi-select mode** turns the tiles into
+says, then an action menu (history, edit, duplicate, delete). **Duplicate** (`POST
+/api/activities/{id}/duplicate`) creates "<title> (copy)" with the same category, goals, tags, repeat
+gap, subtask template and non-archived work types, but no occurrences, and opens it in the edit
+dialog. **Multi-select mode** turns the tiles into
 checkboxes and the row actions into a bottom bar: assign, delete, with per-section select-all. Bulk
 assign changes goals and category across the selection (tags are carried through untouched), each defaulting to "keep current". Goals can
 be added to, removed from, or replaced on every selected activity; it fans
@@ -601,6 +633,7 @@ averaged over days.
 | Day start | The time the day rolls over. |
 | Max focus goals | Hard limit on simultaneous Focus goals, 1-20. |
 | Theme | Light / dark / system. Client-side preference in `localStorage`, defaults to system. |
+| Calendar colours | `category` (default) or `goal`, saved on its own when picked. By goal, an occurrence takes its activity's goal colour when its coloured goals agree on one colour; none, or two different ones, falls back to the category colour (`occurrenceColor` in `lib/calendarLayout.ts`). Only the calendar follows it. A PUT without `calendarColorBy` keeps the stored value. |
 | Server URL | Native shells only: where the app points its API calls. |
 | Export data | Downloads `loom-export-<date>.json`. |
 | Delete history | Confirmed, permanent; the user picks "only the past" (dated before today, by `DayMath`; today, upcoming and undated stay) or "everything" (`DELETE /api/occurrences[?pastOnly=true]`). Deletes occurrences and events; activities, categories, goals and checkpoints are kept, for a fresh start after a break. |

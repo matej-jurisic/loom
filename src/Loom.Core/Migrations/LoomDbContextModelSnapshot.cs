@@ -204,10 +204,23 @@ namespace Loom.Core.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("Color")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Description")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("EndDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Icon")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Notes")
@@ -303,9 +316,6 @@ namespace Loom.Core.Migrations
                     b.Property<string>("Category")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Color")
-                        .HasColumnType("TEXT");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -313,9 +323,6 @@ namespace Loom.Core.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("GroupBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Icon")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Name")
@@ -483,6 +490,10 @@ namespace Loom.Core.Migrations
             modelBuilder.Entity("Loom.Core.Entities.UserSettings", b =>
                 {
                     b.Property<Guid>("UserId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CalendarColorBy")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("DayBoundaryTime")

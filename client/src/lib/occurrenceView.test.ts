@@ -9,6 +9,7 @@ import {
   groupOccurrences,
   isNarrowed,
   listBody,
+  listLook,
   sameView,
   viewFromList,
   type OccurrenceFilters,
@@ -209,17 +210,17 @@ describe('lists', () => {
   const view: OccurrenceView = { status: 'open', category: null, tag: 't1', goal: null, search: ' milk ', group: 'when' }
 
   it('round-trips a view through the saved list shape', () => {
-    const body = listBody({ name: '  Errands ', icon: 'ShoppingCart', color: '#3b82f6' }, view)
-    expect(body).toEqual({ name: 'Errands', icon: 'ShoppingCart', color: '#3b82f6', status: 'open', category: null, tag: 't1', goal: null, search: 'milk', groupBy: 'when' })
+    const body = listBody('  Errands ', view)
+    expect(body).toEqual({ name: 'Errands', status: 'open', category: null, tag: 't1', goal: null, search: 'milk', groupBy: 'when' })
     const back = viewFromList({ id: 'l1', ...body })
     expect(sameView(back, view)).toBe(true)
   })
 
   it('defaults a list without grouping to when and treats an empty search as none', () => {
-    const v = viewFromList({ id: 'l1', name: 'x', icon: null, color: null, status: 'done', category: null, tag: null, goal: null, search: null, groupBy: null })
+    const v = viewFromList({ id: 'l1', name: 'x', status: 'done', category: null, tag: null, goal: null, search: null, groupBy: null })
     expect(v.group).toBe('when')
     expect(v.search).toBe('')
-    expect(listBody({ name: 'x', icon: null, color: null }, { ...v, search: '   ' }).search).toBeNull()
+    expect(listBody('x', { ...v, search: '   ' }).search).toBeNull()
   })
 
   it('sees a grouping change as a difference but not as narrowing', () => {
@@ -229,5 +230,17 @@ describe('lists', () => {
     expect(isNarrowed(plain)).toBe(false)
     expect(isNarrowed({ ...plain, group: 'tag' })).toBe(false)
     expect(isNarrowed({ ...plain, category: 'none' })).toBe(true)
+  })
+
+  it('borrows its look from the goal, then the category, else none', () => {
+    const goals = [
+      { id: 'g1', icon: 'Flag', color: '#ff0000' },
+      { id: 'g2', icon: null, color: null },
+    ]
+    const categories = [{ id: 'c1', icon: 'Leaf', color: '#00ff00' }]
+    expect(listLook({ goal: 'g1', category: 'c1' }, goals, categories)).toEqual({ icon: 'Flag', color: '#ff0000' })
+    expect(listLook({ goal: 'g2', category: 'c1' }, goals, categories)).toEqual({ icon: 'Leaf', color: '#00ff00' })
+    expect(listLook({ goal: 'gone', category: null }, goals, categories)).toBeNull()
+    expect(listLook({ goal: 'none', category: 'none' }, goals, categories)).toBeNull()
   })
 })

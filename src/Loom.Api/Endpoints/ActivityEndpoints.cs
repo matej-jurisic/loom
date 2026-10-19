@@ -45,6 +45,16 @@ public static class ActivityEndpoints
             return result.IsSuccess ? Results.Ok(result.Value) : result.Error!.ToProblem();
         });
 
+        group.MapPost("/{id:guid}/duplicate", async (Guid id, ClaimsPrincipal principal, ActivityService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.DuplicateAsync(id, userId.Value);
+            return result.IsSuccess
+                ? Results.Created($"/api/activities/{result.Value!.Id}", result.Value)
+                : result.Error!.ToProblem();
+        });
+
         group.MapDelete("/{id:guid}", async (Guid id, ClaimsPrincipal principal, ActivityService svc) =>
         {
             var userId = principal.GetUserId();

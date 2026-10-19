@@ -1,4 +1,4 @@
-import type { Occurrence, OccurrenceList, SaveOccurrenceListBody } from './types'
+import type { Category, Goal, Occurrence, OccurrenceList, SaveOccurrenceListBody } from './types'
 
 export type WhenBucket = 'overdue' | 'today' | 'planned' | 'upcoming' | 'floating' | 'nodate' | 'done'
 
@@ -61,14 +61,9 @@ export function viewFromList(l: OccurrenceList): OccurrenceView {
   }
 }
 
-export function listBody(
-  meta: Pick<OccurrenceList, 'name' | 'icon' | 'color'>,
-  v: OccurrenceView,
-): SaveOccurrenceListBody {
+export function listBody(name: string, v: OccurrenceView): SaveOccurrenceListBody {
   return {
-    name: meta.name.trim(),
-    icon: meta.icon,
-    color: meta.color,
+    name: name.trim(),
     status: v.status,
     category: v.category,
     tag: v.tag,
@@ -76,6 +71,23 @@ export function listBody(
     search: v.search.trim() || null,
     groupBy: v.group,
   }
+}
+
+/**
+ * A list has no look of its own: it borrows its goal filter's icon and colour (when that goal has
+ * either), else its category filter's, else null for the plain default tile. "none" and deleted
+ * targets borrow nothing.
+ */
+export function listLook(
+  l: Pick<OccurrenceList, 'goal' | 'category'>,
+  goals: Pick<Goal, 'id' | 'icon' | 'color'>[],
+  categories: Pick<Category, 'id' | 'icon' | 'color'>[],
+): { icon: string | null; color: string | null } | null {
+  const goal = goals.find((g) => g.id === l.goal)
+  if (goal && (goal.icon || goal.color)) return { icon: goal.icon, color: goal.color }
+  const category = categories.find((c) => c.id === l.category)
+  if (category) return { icon: category.icon, color: category.color }
+  return null
 }
 
 /** True when the filters narrow anything compared with the page's default (open, no other filter). */

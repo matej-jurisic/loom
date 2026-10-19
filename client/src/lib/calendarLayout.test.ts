@@ -9,6 +9,7 @@ import {
   isDueOccurrence,
   isEODDue,
   layoutDay,
+  occurrenceColor,
   occursOnDay,
   packColumns,
   snapToGrid,
@@ -185,5 +186,36 @@ describe('occursOnDay', () => {
 
   it('hides occurrences without a start', () => {
     expect(occursOnDay(occ('a', null, at(10)), start, end)).toBe(false)
+  })
+})
+
+describe('occurrenceColor', () => {
+  const category = { id: 'c', name: 'College', color: '#111111', icon: null }
+  const goal = (id: string, color: string | null) => ({ id, title: id, status: 'active' as const, kind: 'track' as const, color, icon: null })
+  const withGoals = (goals: ReturnType<typeof goal>[], cat: typeof category | null = category) =>
+    ({ activity: { category: cat, goals } }) as unknown as Occurrence
+
+  it('uses the category when colouring by category', () => {
+    expect(occurrenceColor(withGoals([goal('a', '#aaaaaa')]), 'category')).toBe('#111111')
+  })
+
+  it('uses the one goal colour when colouring by goal', () => {
+    expect(occurrenceColor(withGoals([goal('a', '#aaaaaa'), goal('b', null)]), 'goal')).toBe('#aaaaaa')
+  })
+
+  it('treats goals sharing a colour as one', () => {
+    expect(occurrenceColor(withGoals([goal('a', '#aaaaaa'), goal('b', '#aaaaaa')]), 'goal')).toBe('#aaaaaa')
+  })
+
+  it('falls back to the category when goal colours disagree', () => {
+    expect(occurrenceColor(withGoals([goal('a', '#aaaaaa'), goal('b', '#bbbbbb')]), 'goal')).toBe('#111111')
+  })
+
+  it('falls back to the category when no goal has a colour', () => {
+    expect(occurrenceColor(withGoals([goal('a', null)]), 'goal')).toBe('#111111')
+  })
+
+  it('is null with neither a goal colour nor a category', () => {
+    expect(occurrenceColor(withGoals([], null), 'goal')).toBeNull()
   })
 })

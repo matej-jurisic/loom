@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Pencil, Trash2, Check, History, ChevronDown, ListChecks } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { goalsApi, checkpointsApi, settingsApi, ApiError } from '@/lib/api'
-import { recencyLabel, isStale } from '@/lib/goals'
+import { recencyLabel, isStale, endLabel } from '@/lib/goals'
 import { useMediaQuery } from '@/lib/useMediaQuery'
 import { toastError } from '@/store/toasts'
 import type { Goal, GoalStatus, Checkpoint, CheckpointSize } from '@/lib/types'
@@ -12,13 +12,21 @@ import { GoalModal } from '@/components/goals/GoalModal'
 import { CheckpointModal } from '@/components/goals/CheckpointModal'
 import { GoalActivitiesModal } from '@/components/goals/GoalActivitiesModal'
 import { GoalHistoryModal } from '@/components/goals/GoalHistoryModal'
+import { GoalTile } from '@/components/goals/GoalIcon'
 import { ActionMenu, type ActionMenuEntry } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { invalidateGoals } from '@/lib/invalidate'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
-const STATUS_ORDER: GoalStatus[] = ['focus', 'active', 'bench', 'closed']
+// Page sections in order: goals by tier, then open tracks, then everything closed.
+type Section = 'focus' | 'active' | 'bench' | 'tracks' | 'closed'
+const SECTION_ORDER: Section[] = ['focus', 'active', 'bench', 'tracks', 'closed']
+
+function sectionOf(g: Goal): Section {
+  if (g.status === 'closed') return 'closed'
+  return g.kind === 'track' ? 'tracks' : g.status
+}
 
 type Tier = 'focus' | 'active' | 'bench'
 const TIER_META: Record<Tier, { label: string; dot: string; varName: string }> = {
@@ -34,6 +42,12 @@ function believedProgress(checkpoints: Checkpoint[]): number {
   if (total === 0) return 0
   const reached = checkpoints.filter((c) => c.status === 'reached').reduce((sum, c) => sum + SIZE_WEIGHT[c.size], 0)
   return (reached / total) * 100
+}
+
+/** A track has no tier, so it draws in its own colour; a goal keeps its tier colour. */
+function goalColor(g: Goal): string {
+  if (g.kind === 'track') return g.color ?? TIER_META.active.varName
+  return TIER_META[(g.status === 'closed' ? 'bench' : g.status) as Tier].varName
 }
 
 function dayMs(iso: string): number {
@@ -56,17 +70,21 @@ const STATUS_TRANSITIONS: Record<GoalStatus, { label: string; value: GoalStatus 
   closed: [{ label: 'Reopen', value: 'active' }],
 }
 
+// A track is only active or closed.
+const TRACK_TRANSITIONS: typeof STATUS_TRANSITIONS = {
+  ...STATUS_TRANSITIONS,
+  active: [{ label: 'Close', value: 'closed' }],
+}
+
 // ── Progress ring ────────────────────────────────────────────────────────────
 
 function ProgressRing({ pct, color, size = 52, stroke = 5, children }: { pct: number; color: string; size?: number; stroke?: number; children?: React.ReactNode }) {
   const r = (size - stroke) / 2
-  const c = 2 * Math.PI * r
-  const dash = (clamp(pct, 0, 100) / 100) * c
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--color-muted)" strokeWidth={stroke} />
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeDasharray={`${dash} ${c}`} className="transition-all duration-500" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" pathLength={100} strokeDasharray={`${clamp(pct, 0, 100)} 100`} className="transition-[stroke-dasharray] duration-500" />
       </svg>
       <div className="absolute inset-0 flex items-center justify-center">
         {children ?? <span className="font-mono text-[11px] font-medium text-foreground tabular-nums">{Math.round(pct)}%</span>}
@@ -244,10 +262,12 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, 
   const qc = useQueryClient()
   const [statusError, setStatusError] = useState('')
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const tier = (goal.status === 'closed' ? 'bench' : goal.status) as Tier
-  const tierColor = TIER_META[tier].varName
+  const tierColor = goalColor(goal)
   const believed = believedProgress(goal.checkpoints)
-  const transitions = STATUS_TRANSITIONS[goal.status]
+  const transitions = (goal.kind === 'track' ? TRACK_TRANSITIONS : STATUS_TRANSITIONS)[goal.status]
+  const ends = endLabel(goal.daysUntilEnd)
+  const hasTile = !!goal.icon || !!goal.color
+  const ended = goal.daysUntilEnd !== null && goal.daysUntilEnd < 0
   const hasCheckpoints = goal.checkpoints.length > 0
   const isClosed = goal.status === 'closed'
   // Focus goals always show their body; others collapse, but only if there is something to reveal.
@@ -255,7 +275,8 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, 
   const collapsible = goal.status !== 'focus' && hasBody
   const [expanded, setExpanded] = useState(false)
   const showBody = !collapsible || expanded
-  const stale = goal.status === 'focus' && isStale(goal.daysSinceLastOccurrence)
+  // Tracks never reach focus, so they are never stale; nor is a goal past its end date.
+  const stale = goal.status === 'focus' && !ended && isStale(goal.daysSinceLastOccurrence)
 
   const deleteMutation = useMutation({
     mutationFn: () => goalsApi.delete(goal.id),
@@ -280,14 +301,19 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, 
       <div className="flex items-start gap-3">
         {hasCheckpoints ? (
           <ProgressRing pct={believed} color={tierColor} size={showBody ? 52 : 40} stroke={showBody ? 5 : 4} />
+        ) : hasTile ? (
+          <GoalTile icon={goal.icon} color={goal.color} />
         ) : (
           <span className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: tierColor }} />
         )}
 
         <button onClick={() => onHistory(goal)} className="min-w-0 flex-1 self-center text-left">
-          <span className="block text-sm font-semibold text-foreground">{goal.title}</span>
+          <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            {hasCheckpoints && <GoalTile icon={goal.icon} color={goal.color} size="sm" />}
+            <span className="min-w-0">{goal.title}</span>
+          </span>
           {showBody && goal.description && <span className="mt-0.5 line-clamp-2 block text-xs text-muted-foreground">{goal.description}</span>}
-          {(hasCheckpoints || goal.daysSinceLastOccurrence !== null) && (
+          {(hasCheckpoints || goal.daysSinceLastOccurrence !== null || (ends && !isClosed)) && (
             <span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
               {hasCheckpoints && (
                 <span>{goal.checkpoints.filter((c) => c.status === 'reached').length}/{goal.checkpoints.length} checkpoints</span>
@@ -295,6 +321,7 @@ function GoalCard({ goal, onHistory, onEdit, onAddCheckpoint, onEditCheckpoint, 
               {goal.daysSinceLastOccurrence !== null && (
                 <span className={stale ? 'font-medium text-foreground' : ''}>{recencyLabel(goal.daysSinceLastOccurrence)}</span>
               )}
+              {ends && !isClosed && <span className={ended ? 'font-medium text-foreground' : ''}>{ends}</span>}
             </span>
           )}
         </button>
@@ -367,9 +394,9 @@ export function GoalsPage() {
   const [activitiesFor, setActivitiesFor] = useState<Goal | null>(null)
   const wideHeatmap = useMediaQuery('(min-width: 40rem)')
 
-  const grouped = STATUS_ORDER.reduce<Record<GoalStatus, Goal[]>>(
-    (acc, s) => { acc[s] = goals.filter((g) => g.status === s); return acc },
-    { focus: [], active: [], bench: [], closed: [] },
+  const grouped = SECTION_ORDER.reduce<Record<Section, Goal[]>>(
+    (acc, s) => { acc[s] = goals.filter((g) => sectionOf(g) === s); return acc },
+    { focus: [], active: [], bench: [], tracks: [], closed: [] },
   )
 
   return (
@@ -407,16 +434,16 @@ export function GoalsPage() {
             </div>
           ) : (
             <div className="flex flex-col gap-6">
-              {STATUS_ORDER.map((status) => {
+              {SECTION_ORDER.map((status) => {
                 const list = grouped[status]
                 if (list.length === 0) return null
-                const tier = (status === 'closed' ? 'bench' : status) as Tier
+                const tier = status === 'focus' || status === 'active' || status === 'bench' ? status : null
                 return (
                   <section key={status}>
                     <div className="mb-2.5 flex items-center gap-2 px-1">
-                      {status !== 'closed' && <span className={`h-1.5 w-1.5 rounded-full ${TIER_META[tier].dot}`} />}
+                      {tier && <span className={`h-1.5 w-1.5 rounded-full ${TIER_META[tier].dot}`} />}
                       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                        {status === 'closed' ? 'Closed' : `${TIER_META[tier].label} Goals`}
+                        {tier ? `${TIER_META[tier].label} Goals` : status === 'tracks' ? 'Tracks' : 'Closed'}
                       </h2>
                       <span className="rounded-full bg-muted px-1.5 text-[11px] font-medium text-muted-foreground">
                         {status === 'focus' && settings ? `${list.length}/${settings.maxFocusGoals}` : list.length}
@@ -448,7 +475,7 @@ export function GoalsPage() {
       <GoalHistoryModal
         open={historyFor !== null}
         goal={historyFor}
-        color={historyFor ? TIER_META[(historyFor.status === 'closed' ? 'bench' : historyFor.status) as Tier].varName : undefined}
+        color={historyFor ? goalColor(historyFor) : undefined}
         onClose={() => setHistoryFor(null)}
       />
       <GoalActivitiesModal goal={activitiesFor} onClose={() => setActivitiesFor(null)} />

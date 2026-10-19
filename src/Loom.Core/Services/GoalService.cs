@@ -9,18 +9,14 @@ namespace Loom.Core.Services;
 
 public class GoalService(LoomDbContext db, UserSettingsService settingsService)
 {
+    // Icon names are the client's (categoryIcons.tsx); the server only bounds the length, as for categories.
+    private const int MaxIconLength = 50;
+
     public async Task<Result<GoalDto>> CreateAsync(Guid userId, CreateGoalRequest req)
     {
-        var err = Validators.ValidateTitle(req.Title, "Title");
+        var goal = new Goal { UserId = userId, Title = "" };
+        var err = Apply(goal, req.Title, req.Description, req.Notes, req.Kind, req.EndDate, req.Color, req.Icon);
         if (err is not null) return Result<GoalDto>.Fail(err);
-
-        var goal = new Goal
-        {
-            UserId = userId,
-            Title = req.Title.Trim(),
-            Description = req.Description?.Trim(),
-            Notes = req.Notes?.Trim(),
-        };
         db.Goals.Add(goal);
         await db.SaveChangesAsync();
         return Result<GoalDto>.Success(GoalDto.FromEntity(goal));
@@ -38,12 +34,14 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         var ctx = await settingsService.GetDayContextAsync(userId);
         var p = progress.GetValueOrDefault(goal.Id);
         DateTimeOffset? last = lastAt.TryGetValue(goal.Id, out var lat) ? lat : null;
+        var now = nowUtc ?? DateTimeOffset.UtcNow;
         return Result<GoalDto>.Success(GoalDto.FromEntity(
             goal,
             p.Stats,
             last,
             p.Heatmap,
-            DaysSince(last, ctx, nowUtc ?? DateTimeOffset.UtcNow)));
+            DaysSince(last, ctx, now),
+            DaysUntilEnd(goal, ctx, now)));
     }
 
     public async Task<List<GoalDto>> ListAsync(Guid userId, GoalStatus? status = null, DateTimeOffset? nowUtc = null)
@@ -66,21 +64,26 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         var ctx = await settingsService.GetDayContextAsync(userId);
         var now = nowUtc ?? DateTimeOffset.UtcNow;
 
+        // A goal past its end date sinks to the bottom of its status, still open until the user closes it.
         return goals
             .OrderBy(g => g.Status)
+            .ThenBy(g => DaysUntilEnd(g, ctx, now) < 0)
             .ThenByDescending(g => lastAt.TryGetValue(g.Id, out var lat) ? lat : DateTimeOffset.MinValue)
             .ThenBy(g => g.CreatedAt)
             .Select(g =>
             {
                 var p = progress.GetValueOrDefault(g.Id);
                 DateTimeOffset? last = lastAt.TryGetValue(g.Id, out var lat) ? lat : null;
-                return GoalDto.FromEntity(g, p.Stats, last, p.Heatmap, DaysSince(last, ctx, now));
+                return GoalDto.FromEntity(g, p.Stats, last, p.Heatmap, DaysSince(last, ctx, now), DaysUntilEnd(g, ctx, now));
             })
             .ToList();
     }
 
     private static int? DaysSince(DateTimeOffset? last, DayContext ctx, DateTimeOffset nowUtc) =>
         last is null ? null : Math.Max(0, DayMath.Today(ctx, nowUtc).DayNumber - DayMath.DayOf(last.Value, ctx).DayNumber);
+
+    private static int? DaysUntilEnd(Goal g, DayContext ctx, DateTimeOffset nowUtc) =>
+        g.EndDate is { } end ? end.DayNumber - DayMath.Today(ctx, nowUtc).DayNumber : null;
 
     private async Task<Dictionary<Guid, DateTimeOffset>> GetLastOccurrenceAtAsync(List<Guid> goalIds, Guid userId)
     {
@@ -186,7 +189,8 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
     /// <summary>
     /// One combined heatmap across every activity linked to any goal, regardless of the goal's
     /// status - "did I do something toward a goal today", not "did I do something toward this
-    /// goal". Only <c>done</c> occurrences count: a skipped one isn't progress toward a goal, so unlike
+    /// goal". Tracks don't count: an activity linked only to tracks (a course's lectures) is routine,
+    /// not goal work, and would otherwise fill the strip. Only <c>done</c> occurrences count: a skipped one isn't progress toward a goal, so unlike
     /// <see cref="GetProgressAsync"/>'s per-goal grid it never puts a day on this one. Same
     /// 280-day window and day-bucketing otherwise, just not split per goal. Used by the Daily Plan page
     /// rather than the goal cards.
@@ -198,7 +202,7 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
         var windowStart = today.AddDays(-(HeatmapDays - 1));
 
         var activityIds = await db.Activities
-            .Where(a => a.UserId == userId && a.Goals.Any())
+            .Where(a => a.UserId == userId && a.Goals.Any(g => g.Kind == GoalKind.goal))
             .Select(a => a.Id)
             .ToListAsync();
         if (activityIds.Count == 0) return new GoalHeatmap(windowStart, today, []);
@@ -229,19 +233,45 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
 
     public async Task<Result<GoalDto>> UpdateAsync(Guid id, Guid userId, UpdateGoalRequest req)
     {
-        var err = Validators.ValidateTitle(req.Title, "Title");
-        if (err is not null) return Result<GoalDto>.Fail(err);
-
         var goal = await db.Goals
             .Include(g => g.Checkpoints)
             .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId);
         if (goal is null) return Result<GoalDto>.Fail(new Error(ErrorType.NotFound, "Goal not found."));
 
-        goal.Title = req.Title.Trim();
-        goal.Description = req.Description?.Trim();
-        goal.Notes = req.Notes?.Trim();
+        var err = Apply(goal, req.Title, req.Description, req.Notes, req.Kind, req.EndDate, req.Color, req.Icon);
+        if (err is not null) return Result<GoalDto>.Fail(err);
         await db.SaveChangesAsync();
         return Result<GoalDto>.Success(GoalDto.FromEntity(goal));
+    }
+
+    /// <summary>
+    /// The create/update field rules, validated before anything is written to <paramref name="goal"/>.
+    /// Turning a focus or bench goal into a track moves it to active, the one open status a track has.
+    /// </summary>
+    private static Error? Apply(
+        Goal goal, string title, string? description, string? notes,
+        GoalKind kind, DateOnly? endDate, string? color, string? icon)
+    {
+        var err = Validators.ValidateTitle(title, "Title");
+        if (err is not null) return err;
+        if (!Enum.IsDefined(kind)) return new Error(ErrorType.Validation, "Unknown goal kind.");
+
+        color = string.IsNullOrWhiteSpace(color) ? null : color.Trim();
+        if (color is not null && Validators.ValidateColor(color) is { } colorErr) return colorErr;
+        icon = string.IsNullOrWhiteSpace(icon) ? null : icon.Trim();
+        if (icon is { Length: > MaxIconLength })
+            return new Error(ErrorType.Validation, $"Icon cannot exceed {MaxIconLength} characters.");
+
+        goal.Title = title.Trim();
+        goal.Description = description?.Trim();
+        goal.Notes = notes?.Trim();
+        goal.Kind = kind;
+        goal.EndDate = endDate;
+        goal.Color = color;
+        goal.Icon = icon;
+        if (kind == GoalKind.track && goal.Status is GoalStatus.focus or GoalStatus.bench)
+            goal.Status = GoalStatus.active;
+        return null;
     }
 
     public async Task<Result> DeleteAsync(Guid id, Guid userId)
@@ -259,6 +289,9 @@ public class GoalService(LoomDbContext db, UserSettingsService settingsService)
             .Include(g => g.Checkpoints)
             .FirstOrDefaultAsync(g => g.Id == id && g.UserId == userId);
         if (goal is null) return Result<GoalDto>.Fail(new Error(ErrorType.NotFound, "Goal not found."));
+
+        if (goal.Kind == GoalKind.track && status is GoalStatus.focus or GoalStatus.bench)
+            return Result<GoalDto>.Fail(new Error(ErrorType.Validation, "A track is either active or closed."));
 
         if (status == GoalStatus.focus && goal.Status != GoalStatus.focus)
         {

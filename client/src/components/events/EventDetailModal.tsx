@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, X, Pencil, Trash2, Clock, CalendarPlus, Copy, History, MoreHorizontal, Pin, PinOff, Layers, Flag, CalendarOff } from 'lucide-react'
@@ -94,7 +94,7 @@ export function EventDetailModal({ open, onClose, event: occurrence, onEdit, onS
   const [skipOpen, setSkipOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [menuPos, setMenuPos] = useState<{ bottom: number; right: number }>({ bottom: 0, right: 0 })
+  const [menuPos, setMenuPos] = useState<{ bottom: number; left: number } | null>(null)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
   const moreMenuRef = useRef<HTMLDivElement>(null)
   const [localSubtasks, setLocalSubtasks] = useState<OccurrenceSubtask[]>(() => occurrence?.subtasks ?? [])
@@ -121,11 +121,18 @@ export function EventDetailModal({ open, onClose, event: occurrence, onEdit, onS
     return () => document.removeEventListener('mousedown', close)
   }, [moreOpen])
 
+  // Measured after render: the menu hangs right-aligned under the button, but the
+  // footer's left side can push the button close to the edge, so clamp it into view.
+  useLayoutEffect(() => {
+    if (!moreOpen || !moreButtonRef.current || !moreMenuRef.current) return
+    const rect = moreButtonRef.current.getBoundingClientRect()
+    const width = moreMenuRef.current.offsetWidth
+    const left = Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))
+    setMenuPos({ bottom: window.innerHeight - rect.top + 4, left })
+  }, [moreOpen])
+
   function openMore() {
-    if (moreButtonRef.current) {
-      const rect = moreButtonRef.current.getBoundingClientRect()
-      setMenuPos({ bottom: window.innerHeight - rect.top + 4, right: window.innerWidth - rect.right })
-    }
+    setMenuPos(null)
     setMoreOpen((o) => !o)
   }
 
@@ -256,7 +263,7 @@ const statusMutation = useMutation({
           {moreOpen && createPortal(
             <div
               ref={moreMenuRef}
-              style={{ position: 'fixed', bottom: menuPos.bottom, right: menuPos.right, zIndex: 60 }}
+              style={{ position: 'fixed', bottom: menuPos?.bottom ?? 0, left: menuPos?.left ?? 0, zIndex: 60, visibility: menuPos ? 'visible' : 'hidden' }}
               className="min-w-[160px] rounded-lg border border-border bg-card py-1 shadow-pop"
             >
               <button

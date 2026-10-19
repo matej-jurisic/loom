@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { Hash, ListTodo, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Hash, Layers, ListTodo, Pencil, Plus, Trash2 } from 'lucide-react'
 import { activitiesApi, occurrencesApi, tagsApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Tag } from '@/lib/types'
@@ -128,6 +128,11 @@ export function TagsPage() {
                         ariaLabel={`Actions for ${tag.name}`}
                         iconClassName="h-3.5 w-3.5"
                         items={[
+                          {
+                            icon: Layers,
+                            label: 'View activities',
+                            onClick: () => navigate(`/activities?tag=${tag.id}`),
+                          },
                           {
                             icon: ListTodo,
                             label: 'View occurrences',

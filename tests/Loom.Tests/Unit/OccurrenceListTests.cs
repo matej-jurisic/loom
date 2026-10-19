@@ -86,32 +86,4 @@ public class OccurrenceListTests : IDisposable
         Assert.True((await _ctx.OccurrenceListService.DeleteAsync(list.Id, userId)).IsSuccess);
         Assert.Empty(await _ctx.OccurrenceListService.ListAsync(userId));
     }
-
-    [Fact]
-    public async Task Icon_is_stored_cleared_by_a_replace_and_length_bounded()
-    {
-        var userId = await CreateUserAsync();
-        var created = (await _ctx.OccurrenceListService.CreateAsync(userId, Req("Errands") with { Icon = "ShoppingCart" })).Value!;
-        Assert.Equal("ShoppingCart", created.Icon);
-
-        var updated = (await _ctx.OccurrenceListService.UpdateAsync(created.Id, userId, Req("Errands"))).Value!;
-        Assert.Null(updated.Icon);
-
-        var tooLong = await _ctx.OccurrenceListService.CreateAsync(userId, Req("B") with { Icon = new string('x', 51) });
-        Assert.Equal(ErrorType.Validation, tooLong.Error!.Type);
-    }
-
-    [Fact]
-    public async Task Color_is_stored_cleared_by_a_replace_and_must_be_hex()
-    {
-        var userId = await CreateUserAsync();
-        var created = (await _ctx.OccurrenceListService.CreateAsync(userId, Req("Errands") with { Color = "#3b82f6" })).Value!;
-        Assert.Equal("#3b82f6", created.Color);
-
-        var updated = (await _ctx.OccurrenceListService.UpdateAsync(created.Id, userId, Req("Errands"))).Value!;
-        Assert.Null(updated.Color);
-
-        var bad = await _ctx.OccurrenceListService.CreateAsync(userId, Req("B") with { Color = "blue" });
-        Assert.Equal(ErrorType.Validation, bad.Error!.Type);
-    }
 }

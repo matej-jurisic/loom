@@ -1,3 +1,5 @@
+using Loom.Core.Common;
+using Loom.Core.Dtos;
 using Loom.Core.Entities;
 using Loom.Core.Enums;
 
@@ -247,5 +249,84 @@ public class GoalServiceTests : IDisposable
         var goals = await _ctx.GoalService.ListAsync(userId, nowUtc: Now);
 
         Assert.Equal(["Busy", "Practice", "Quiet"], goals.Select(g => g.Title));
+    }
+
+    // ── Tracks, end date, colour ─────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(GoalStatus.focus)]
+    [InlineData(GoalStatus.bench)]
+    public async Task SetStatusAsync_rejects_focus_and_bench_for_a_track(GoalStatus status)
+    {
+        var (userId, goalId, _) = await SetupGoalAsync();
+        var goal = await _ctx.Db.Goals.FindAsync(goalId);
+        goal!.Kind = GoalKind.track;
+        await _ctx.Db.SaveChangesAsync();
+
+        var result = await _ctx.GoalService.SetStatusAsync(goalId, userId, status);
+
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_turning_a_focus_goal_into_a_track_makes_it_active()
+    {
+        var (userId, goalId, _) = await SetupGoalAsync();
+        await _ctx.GoalService.SetStatusAsync(goalId, userId, GoalStatus.focus);
+
+        var result = await _ctx.GoalService.UpdateAsync(goalId, userId,
+            new UpdateGoalRequest("Practice", null, Kind: GoalKind.track, Color: "#3b82f6", Icon: "book"));
+
+        Assert.Equal("active", result.Value!.Status);
+        Assert.Equal("track", result.Value.Kind);
+        Assert.Equal("#3b82f6", result.Value.Color);
+        Assert.Equal("book", result.Value.Icon);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_rejects_a_bad_colour()
+    {
+        var (userId, goalId, _) = await SetupGoalAsync();
+
+        var result = await _ctx.GoalService.UpdateAsync(goalId, userId, new UpdateGoalRequest("Practice", null, Color: "blue"));
+
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
+    }
+
+    [Fact]
+    public async Task GetAggregateHeatmapAsync_ignores_activities_linked_only_to_tracks()
+    {
+        var (userId, goalId, scales) = await SetupGoalAsync();
+        var track = new Goal { UserId = userId, Title = "Linear Algebra", Kind = GoalKind.track };
+        var goal = await _ctx.Db.Goals.FindAsync(goalId);
+        var lectures = new Activity { UserId = userId, Title = "Lectures", Goals = [track] };
+        var examPrep = new Activity { UserId = userId, Title = "Exam prep", Goals = [track, goal!] };
+        _ctx.Db.AddRange(track, lectures, examPrep);
+        await _ctx.Db.SaveChangesAsync();
+        await AddOccurrenceAsync(userId, lectures, At(7, 6, 9), EventStatus.done);
+        await AddOccurrenceAsync(userId, examPrep, At(7, 5, 9), EventStatus.done);
+        await AddOccurrenceAsync(userId, scales, At(7, 4, 9), EventStatus.done);
+
+        var heatmap = await _ctx.GoalService.GetAggregateHeatmapAsync(userId, Now);
+
+        Assert.Equal([new DateOnly(2026, 7, 4), new DateOnly(2026, 7, 5)], heatmap.Days.Select(d => d.Date));
+    }
+
+    [Fact]
+    public async Task ListAsync_counts_days_until_end_and_sinks_ended_goals()
+    {
+        var (userId, goalId, _) = await SetupGoalAsync();
+        var goal = await _ctx.Db.Goals.FindAsync(goalId);
+        goal!.EndDate = new DateOnly(2026, 7, 6);
+        _ctx.Db.Goals.Add(new Goal { UserId = userId, Title = "Today", EndDate = new DateOnly(2026, 7, 7) });
+        _ctx.Db.Goals.Add(new Goal { UserId = userId, Title = "Open" });
+        await _ctx.Db.SaveChangesAsync();
+
+        var goals = await _ctx.GoalService.ListAsync(userId, nowUtc: Now);
+
+        Assert.Equal("Practice", goals[^1].Title);
+        Assert.Equal(-1, goals[^1].DaysUntilEnd);
+        Assert.Equal(0, goals.Single(g => g.Title == "Today").DaysUntilEnd);
+        Assert.Null(goals.Single(g => g.Title == "Open").DaysUntilEnd);
     }
 }

@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useSearchParams } from "react-router-dom";
 import {
   Plus,
   Layers,
@@ -53,6 +54,10 @@ export function ActivitiesPage() {
   const [historyFor, setHistoryFor] = useState<Activity | null>(null);
   const [group, setGroup] = useState<GroupBy>(storedGroupBy);
   const [search, setSearch] = useState("");
+  // Category and tag filters live in the URL, so the Categories and Tags pages can link here.
+  const [params, setParams] = useSearchParams();
+  const categoryFilter = params.get("category");
+  const tagFilter = params.get("tag");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   // Multi-select: the page swaps row actions for checkboxes and a bottom action bar.
@@ -103,6 +108,16 @@ export function ActivitiesPage() {
     onError: (err) => toastError(err, "Could not delete the selected activities."),
   });
 
+  // The copy opens straight in the edit modal, so it can be renamed before anything else.
+  const duplicateMutation = useMutation({
+    mutationFn: (a: Activity) => activitiesApi.duplicate(a.id),
+    onSuccess: (copy) => {
+      invalidateActivities(qc);
+      openEdit(copy);
+    },
+    onError: (err) => toastError(err, "Could not duplicate the activity."),
+  });
+
   function openCreate() {
     setEditing(undefined);
     setModalOpen(true);
@@ -145,13 +160,35 @@ export function ActivitiesPage() {
 
   // Search spans the row's visible text, so typing a category or goal narrows the list too.
   const visible = useMemo(() => {
-    if (!query) return activities;
-    return activities.filter((a) =>
-      [a.title, a.category?.name, ...a.goals.map((g) => g.title), ...a.tags.map((t) => t.name)].some((field) =>
-        field?.toLowerCase().includes(query),
-      ),
+    return activities.filter(
+      (a) =>
+        (!categoryFilter || a.categoryId === categoryFilter) &&
+        (!tagFilter || a.tags.some((t) => t.id === tagFilter)) &&
+        (!query ||
+          [a.title, a.category?.name, ...a.goals.map((g) => g.title), ...a.tags.map((t) => t.name)].some((field) =>
+            field?.toLowerCase().includes(query),
+          )),
     );
-  }, [activities, query]);
+  }, [activities, query, categoryFilter, tagFilter]);
+
+  const filterChips = [
+    categoryFilter && {
+      key: "category",
+      label: categories.find((c) => c.id === categoryFilter)?.name ?? "Category",
+    },
+    tagFilter && {
+      key: "tag",
+      label: `#${tags.find((t) => t.id === tagFilter)?.name ?? "tag"}`,
+    },
+  ].filter((c): c is { key: string; label: string } => !!c);
+
+  function clearFilter(key: string) {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete(key);
+      return next;
+    }, { replace: true });
+  }
 
   // Grouping is keyed by attribute so a new grouping dimension is one entry, not a new branch.
   // Buckets are seeded in canonical order so sections do not reshuffle as the filter changes,
@@ -281,6 +318,21 @@ export function ActivitiesPage() {
             </div>
 
             <div className="flex flex-wrap items-center justify-end gap-2">
+              {filterChips.length > 0 && (
+                <div className="mr-auto flex flex-wrap items-center gap-1.5">
+                  {filterChips.map((chip) => (
+                    <button
+                      key={chip.key}
+                      onClick={() => clearFilter(chip.key)}
+                      aria-label={`Clear ${chip.key} filter`}
+                      className="flex h-7 max-w-[12rem] items-center gap-1 rounded-full border border-border bg-muted px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/60"
+                    >
+                      <span className="truncate">{chip.label}</span>
+                      <X className="h-3 w-3 shrink-0" strokeWidth={2} />
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex overflow-hidden rounded-md border border-border">
                 <span className="hidden items-center border-r border-border px-2.5 text-xs text-muted-foreground sm:flex">
                   Group
@@ -332,9 +384,11 @@ export function ActivitiesPage() {
           ) : sections.length === 0 ? (
             <div className="flex flex-col items-center gap-1 py-12 text-center">
               <p className="text-sm text-foreground">No matches</p>
-              <p className="text-xs text-muted-foreground">
-                Nothing matches "{search.trim()}".
-              </p>
+              {search.trim() && (
+                <p className="text-xs text-muted-foreground">
+                  Nothing matches "{search.trim()}".
+                </p>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-4">
@@ -396,6 +450,7 @@ export function ActivitiesPage() {
                               selected={selected.has(a.id)}
                               onToggleSelect={() => toggleSelected(a.id)}
                               onEdit={() => openEdit(a)}
+                              onDuplicate={() => duplicateMutation.mutate(a)}
                               onDelete={() => setDeleting(a)}
                               onHistory={() => setHistoryFor(a)}
                               hiddenGoalId={group === "goal" ? section.key : undefined}

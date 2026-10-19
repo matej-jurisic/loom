@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Occurrence } from '@/lib/types'
 import { dueRowRef, eventAllDayColors, titleWithTags } from '@/lib/calendarLayout'
+import { useCalendarColorBy } from '@/lib/useCalendarColorBy'
 
 export type FloatingDragInfo = { pointerId: number; clientX: number; clientY: number; pointerType: string }
 
@@ -60,6 +61,8 @@ function TrayPillRow({
     occ: Occurrence
     pointerType: string
   } | null>(null)
+
+  const colorBy = useCalendarColorBy()
 
   function cancelPending() {
     if (!pendingRef.current) return
@@ -124,7 +127,7 @@ function TrayPillRow({
         {tasks.length > 0 ? (
           <div className="flex gap-1 px-1 py-1">
             {tasks.map((o) => {
-              const { className, style } = eventAllDayColors(o)
+              const { className, style } = eventAllDayColors(o, colorBy)
               return (
                 <button
                   key={o.id}

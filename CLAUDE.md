@@ -117,9 +117,14 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   `CategoryDto`/`CategorySummaryDto`, `CheckpointDto` (has `Size` enum — not numeric progress).
   `GoalHeatmap`/`GoalHeatmapDay` are shared by a single goal's `GoalDto.Heatmap` (built for every goal with linked occurrences,
   by `GoalService.GetProgressAsync`, includes skipped days) and
-  `GoalService.GetAggregateHeatmapAsync` (every goal-linked activity summed together, any
-  status, `done` occurrences only — skipped ones aren't progress and put no day on the grid — behind
+  `GoalService.GetAggregateHeatmapAsync` (every activity linked to a `goal`-kind goal summed together, any
+  status, tracks excluded, `done` occurrences only — skipped ones aren't progress and put no day on the grid — behind
   `GET /api/goals/heatmap`, the Daily Plan's "Goal activity" strip).
+- `Goal.Kind` — `goal` or `track` (a course, an ongoing area). `GoalService.Apply` owns the field
+  rules: a track is only active or closed (`SetStatusAsync` rejects focus / bench, and becoming a
+  track moves a focus or bench goal to active), which is also why a track is never stale. `EndDate`
+  is display only: `GoalDto.DaysUntilEnd` (via `DayMath`) drives the card note and sort, and nothing
+  ever closes a goal on its own. `Color`/`Icon` ride on `GoalSummaryDto` too, for the calendar.
 - `Services/*Service.cs` — ctor-inject `LoomDbContext`; return `Result`/`Result<T>`. Registered in `AddLoomCore`.
 - `Services/InsightsService.cs` — totals over completed occurrences only. **Never add a stat whose
   denominator is the length of a day**; see the boundary above.
@@ -183,13 +188,14 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   `formatOccurrenceDate`, and `OccurrenceView` / `viewFromList` / `listBody` / `sameView` for Lists) and
   has the vitest cases. `components/events/OccurrenceFilterFields.tsx` is the selects grid, shared with
   `components/lists/ListModal.tsx`. `pages/CategoriesPage.tsx` and `pages/TagsPage.tsx` are management
-  lists only and link to it with `/occurrences/all?category=` / `?tag=`.
+  lists only and link to it with `/occurrences/all?category=` / `?tag=`, and to `ActivitiesPage` with
+  `/activities?category=` / `?tag=` (URL filters there, cleared from a toolbar chip).
 - `pages/ListsPage.tsx` — `/occurrences`: the saved Lists (`OccurrenceList` entity, `OccurrenceListService`,
   `/api/lists`, query key `['lists']`, `invalidateLists`) then an "All occurrences" link. A query string
   redirects to `/occurrences/all` so old filtered links keep working. Lists store category / tag / goal
-  as the filter string (id or `none`), not foreign keys. A list's optional `icon` is a name from the category
-  icon set and its optional `color` a hex, drawn by `components/lists/ListIcon.tsx` (`ListTile`); the PUT is a full
-  replace, so `listBody` carries both.
+  as the filter string (id or `none`), not foreign keys. A list has no icon or colour of its own: `listLook`
+  (`lib/occurrenceView.ts`) borrows its goal filter's, else its category filter's, drawn by
+  `components/lists/ListIcon.tsx` (`ListTile`).
 - `lib/api.ts` — `request<T>` (bearer + one-shot 401 refresh). Key namespaces: `activitiesApi`, `occurrencesApi`, `categoriesApi`, `goalsApi`, `checkpointsApi`, `listsApi`, `insightsApi`.
 - `lib/types.ts` — mirrors backend DTOs. Key types: `Activity`, `Occurrence` (has `effectiveTitle`), `Goal`, `Category`, `Insights`.
 - `lib/goals.ts` — `recencyLabel`/`isStale` over the server's `daysSinceLastOccurrence` (Goals page and Plan chips); `lib/useMediaQuery.ts` — `matchMedia` as a hook.
@@ -207,7 +213,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   plus `input.ts` (`inputCls`, the bare input/select treatment; `SettingSection` re-exports it).
 - `components/events/OccurrenceListRow.tsx` — shared occurrence list row (Plan + Categories): optimistic status toggle, action menu, confirmed delete.
 - `components/activities/ActivityListRow.tsx` — activity list row: leading tile in the **category's**
-  colour and icon (via `CategoryIcon`), meta line, action menu (history / edit / delete).
+  colour and icon (via `CategoryIcon`), meta line, action menu (history / edit / duplicate / delete). Duplicate is
+  `ActivityService.DuplicateAsync` (templates and links, never occurrences); the page opens the copy in `ActivityModal`.
   In multi-select mode the tile becomes a checkbox and the row selects instead of navigating.
   `hideCategory`/`hiddenGoalId` drop whatever the current grouping already says in the section header
   (an activity's other goals still show).
@@ -237,6 +244,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   resolved target *and* a `commit` callback, so each drop kind (`rescheduleEvent`,
   `rescheduleFromAllDay`, `makeEventAllDay`) keeps its own optimistic update; the modal only owns the
   skip-and-create path. Nothing is written until the user picks, so a cancelled drop just snaps back.
+- `components/goals/GoalIcon.tsx` — `GoalTile`, a goal's icon in its colour (nothing when it has
+  neither); Goals page cards and Plan focus chips.
 - `components/goals/OccurrenceBar.tsx` — done/skipped/pending counts bar for goals with linked occurrences; data from
   `GoalDto.OccurrenceStats`. Used by the Plan page's goal chip; the Goals page uses the heatmap instead.
 - `components/events/OccurrenceHeatmap.tsx` — GitHub-style day grid, generic over any `HeatmapWindow`
@@ -277,7 +286,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - Calendar split: `pages/CalendarPage.tsx` keeps the page state, scroll anchoring and every pointer gesture
   (they share refs, so they stay together). Around it: `lib/calendarDates.ts` (date/label helpers,
   `ViewMode`), `lib/calendarLayout.ts` (column packing, `layoutDay`, snapping, `occursOnDay`, due helpers,
-  colours), `lib/useOccurrenceMutations.ts` (optimistic reschedule / float / all-day commits and the
+  colours: `occurrenceColor(o, by)` is the one resolver, `by` from `lib/useCalendarColorBy.ts`, the
+  `calendarColorBy` setting), `lib/useOccurrenceMutations.ts` (optimistic reschedule / float / all-day commits and the
   Move-or-Skip hand-off), `lib/useCalendarModals.ts` (modal state and openers), and
   `components/calendar/` (`EventBlock`, `DayColumn`, `CalendarHeader`, `CalendarTray` over `TrayPillRow`'s
   Float / Due / Soon rows). The pure `lib/` parts have vitest tests.

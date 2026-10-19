@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
-import { ListTodo, Pencil, Plus, Shapes, Trash2 } from 'lucide-react'
+import { Layers, ListTodo, Pencil, Plus, Shapes, Trash2 } from 'lucide-react'
 import { activitiesApi, categoriesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Category } from '@/lib/types'
@@ -123,6 +123,11 @@ export function CategoriesPage() {
                         ariaLabel={`Actions for ${cat.name}`}
                         iconClassName="h-3.5 w-3.5"
                         items={[
+                          {
+                            icon: Layers,
+                            label: 'View activities',
+                            onClick: () => navigate(`/activities?category=${cat.id}`),
+                          },
                           {
                             icon: ListTodo,
                             label: 'View occurrences',

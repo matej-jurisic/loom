@@ -14,6 +14,9 @@ export interface AuthResponse {
 
 export type EventStatus = 'pending' | 'done' | 'skipped'
 export type GoalStatus = 'focus' | 'active' | 'bench' | 'closed'
+/** A track (a course, an ongoing area) is only active or closed, never stale, and stays out of the Goal activity strip. */
+export type GoalKind = 'goal' | 'track'
+export type CalendarColorBy = 'category' | 'goal'
 export type CheckpointStatus = 'pending' | 'reached'
 export type CheckpointSize = 'tiny' | 'small' | 'normal' | 'big' | 'huge'
 export type ActivityKind = 'activity' | 'event'
@@ -22,6 +25,9 @@ export interface GoalSummary {
   id: string
   title: string
   status: GoalStatus
+  kind: GoalKind
+  color: string | null
+  icon: string | null
 }
 
 export interface Checkpoint {
@@ -60,12 +66,18 @@ export interface Goal {
   description: string | null
   notes: string | null
   status: GoalStatus
+  kind: GoalKind
+  endDate: string | null // yyyy-MM-dd
+  color: string | null
+  icon: string | null
   createdAt: string
   checkpoints: Checkpoint[]
   occurrenceStats: GoalOccurrenceStats | null
   lastOccurrenceAt: string | null
   daysSinceLastOccurrence: number | null
   heatmap: GoalHeatmap | null
+  /** endDate minus the server's today: 0 on the last day, negative once passed. */
+  daysUntilEnd: number | null
 }
 
 export interface CategorySummary {
@@ -123,10 +135,6 @@ export interface Tag {
 export interface OccurrenceList {
   id: string
   name: string
-  /** A name from `ICON_MAP` (categoryIcons.tsx); null shows the default list icon. */
-  icon: string | null
-  /** 6-digit hex; null shows the neutral muted tile. */
-  color: string | null
   status: StatusFilter
   category: string | null
   tag: string | null
@@ -224,4 +232,5 @@ export interface UserSettings {
   maxFocusGoals: number
   dayBoundaryTime: string // "HH:mm"
   timezone: string // IANA id
+  calendarColorBy: CalendarColorBy
 }

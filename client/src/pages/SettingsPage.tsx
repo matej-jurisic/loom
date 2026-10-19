@@ -11,6 +11,7 @@ import { useAuthStore } from '@/store/auth'
 import { getThemePref, setThemePref, type ThemePref } from '@/lib/theme'
 import { isNative, getServerUrl, setServerUrl } from '@/lib/server-config'
 import { invalidateAll, invalidateOccurrences } from '@/lib/invalidate'
+import type { CalendarColorBy } from '@/lib/types'
 
 function timezoneOptions(current: string): string[] {
   const supported =
@@ -24,6 +25,11 @@ const THEME_OPTIONS: { value: ThemePref; label: string; Icon: typeof Sun }[] = [
   { value: 'light',  label: 'Light',  Icon: Sun },
   { value: 'dark',   label: 'Dark',   Icon: Moon },
   { value: 'system', label: 'System', Icon: Monitor },
+]
+
+const COLOR_BY_OPTIONS: { value: CalendarColorBy; label: string }[] = [
+  { value: 'category', label: 'Category' },
+  { value: 'goal',     label: 'Goal' },
 ]
 
 const CLEAR_SCOPES = [
@@ -59,7 +65,7 @@ export function SettingsPage() {
   }, [settings])
 
   const saveMutation = useMutation({
-    mutationFn: () => settingsApi.update(form),
+    mutationFn: () => settingsApi.update({ ...form, calendarColorBy: settings?.calendarColorBy ?? 'category' }),
     onSuccess: () => {
       setSaved(true)
       qc.invalidateQueries({ queryKey: ['settings'] })
@@ -67,6 +73,17 @@ export function SettingsPage() {
     },
   })
 
+  // Saves on its own, like the theme: it sends the stored planning values, not unsaved edits in the form.
+  const colorByMutation = useMutation({
+    mutationFn: (calendarColorBy: CalendarColorBy) => settingsApi.update({
+      maxFocusGoals: settings!.maxFocusGoals,
+      dayBoundaryTime: settings!.dayBoundaryTime,
+      timezone: settings!.timezone,
+      calendarColorBy,
+    }),
+    onSuccess: (updated) => qc.setQueryData(['settings'], updated),
+    onError: (err) => toastError(err),
+  })
 
   async function handleLogout() {
     try { await authApi.logout() } finally { clear() }
@@ -185,6 +202,24 @@ export function SettingsPage() {
                         }`}
                       >
                         <Icon className="h-3.5 w-3.5" strokeWidth={2} />
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </SettingRow>
+                <SettingRow label="Calendar colours">
+                  <div className="flex overflow-hidden rounded-md border border-border">
+                    {COLOR_BY_OPTIONS.map(({ value, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => colorByMutation.mutate(value)}
+                        disabled={!settings || colorByMutation.isPending}
+                        className={`border-l border-border px-3 py-1.5 text-xs font-medium transition-colors first:border-l-0 ${
+                          (colorByMutation.isPending ? colorByMutation.variables : settings?.calendarColorBy) === value
+                            ? 'bg-primary text-primary-foreground'
+                            : 'text-muted-foreground hover:bg-muted'
+                        }`}
+                      >
                         {label}
                       </button>
                     ))}

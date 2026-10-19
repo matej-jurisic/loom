@@ -6,6 +6,7 @@ import { recencyLabel } from '@/lib/goals'
 import { toastError } from '@/store/toasts'
 import type { Checkpoint, CheckpointSize, Occurrence, Goal } from '@/lib/types'
 import { OccurrenceBar } from '@/components/goals/OccurrenceBar'
+import { GoalTile } from '@/components/goals/GoalIcon'
 import { OccurrenceHeatmap } from '@/components/events/OccurrenceHeatmap'
 import { EventModal } from '@/components/events/EventModal'
 import { OccurrenceListRow } from '@/components/events/OccurrenceListRow'
@@ -118,7 +119,9 @@ function GoalHealthChip({ goal }: { goal: Goal }) {
   const hasCheckpoints = goal.checkpoints.length > 0
   return (
     <div className="flex min-w-0 items-center gap-2.5 rounded-lg border border-border px-3 py-2">
-      <span className="h-2 w-2 shrink-0 rounded-full bg-goal-focus" />
+      {goal.icon || goal.color
+        ? <GoalTile icon={goal.icon} color={goal.color} size="sm" />
+        : <span className="h-2 w-2 shrink-0 rounded-full bg-goal-focus" />}
       <div className="min-w-0">
         <p className="truncate text-xs font-medium text-foreground">{goal.title}</p>
         <p className="text-[10px] text-muted-foreground/70">{recencyLabel(goal.daysSinceLastOccurrence)}</p>
@@ -225,7 +228,9 @@ function TimelineRow({
 
 export function PlanPage() {
   const qc = useQueryClient()
-  const [current, setCurrent] = useState<Date>(() => sod(new Date()))
+  // null follows the effective today, which sits on the previous calendar date until the day
+  // boundary passes; only an explicit pick pins a day.
+  const [picked, setPicked] = useState<Date | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [editingOccurrence, setEditingOccurrence] = useState<Occurrence | undefined>()
   const [defaultActivity, setDefaultActivity] = useState<Occurrence['activity'] | undefined>()
@@ -252,14 +257,16 @@ export function PlanPage() {
 
   const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: settingsApi.get, staleTime: 5 * 60 * 1000 })
 
-  const effectiveToday = useMemo(() => {
-    const boundary = settings?.dayBoundaryTime ?? '00:00'
-    const n = new Date()
+  const boundary = settings?.dayBoundaryTime ?? '00:00'
+  const effectiveTodayMs = useMemo(() => {
     const [h, m] = boundary.split(':').map(Number)
-    const b = new Date(n)
+    const b = new Date(now)
     b.setHours(h, m, 0, 0)
-    return n < b ? addDays(sod(n), -1) : sod(n)
-  }, [settings?.dayBoundaryTime])
+    return (now < b ? addDays(sod(now), -1) : sod(now)).getTime()
+  }, [boundary, now])
+  const effectiveToday = useMemo(() => new Date(effectiveTodayMs), [effectiveTodayMs])
+
+  const current = picked ?? effectiveToday
 
   const dayStart = sod(current)
   const dayEnd = addDays(dayStart, 1)
@@ -365,9 +372,9 @@ export function PlanPage() {
     onError: (err) => toastError(err, 'Could not move overdue items.'),
   })
 
-  function prev() { setCurrent((d) => addDays(d, -1)) }
-  function next() { setCurrent((d) => addDays(d, 1)) }
-  function goToday() { setCurrent(effectiveToday) }
+  function prev() { setPicked(addDays(current, -1)) }
+  function next() { setPicked(addDays(current, 1)) }
+  function goToday() { setPicked(null) }
 
   function openEdit(occurrence: Occurrence) {
     setDefaultActivity(undefined)
@@ -428,7 +435,7 @@ export function PlanPage() {
               value={dateStr}
               onChange={(e) => {
                 const d = new Date(e.target.value + 'T00:00:00')
-                if (!isNaN(d.getTime())) setCurrent(sod(d))
+                if (!isNaN(d.getTime())) setPicked(sod(d))
               }}
               onKeyDown={(e) => { if (e.key === 'ArrowUp' || e.key === 'ArrowDown') e.preventDefault() }}
               className="hidden sm:block h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground transition-colors hover:bg-muted focus:outline-none focus:ring-1 focus:ring-ring"

@@ -11,10 +11,6 @@ public class OccurrenceList
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid UserId { get; set; }
     public required string Name { get; set; }
-    /// <summary>A lucide icon name from the client's category icon set; null shows the default.</summary>
-    public string? Icon { get; set; }
-    /// <summary>A 6-digit hex colour for the icon tile; null shows the neutral default.</summary>
-    public string? Color { get; set; }
     public string Status { get; set; } = "open";
     public string? Category { get; set; }
     public string? Tag { get; set; }

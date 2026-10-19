@@ -18,7 +18,8 @@ import { CalendarTray } from '@/components/calendar/CalendarTray'
 import type { FloatingDragInfo } from '@/components/calendar/TrayPillRow'
 import { VIEW_OPTIONS, addDays, assignAllDayRows, dayHeader, effectiveAllDayEnd, formatDateInput, formatDatetimeLocal, hourLabel, isSameDay, sod, startOfWeek } from '@/lib/calendarDates'
 import type { ViewMode } from '@/lib/calendarDates'
-import { DUE_SPAN_MINUTES, MIN_EVENT_PX, dragStartFor, duePinHeight, dueRowRef, eventAllDayColors, isDueOccurrence, isEODDue, occursOnDay, snapToGrid, snapToGridDue, titleWithTags } from '@/lib/calendarLayout'
+import { DUE_SPAN_MINUTES, MIN_EVENT_PX, dragStartFor, duePinHeight, dueRowRef, eventAllDayColors, isDueOccurrence, isEODDue, occurrenceColor, occursOnDay, snapToGrid, snapToGridDue, titleWithTags } from '@/lib/calendarLayout'
+import { useCalendarColorBy } from '@/lib/useCalendarColorBy'
 
 const DEFAULT_HOUR_PX = 64
 const MIN_HOUR_PX = 32
@@ -43,6 +44,7 @@ const ANCHOR_TTL_MS = 120
 // ── CalendarPage ─────────────────────────────────────────────────────────────
 
 export function CalendarPage() {
+  const colorBy = useCalendarColorBy()
   const [view, setView] = useState<ViewMode>(() => {
     const saved = localStorage.getItem('loom-calendar-view')
     return saved === 'week' ? 'week' : saved === '3day' ? '3day' : 'day'
@@ -1730,9 +1732,9 @@ export function CalendarPage() {
                               top: row * 24 + 2,
                               height: 20,
                               touchAction: 'none',
-                              ...eventAllDayColors(e).style,
+                              ...eventAllDayColors(e, colorBy).style,
                             }}
-                            className={`truncate rounded-[3px] px-1.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`}
+                            className={`truncate rounded-[3px] px-1.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e, colorBy).className}`}
                           >
                             {titleWithTags(e)}
                           </button>
@@ -1769,7 +1771,7 @@ export function CalendarPage() {
                     </div>
                     <div className="flex flex-1 flex-col gap-0.5 border-l border-r px-0.5 py-0.5 min-h-[26px]" style={{ borderColor: 'var(--calendar-line)' }}>
                       {dayAllDayEvents.map((e) => (
-                        <button key={e.id} onPointerDown={(ev) => handleAllDayPillMoveStart(ev, e)} onClick={() => { if (!suppressClickRef.current) openDetail(e) }} className={`w-full truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e).className}`} style={{ touchAction: 'none', ...eventAllDayColors(e).style }}>
+                        <button key={e.id} onPointerDown={(ev) => handleAllDayPillMoveStart(ev, e)} onClick={() => { if (!suppressClickRef.current) openDetail(e) }} className={`w-full truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e, colorBy).className}`} style={{ touchAction: 'none', ...eventAllDayColors(e, colorBy).style }}>
                           {titleWithTags(e)}
                         </button>
                       ))}
@@ -1864,8 +1866,9 @@ export function CalendarPage() {
                 return (
                   <div key={day.toISOString()} className={`flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden px-0.5 py-0.5 ${idx === 0 ? 'border-l border-r' : 'border-r'}`} style={{ borderColor: 'var(--calendar-line)' }}>
                     {dayPins.map((o) => {
-                      const accentColor = o.activity.category?.color ?? 'var(--color-primary)'
-                      const leftColor = o.activity.category?.color ?? 'var(--color-border)'
+                      const pinColor = occurrenceColor(o, colorBy)
+                      const accentColor = pinColor ?? 'var(--color-primary)'
+                      const leftColor = pinColor ?? 'var(--color-border)'
                       const isHex = accentColor.startsWith('#')
                       const bgColor = isHex ? `${accentColor}18` : `color-mix(in srgb, ${accentColor} 9%, transparent)`
                       const time = new Date(o.startAt!).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })

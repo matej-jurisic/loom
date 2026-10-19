@@ -1,6 +1,6 @@
 import { useAuthStore } from '@/store/auth'
 import { getServerUrl, isNative, getNativeRefreshToken, setNativeRefreshToken } from './server-config'
-import type { AuthResponse, User, Goal, GoalStatus, GoalHeatmap, Checkpoint, CheckpointStatus, UserSettings, Category, Tag, OccurrenceList, SaveOccurrenceListBody, Activity, ActivitySubtask, ActivityWorkType, Occurrence, Insights } from './types'
+import type { AuthResponse, User, Goal, GoalStatus, GoalKind, GoalHeatmap, CalendarColorBy, Checkpoint, CheckpointStatus, UserSettings, Category, Tag, OccurrenceList, SaveOccurrenceListBody, Activity, ActivitySubtask, ActivityWorkType, Occurrence, Insights } from './types'
 
 export class ApiError extends Error {
   readonly status: number
@@ -98,6 +98,8 @@ export const activitiesApi = {
 
   update: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds: string[]; repeatAfterDays: number | null }) =>
     request<Activity>(`/api/activities/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  duplicate: (id: string) => request<Activity>(`/api/activities/${id}/duplicate`, { method: 'POST' }),
 
   delete: (id: string) => request<void>(`/api/activities/${id}`, { method: 'DELETE' }),
 }
@@ -199,6 +201,16 @@ export const occurrencesApi = {
     request<Occurrence>(`/api/occurrences/${id}/event`, { method: 'PUT', body: JSON.stringify(body) }),
 }
 
+export interface GoalBody {
+  title: string
+  description: string | null
+  notes: string | null
+  kind: GoalKind
+  endDate: string | null
+  color: string | null
+  icon: string | null
+}
+
 export const goalsApi = {
   list: (params?: { status?: string }) => {
     const q = new URLSearchParams()
@@ -208,10 +220,11 @@ export const goalsApi = {
 
   get: (id: string) => request<Goal>(`/api/goals/${id}`),
 
-  create: (body: { title: string; description?: string | null; notes?: string | null }) =>
+  create: (body: GoalBody) =>
     request<Goal>('/api/goals', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (id: string, body: { title: string; description?: string | null; notes?: string | null }) =>
+  // Full replace: kind, end date, colour and icon all reset when omitted.
+  update: (id: string, body: GoalBody) =>
     request<Goal>(`/api/goals/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 
   delete: (id: string) => request<void>(`/api/goals/${id}`, { method: 'DELETE' }),
@@ -239,7 +252,7 @@ export const checkpointsApi = {
 
 export const settingsApi = {
   get: () => request<UserSettings>('/api/settings'),
-  update: (body: { maxFocusGoals: number; dayBoundaryTime: string; timezone: string }) =>
+  update: (body: { maxFocusGoals: number; dayBoundaryTime: string; timezone: string; calendarColorBy: CalendarColorBy }) =>
     request<UserSettings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
 }
 

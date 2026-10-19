@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import type { Occurrence } from '@/lib/types'
+import type { CalendarColorBy, Occurrence } from '@/lib/types'
 import type { TimeScale } from '@/lib/timeScale'
 import { sod } from '@/lib/calendarDates'
 
@@ -137,28 +137,41 @@ export function isEODDue(o: Occurrence): boolean {
 
 // ── Event coloring ──────────────────────────────────────────────────────────
 
+/**
+ * The colour an occurrence is drawn in. Colouring by goal uses the activity's goal colour only when
+ * its coloured goals agree on one; none, or two different ones, falls back to the category, so an
+ * activity shared by two courses never picks one of them arbitrarily.
+ */
+export function occurrenceColor(o: Occurrence, by: CalendarColorBy): string | null {
+  if (by === 'goal') {
+    const colors = new Set(o.activity.goals.flatMap((g) => (g.color ? [g.color] : [])))
+    if (colors.size === 1) return [...colors][0]
+  }
+  return o.activity.category?.color ?? null
+}
+
 export type EventColors = { bgClass: string; bgHex?: string; leftColor: string; textClass: string }
 
-export function eventColors(o: Occurrence): EventColors {
-  const category = o.activity.category
-  if (category) {
+export function eventColors(o: Occurrence, by: CalendarColorBy): EventColors {
+  const color = occurrenceColor(o, by)
+  if (color) {
     return {
       bgClass: '',
-      bgHex: category.color,
-      leftColor: category.color,
+      bgHex: color,
+      leftColor: color,
       textClass: 'text-foreground',
     }
   }
   return { bgClass: 'bg-muted', leftColor: 'var(--color-border)', textClass: 'text-foreground' }
 }
 
-export function eventAllDayColors(o: Occurrence): { className: string; style?: CSSProperties } {
+export function eventAllDayColors(o: Occurrence, by: CalendarColorBy): { className: string; style?: CSSProperties } {
   // Skipped: an empty grey outline, matching the grid's skipped block.
   if (o.status === 'skipped') return { className: 'border border-muted-foreground/40 text-muted-foreground' }
-  const category = o.activity.category
-  const plannedBorder = o.isPlanned ? { border: `1px dashed ${category?.color ?? 'var(--color-primary)'}` } : undefined
-  if (category) {
-    return { className: 'text-foreground', style: { backgroundColor: category.color + '26', ...plannedBorder } }
+  const color = occurrenceColor(o, by)
+  const plannedBorder = o.isPlanned ? { border: `1px dashed ${color ?? 'var(--color-primary)'}` } : undefined
+  if (color) {
+    return { className: 'text-foreground', style: { backgroundColor: color + '26', ...plannedBorder } }
   }
   return { className: 'bg-primary/10 text-primary', style: plannedBorder }
 }

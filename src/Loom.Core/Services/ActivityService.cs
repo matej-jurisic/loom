@@ -144,6 +144,46 @@ public class ActivityService(LoomDbContext db)
         return Result<ActivityDto>.Success(ActivityDto.FromEntity(a));
     }
 
+    /// <summary>
+    /// A new activity with the source's category, goals, tags, repeat gap, subtask template and live
+    /// work types. Occurrences stay with the source: the copy starts with no history.
+    /// </summary>
+    public async Task<Result<ActivityDto>> DuplicateAsync(Guid id, Guid userId)
+    {
+        var src = await db.Activities
+            .Include(a => a.Category)
+            .Include(a => a.Goals)
+            .Include(a => a.Tags)
+            .Include(a => a.Subtasks)
+            .Include(a => a.WorkTypes)
+            .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId && a.Kind == ActivityKind.activity);
+        if (src is null) return Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."));
+
+        var title = $"{src.Title} (copy)";
+        var now = DateTimeOffset.UtcNow;
+        // Children are ordered by CreatedAt, so each copy gets a strictly increasing stamp.
+        var copy = new Activity
+        {
+            UserId = userId,
+            Title = title.Length > 255 ? src.Title : title,
+            CategoryId = src.CategoryId,
+            Category = src.Category,
+            RepeatAfterDays = src.RepeatAfterDays,
+            Goals = [.. src.Goals],
+            Tags = [.. src.Tags],
+            Subtasks = src.Subtasks.OrderBy(s => s.CreatedAt)
+                .Select((s, i) => new ActivitySubtask { Title = s.Title, CreatedAt = now.AddTicks(i) })
+                .ToList(),
+            WorkTypes = src.WorkTypes.Where(w => !w.IsArchived).OrderBy(w => w.CreatedAt)
+                .Select((w, i) => new ActivityWorkType { Title = w.Title, CreatedAt = now.AddTicks(i) })
+                .ToList(),
+        };
+
+        db.Activities.Add(copy);
+        await db.SaveChangesAsync();
+        return Result<ActivityDto>.Success(ActivityDto.FromEntity(copy));
+    }
+
     internal static async Task<Result<List<Goal>>> ResolveGoalsAsync(LoomDbContext db, Guid userId, List<Guid>? goalIds)
     {
         var ids = (goalIds ?? []).Distinct().ToList();

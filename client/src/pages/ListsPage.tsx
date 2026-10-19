@@ -11,6 +11,7 @@ import {
   NONE_FILTER,
   STATUS_OPTIONS,
   filterOccurrences,
+  listLook,
   viewFromList,
 } from '@/lib/occurrenceView'
 import { ListTile } from '@/components/lists/ListIcon'
@@ -116,7 +117,7 @@ export function ListsPage() {
                 <ul className="divide-y divide-border">
                   {lists.map((l) => (
                     <li key={l.id} className="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40">
-                      <ListTile icon={l.icon} color={l.color} />
+                      <ListTile look={listLook(l, goals, categories)} />
                       <Link to={`/occurrences/lists/${l.id}`} className="min-w-0 flex-1">
                         <span className="block truncate text-sm text-foreground">{l.name}</span>
                         <span className="block truncate text-xs text-muted-foreground">{describe(l)}</span>

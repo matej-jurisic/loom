@@ -76,6 +76,7 @@ public class UserSettingsService(LoomDbContext db)
         var settings = await GetOrCreateAsync(userId);
         settings.MaxFocusGoals = req.MaxFocusGoals;
         settings.DayBoundaryTime = boundary;
+        if (req.CalendarColorBy is { } colorBy) settings.CalendarColorBy = colorBy;
         user.Timezone = req.Timezone;
         await db.SaveChangesAsync();
 

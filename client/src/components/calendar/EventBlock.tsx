@@ -1,6 +1,7 @@
 import type { Occurrence } from '@/lib/types'
 import { timeLabel } from '@/lib/calendarDates'
-import { eventColors, isDueOccurrence } from '@/lib/calendarLayout'
+import { eventColors, isDueOccurrence, occurrenceColor } from '@/lib/calendarLayout'
+import { useCalendarColorBy } from '@/lib/useCalendarColorBy'
 import type { LayoutEvent } from '@/lib/calendarLayout'
 
 export function EventBlock({
@@ -21,12 +22,13 @@ export function EventBlock({
   isResizing?: boolean
 }) {
   const { event, col, totalCols, topPx, heightPx, trueEndPx } = layout
-  const { bgClass, bgHex, leftColor, textClass } = eventColors(event)
+  const colorBy = useCalendarColorBy()
+  const { bgClass, bgHex, leftColor, textClass } = eventColors(event, colorBy)
   const isDone = event.status === 'done'
   const isSkipped = event.status === 'skipped'
   const isPlanned = event.isPlanned
   const isDue = isDueOccurrence(event)
-  const accentColor = event.activity.category ? event.activity.category.color : 'var(--color-primary)'
+  const accentColor = occurrenceColor(event, colorBy) ?? 'var(--color-primary)'
   const isHex = accentColor.startsWith('#')
   const accentFaded = isHex ? `${accentColor}18` : `color-mix(in srgb, ${accentColor} 9%, transparent)`
   const accentMid   = isHex ? `${accentColor}60` : `color-mix(in srgb, ${accentColor} 38%, transparent)`

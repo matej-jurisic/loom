@@ -6,3 +6,5 @@ public enum CheckpointStatus { pending, reached }
 public enum CheckpointSize { tiny, small, normal, big, huge }
 public enum ActivityKind { activity, @event }
 
+public enum GoalKind { goal, track }
+public enum CalendarColorBy { category, goal }

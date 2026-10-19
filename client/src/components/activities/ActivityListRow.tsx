@@ -1,4 +1,4 @@
-import { Check, History, Pencil, Repeat, Trash2 } from 'lucide-react'
+import { Check, Copy, History, Pencil, Repeat, Trash2 } from 'lucide-react'
 import type { Activity } from '@/lib/types'
 import { Badge } from '@/components/ui/Badge'
 import { ActionMenu } from '@/components/ui/ActionMenu'
@@ -20,6 +20,7 @@ interface ActivityListRowProps {
   selected: boolean
   onToggleSelect: () => void
   onEdit: () => void
+  onDuplicate: () => void
   onDelete: () => void
   onHistory: () => void
   /** Hidden when the section already says it (grouping by that attribute). */
@@ -34,6 +35,7 @@ export function ActivityListRow({
   selected,
   onToggleSelect,
   onEdit,
+  onDuplicate,
   onDelete,
   onHistory,
   hideCategory,
@@ -139,6 +141,7 @@ export function ActivityListRow({
             items={[
               { icon: History, label: 'History', onClick: onHistory },
               { icon: Pencil, label: 'Edit', onClick: onEdit },
+              { icon: Copy, label: 'Duplicate', onClick: onDuplicate },
               'separator',
               { icon: Trash2, label: 'Delete', onClick: onDelete, destructive: true },
             ]}

@@ -3,15 +3,27 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Field } from '@/components/ui/Field'
+import { ColorPicker, IconPicker } from '@/components/categories/CategoryModal'
+import { inputCls } from '@/components/ui/input'
 import { goalsApi, ApiError } from '@/lib/api'
-import type { Goal } from '@/lib/types'
+import type { Goal, GoalKind } from '@/lib/types'
 import { invalidateGoals } from '@/lib/invalidate'
+import { GOAL_DEFAULT_ICON } from './GoalIcon'
 
 interface FormState {
   title: string
   description: string
   notes: string
+  kind: GoalKind
+  endDate: string
+  color: string | null
+  icon: string | null
 }
+
+const KIND_OPTIONS: { value: GoalKind; label: string }[] = [
+  { value: 'goal', label: 'Goal' },
+  { value: 'track', label: 'Track' },
+]
 
 interface Errors {
   title?: string
@@ -34,7 +46,7 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
   const qc = useQueryClient()
   const isEdit = Boolean(goal)
 
-  const [form, setForm] = useState<FormState>({ title: '', description: '', notes: '' })
+  const [form, setForm] = useState<FormState>({ title: '', description: '', notes: '', kind: 'goal', endDate: '', color: null, icon: null })
   const [errors, setErrors] = useState<Errors>({})
   const [apiError, setApiError] = useState('')
 
@@ -44,6 +56,10 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
         title: goal?.title ?? '',
         description: goal?.description ?? '',
         notes: goal?.notes ?? '',
+        kind: goal?.kind ?? 'goal',
+        endDate: goal?.endDate ?? '',
+        color: goal?.color ?? null,
+        icon: goal?.icon ?? null,
       })
       setErrors({})
       setApiError('')
@@ -56,6 +72,10 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
         title: form.title.trim(),
         description: form.description.trim() || null,
         notes: form.notes.trim() || null,
+        kind: form.kind,
+        endDate: form.endDate || null,
+        color: form.color,
+        icon: form.icon,
       }
       return isEdit ? goalsApi.update(goal!.id, payload) : goalsApi.create(payload)
     },
@@ -97,6 +117,35 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
         error={errors.title}
         autoFocus={!isEdit}
       />
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-foreground">Kind</label>
+          <div className="flex overflow-hidden rounded-md border border-border">
+            {KIND_OPTIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, kind: value }))}
+                className={`border-l border-border px-3 py-1.5 text-xs font-medium transition-colors first:border-l-0 ${
+                  form.kind === value ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label className="text-sm font-medium text-foreground">End date</label>
+          <input
+            type="date"
+            lang="en-GB"
+            value={form.endDate}
+            onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
+            className={inputCls}
+          />
+        </div>
+      </div>
       <div className="flex flex-col gap-1.5">
         <label className="text-sm font-medium text-foreground">Description</label>
         <textarea
@@ -115,6 +164,19 @@ export function GoalModal({ open, onClose, goal }: GoalModalProps) {
           placeholder="Optional: plans, links, reminders."
           rows={4}
           className="rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+        />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-medium text-foreground">Color</label>
+        <ColorPicker value={form.color} onChange={(color) => setForm((f) => ({ ...f, color }))} onClear={() => setForm((f) => ({ ...f, color: null }))} />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <label className="text-sm font-medium text-foreground">Icon</label>
+        <IconPicker
+          value={form.icon}
+          color={form.color ?? 'var(--color-primary)'}
+          onChange={(icon) => setForm((f) => ({ ...f, icon }))}
+          noneIcon={GOAL_DEFAULT_ICON}
         />
       </div>
       {apiError && <p className="text-sm text-destructive">{apiError}</p>}

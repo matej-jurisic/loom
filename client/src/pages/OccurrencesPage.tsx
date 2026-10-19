@@ -181,7 +181,7 @@ function ListView({ list }: { list: OccurrenceList }) {
   const dirty = !sameView(view, saved)
 
   const saveMutation = useMutation({
-    mutationFn: () => listsApi.update(list.id, listBody(list, view)),
+    mutationFn: () => listsApi.update(list.id, listBody(list.name, view)),
     onSuccess: () => invalidateLists(qc),
     onError: (err) => toastError(err, 'Could not save the list.'),
   })

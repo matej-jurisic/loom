@@ -21,9 +21,9 @@ public sealed record CategorySummaryDto(Guid Id, string Name, string Color, stri
     public static CategorySummaryDto FromEntity(Entities.Category c) => new(c.Id, c.Name, c.Color, c.Icon);
 }
 
-public sealed record GoalSummaryDto(Guid Id, string Title, string Status)
+public sealed record GoalSummaryDto(Guid Id, string Title, string Status, string Kind, string? Color, string? Icon)
 {
-    public static GoalSummaryDto FromEntity(Goal g) => new(g.Id, g.Title, g.Status.ToString());
+    public static GoalSummaryDto FromEntity(Goal g) => new(g.Id, g.Title, g.Status.ToString(), g.Kind.ToString(), g.Color, g.Icon);
 }
 
 public sealed record TagDto(Guid Id, string Name)
@@ -36,15 +36,14 @@ public sealed record UpdateTagRequest(string Name);
 
 // Lists — saved filter presets of the Occurrences page; the client does the filtering.
 public sealed record OccurrenceListDto(
-    Guid Id, string Name, string? Icon, string? Color, string Status, string? Category, string? Tag, string? Goal, string? Search, string? GroupBy)
+    Guid Id, string Name, string Status, string? Category, string? Tag, string? Goal, string? Search, string? GroupBy)
 {
     public static OccurrenceListDto FromEntity(OccurrenceList l) =>
-        new(l.Id, l.Name, l.Icon, l.Color, l.Status, l.Category, l.Tag, l.Goal, l.Search, l.GroupBy);
+        new(l.Id, l.Name, l.Status, l.Category, l.Tag, l.Goal, l.Search, l.GroupBy);
 }
 
 public sealed record SaveOccurrenceListRequest(
-    string Name, string? Status, string? Category, string? Tag, string? Goal, string? Search, string? GroupBy,
-    string? Icon = null, string? Color = null);
+    string Name, string? Status, string? Category, string? Tag, string? Goal, string? Search, string? GroupBy);
 
 // Activities
 public sealed record ActivityDto(
@@ -273,27 +272,38 @@ public sealed record GoalDto(
     string? Description,
     string? Notes,
     string Status,
+    string Kind,
+    DateOnly? EndDate,
+    string? Color,
+    string? Icon,
     DateTimeOffset CreatedAt,
     List<CheckpointDto> Checkpoints,
     GoalOccurrenceStats? OccurrenceStats = null,
     DateTimeOffset? LastOccurrenceAt = null,
     GoalHeatmap? Heatmap = null,
-    int? DaysSinceLastOccurrence = null)
+    int? DaysSinceLastOccurrence = null,
+    // EndDate minus the user's today: 0 on the last day, negative once it has passed.
+    int? DaysUntilEnd = null)
 {
     public static GoalDto FromEntity(
         Goal g,
         GoalOccurrenceStats? stats = null,
         DateTimeOffset? lastOccurrenceAt = null,
         GoalHeatmap? heatmap = null,
-        int? daysSinceLastOccurrence = null) => new(
+        int? daysSinceLastOccurrence = null,
+        int? daysUntilEnd = null) => new(
         g.Id, g.UserId, g.Title, g.Description, g.Notes,
-        g.Status.ToString(), g.CreatedAt,
+        g.Status.ToString(), g.Kind.ToString(), g.EndDate, g.Color, g.Icon, g.CreatedAt,
         g.Checkpoints.Select(CheckpointDto.FromEntity).ToList(),
-        stats, lastOccurrenceAt, heatmap, daysSinceLastOccurrence);
+        stats, lastOccurrenceAt, heatmap, daysSinceLastOccurrence, daysUntilEnd);
 }
 
-public sealed record CreateGoalRequest(string Title, string? Description, string? Notes = null);
-public sealed record UpdateGoalRequest(string Title, string? Description, string? Notes = null);
+public sealed record CreateGoalRequest(
+    string Title, string? Description, string? Notes = null,
+    GoalKind Kind = GoalKind.goal, DateOnly? EndDate = null, string? Color = null, string? Icon = null);
+public sealed record UpdateGoalRequest(
+    string Title, string? Description, string? Notes = null,
+    GoalKind Kind = GoalKind.goal, DateOnly? EndDate = null, string? Color = null, string? Icon = null);
 public sealed record SetGoalStatusRequest(GoalStatus Status);
 
 // Checkpoints
@@ -385,11 +395,12 @@ public sealed record ExportDto(
 
 // UserSettings
 public sealed record UserSettingsDto(
-    Guid UserId, int MaxFocusGoals, string DayBoundaryTime, string Timezone)
+    Guid UserId, int MaxFocusGoals, string DayBoundaryTime, string Timezone, string CalendarColorBy)
 {
     public static UserSettingsDto FromEntity(UserSettings us, string timezone) => new(
-        us.UserId, us.MaxFocusGoals, us.DayBoundaryTime.ToString("HH:mm"), timezone);
+        us.UserId, us.MaxFocusGoals, us.DayBoundaryTime.ToString("HH:mm"), timezone, us.CalendarColorBy.ToString());
 }
 
+// CalendarColorBy null keeps the stored value, so a client that predates it can still save settings.
 public sealed record UpdateUserSettingsRequest(
-    int MaxFocusGoals, string DayBoundaryTime, string Timezone);
+    int MaxFocusGoals, string DayBoundaryTime, string Timezone, CalendarColorBy? CalendarColorBy = null);

@@ -13,8 +13,6 @@ public class OccurrenceListService(LoomDbContext db)
     private static readonly string[] GroupBys = ["when", "category", "tag", "goal", "activity", "none"];
     private const string NoneFilter = "none";
     private const int MaxSearchLength = 255;
-    // Icon names are the client's (categoryIcons.tsx); the server only bounds the length, as for categories.
-    private const int MaxIconLength = 50;
 
     public async Task<List<OccurrenceListDto>> ListAsync(Guid userId)
     {
@@ -80,13 +78,6 @@ public class OccurrenceListService(LoomDbContext db)
         if (search is { Length: > MaxSearchLength })
             return new Error(ErrorType.Validation, $"Search cannot exceed {MaxSearchLength} characters.");
 
-        var icon = Blank(req.Icon);
-        if (icon is { Length: > MaxIconLength })
-            return new Error(ErrorType.Validation, $"Icon cannot exceed {MaxIconLength} characters.");
-
-        var color = Blank(req.Color);
-        if (color is not null && Validators.ValidateColor(color) is { } colorErr) return colorErr;
-
         var category = Blank(req.Category);
         var tag = Blank(req.Tag);
         var goal = Blank(req.Goal);
@@ -98,8 +89,6 @@ public class OccurrenceListService(LoomDbContext db)
             return new Error(ErrorType.Validation, "Goal not found.");
 
         list.Name = name;
-        list.Icon = icon;
-        list.Color = color;
         list.Status = status;
         list.Category = category is null or NoneFilter ? category : Guid.Parse(category).ToString();
         list.Tag = tag is null or NoneFilter ? tag : Guid.Parse(tag).ToString();

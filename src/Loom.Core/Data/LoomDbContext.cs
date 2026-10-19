@@ -98,6 +98,14 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
             .Property(g => g.Status)
             .HasConversion<string>();
 
+        modelBuilder.Entity<Goal>()
+            .Property(g => g.Kind)
+            .HasConversion<string>();
+
+        modelBuilder.Entity<UserSettings>()
+            .Property(us => us.CalendarColorBy)
+            .HasConversion<string>();
+
         modelBuilder.Entity<Checkpoint>()
             .Property(c => c.Status)
             .HasConversion<string>();

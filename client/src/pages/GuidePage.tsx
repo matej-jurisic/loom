@@ -1,4 +1,4 @@
-import { Hash, Layers, ListChecks, ListTodo, Shapes, Target, Timer } from 'lucide-react'
+import { Hash, Layers, ListChecks, ListTodo, Route, Shapes, Target, Timer } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { PageHeader } from '@/components/layout/PageHeader'
 
@@ -48,6 +48,13 @@ const organise: Term[] = [
     what: 'What you are working toward.',
     relation: 'Any number per activity. Every done occurrence counts toward all its goals.',
     example: 'Finish thesis',
+  },
+  {
+    name: 'Track',
+    Icon: Route,
+    what: 'A goal with no finish line.',
+    relation: 'Groups activities like a goal. Only active or closed, never stale, left out of Goal activity.',
+    example: 'Linear Algebra',
   },
 ]
 
