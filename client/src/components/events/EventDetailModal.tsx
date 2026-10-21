@@ -361,15 +361,11 @@ const statusMutation = useMutation({
                 disabled={busy}
                 aria-label="Mark done"
                 title="Mark done"
-                className="group flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-muted disabled:opacity-50"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {statusMutation.isPending
-                  ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                  : (
-                    <span className="flex h-5 w-5 items-center justify-center rounded-[5px] border-2 border-border bg-background text-primary transition-colors group-hover:border-primary">
-                      <Check className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" strokeWidth={3} />
-                    </span>
-                  )}
+                  ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  : <Check className="h-4 w-4" strokeWidth={2.5} />}
               </button>
               {!isFloat && (
                 <button
@@ -378,7 +374,7 @@ const statusMutation = useMutation({
                   disabled={busy}
                   aria-label="Skip"
                   title="Skip"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                 >
                   <X className="h-4 w-4" strokeWidth={2.5} />
                 </button>

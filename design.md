@@ -90,7 +90,7 @@ A 240px sidebar (`w-60`, sticky, white, 1px right border) beside a fluid white c
   occurrence dialog has the same picker, with the activity's own tags listed beneath as "Also from the activity".
 - **Repeat ("do again"):** the activity dialog has "Do again after (optional)", a `w-20` numeric input with a `days` suffix and placeholder `Off`
   (invalid turns the border destructive with an error below), and a "Show as overdue" checkbox. The detail modal footer reads, left to right: Delete,
-  then the "Again <date>" checkbox (ticked every time it opens), the `...` menu, a done checkbox and a skip `X` icon button;
+  then the "Again <date>" checkbox (ticked every time it opens), the `...` menu, a round filled primary Done button with a check icon, and a round bordered skip `X` button;
   Skip is not in the menu. Activity rows show a `Repeat` icon and "again after 7 days".
 - **Reminders:** the same `rounded-full` toggle chips as tags, one per preset offset (On time, 5 min ... 1 week; a stored non-preset
   offset gets its own chip), unselected ones dimmed once 5 are picked. "Reminders (optional)" in the activity dialog after "Do again after",
