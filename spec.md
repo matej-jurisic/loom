@@ -270,6 +270,16 @@ reminds about something the user already put on the calendar and creates nothing
   pruned on the next send. Without a Firebase credential on the server nothing is sent and the
   scheduler stays idle. `POST /api/notifications/test` sends a test notification to the caller's devices.
 
+### Daily overdue notification
+
+Optional (`dailyDigestTime`, "HH:mm" in the user's timezone, off by default). Once a day, at or within an
+hour after that time, `NotificationService.SendDailyDigestsAsync` sends one push to the user's devices
+listing what is overdue right then (`isOverdue` rules, so activities with "Show as overdue" off are
+left out): the title is the count, the body the first three titles plus "+N more". Nothing is sent
+when nothing is overdue. It is sent at most once per local date (`LastDigestDate`, reset when the time
+is changed), and a missed window is not made up. A tap opens `/plan`. It creates nothing and reads only
+what the user already put on the calendar.
+
 ### Overdue
 
 An occurrence is overdue when it is pending, not planned, has a start, and:
@@ -658,6 +668,7 @@ averaged over days.
 | Max focus goals | Hard limit on simultaneous Focus goals, 1-20. |
 | Theme | Light / dark / system. Client-side preference in `localStorage`, defaults to system. |
 | Calendar colours | `category` (default) or `goal`, saved on its own when picked. By goal, an occurrence takes its activity's goal colour when its coloured goals agree on one colour; none, or two different ones, falls back to the category colour (`occurrenceColor` in `lib/calendarLayout.ts`). Only the calendar follows it. A PUT without `calendarColorBy` keeps the stored value. |
+| Daily overdue reminder | Native shells only: a switch and a time for the daily overdue notification. Saved with the planning values; a PUT without `dailyDigestTime` keeps it, `null` turns it off. |
 | Server URL | Native shells only: where the app points its API calls. |
 | Notifications | Native shells only: sends a test notification to this account's devices. |
 | Export data | Downloads `loom-export-<date>.json`. |

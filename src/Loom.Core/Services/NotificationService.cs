@@ -14,6 +14,8 @@ public class NotificationService(LoomDbContext db, UserSettingsService settings,
     /// restart, without a burst of stale reminders after a long outage.</summary>
     public static readonly TimeSpan Grace = TimeSpan.FromMinutes(10);
 
+    public static readonly TimeSpan DigestWindow = TimeSpan.FromHours(1);
+
     /// <summary>Delivery records older than this can no longer matter (their fire time is past the grace).</summary>
     private static readonly TimeSpan DeliveryRetention = TimeSpan.FromDays(2);
 
@@ -105,6 +107,55 @@ public class NotificationService(LoomDbContext db, UserSettingsService settings,
 
         await db.SaveChangesAsync(ct);
         return notified;
+    }
+
+    public async Task<int> SendDailyDigestsAsync(DateTimeOffset nowUtc, CancellationToken ct = default)
+    {
+        var userIds = await db.PushDevices.Select(d => d.UserId).Distinct().ToListAsync(ct);
+        var notified = 0;
+
+        foreach (var userId in userIds)
+        {
+            var prefs = await db.UserSettings.FirstOrDefaultAsync(s => s.UserId == userId, ct);
+            if (prefs?.DailyDigestTime is not { } digestTime) continue;
+
+            var ctx = await settings.GetDayContextAsync(userId);
+            var local = TimeZoneInfo.ConvertTime(nowUtc, ctx.TimeZone);
+            var today = DateOnly.FromDateTime(local.DateTime);
+            var sinceDigest = TimeOnly.FromDateTime(local.DateTime).ToTimeSpan() - digestTime.ToTimeSpan();
+            if (sinceDigest < TimeSpan.Zero || sinceDigest > DigestWindow || prefs.LastDigestDate == today) continue;
+
+            prefs.LastDigestDate = today;
+
+            var overdue = (await db.Occurrences
+                    .AsNoTracking()
+                    .Include(o => o.Activity)
+                    .Where(o => o.UserId == userId && o.Status == EventStatus.pending && o.StartAt != null)
+                    .ToListAsync(ct))
+                .Where(o => o.Activity.ShowAsOverdue && DayMath.IsOverdue(o, ctx, nowUtc))
+                .OrderBy(o => o.StartAt)
+                .ToList();
+
+            if (overdue.Count > 0)
+            {
+                var devices = await db.PushDevices.Where(d => d.UserId == userId).ToListAsync(ct);
+                await SendToDevicesAsync(devices, DigestMessage(overdue), ct);
+                notified++;
+            }
+
+            await db.SaveChangesAsync(ct);
+        }
+
+        return notified;
+    }
+
+    public static PushMessage DigestMessage(List<Occurrence> overdue)
+    {
+        const int shown = 3;
+        var titles = string.Join(", ", overdue.Take(shown).Select(o => o.Title ?? o.Activity.Title));
+        var more = overdue.Count > shown ? $" +{overdue.Count - shown} more" : "";
+        var title = overdue.Count == 1 ? "1 overdue item" : $"{overdue.Count} overdue items";
+        return new PushMessage(title, titles + more, "/plan");
     }
 
     /// <summary>Sends to each device, removing any whose token is gone. The caller saves.</summary>

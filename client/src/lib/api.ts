@@ -262,7 +262,7 @@ export const notificationsApi = {
 
 export const settingsApi = {
   get: () => request<UserSettings>('/api/settings'),
-  update: (body: { maxFocusGoals: number; dayBoundaryTime: string; timezone: string; calendarColorBy: CalendarColorBy }) =>
+  update: (body: { maxFocusGoals: number; dayBoundaryTime: string; timezone: string; calendarColorBy: CalendarColorBy; dailyDigestTime?: string | null }) =>
     request<UserSettings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
 }
 

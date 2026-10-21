@@ -266,4 +266,5 @@ export interface UserSettings {
   dayBoundaryTime: string // "HH:mm"
   timezone: string // IANA id
   calendarColorBy: CalendarColorBy
+  dailyDigestTime: string | null // "HH:mm", null = off
 }

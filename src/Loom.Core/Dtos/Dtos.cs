@@ -417,12 +417,16 @@ public sealed record ExportDto(
 
 // UserSettings
 public sealed record UserSettingsDto(
-    Guid UserId, int MaxFocusGoals, string DayBoundaryTime, string Timezone, string CalendarColorBy)
+    Guid UserId, int MaxFocusGoals, string DayBoundaryTime, string Timezone, string CalendarColorBy,
+    string? DailyDigestTime = null)
 {
     public static UserSettingsDto FromEntity(UserSettings us, string timezone) => new(
-        us.UserId, us.MaxFocusGoals, us.DayBoundaryTime.ToString("HH:mm"), timezone, us.CalendarColorBy.ToString());
+        us.UserId, us.MaxFocusGoals, us.DayBoundaryTime.ToString("HH:mm"), timezone, us.CalendarColorBy.ToString(),
+        us.DailyDigestTime?.ToString("HH:mm"));
 }
 
 // CalendarColorBy null keeps the stored value, so a client that predates it can still save settings.
+// DailyDigestTime absent keeps it, an explicit null turns the digest off.
 public sealed record UpdateUserSettingsRequest(
-    int MaxFocusGoals, string DayBoundaryTime, string Timezone, CalendarColorBy? CalendarColorBy = null);
+    int MaxFocusGoals, string DayBoundaryTime, string Timezone, CalendarColorBy? CalendarColorBy = null,
+    Optional<string?> DailyDigestTime = default);

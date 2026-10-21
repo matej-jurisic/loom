@@ -8,5 +8,7 @@ public class UserSettings
     public int MaxFocusGoals { get; set; } = 3;
     public TimeOnly DayBoundaryTime { get; set; } = TimeOnly.MinValue;
     public CalendarColorBy CalendarColorBy { get; set; } = CalendarColorBy.category;
+    public TimeOnly? DailyDigestTime { get; set; }
+    public DateOnly? LastDigestDate { get; set; }
     public User User { get; set; } = null!;
 }

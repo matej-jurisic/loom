@@ -52,7 +52,9 @@ export function SettingsPage() {
     queryFn: settingsApi.get,
   })
 
-  const [form, setForm] = useState({ timezone: '', dayBoundaryTime: '00:00', maxFocusGoals: 3 })
+  const [form, setForm] = useState<{ timezone: string; dayBoundaryTime: string; maxFocusGoals: number; dailyDigestTime: string | null }>(
+    { timezone: '', dayBoundaryTime: '00:00', maxFocusGoals: 3, dailyDigestTime: null },
+  )
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
@@ -61,6 +63,7 @@ export function SettingsPage() {
         timezone: settings.timezone,
         dayBoundaryTime: settings.dayBoundaryTime,
         maxFocusGoals: settings.maxFocusGoals,
+        dailyDigestTime: settings.dailyDigestTime,
       })
     }
   }, [settings])
@@ -81,6 +84,7 @@ export function SettingsPage() {
       dayBoundaryTime: settings!.dayBoundaryTime,
       timezone: settings!.timezone,
       calendarColorBy,
+      dailyDigestTime: settings!.dailyDigestTime,
     }),
     onSuccess: (updated) => qc.setQueryData(['settings'], updated),
     onError: (err) => toastError(err),
@@ -188,6 +192,26 @@ export function SettingsPage() {
                     className={`${inputCls} w-16 text-center`}
                   />
                 </SettingRow>
+
+                {isNative() && (
+                  <SettingRow label="Daily overdue reminder" hint="A notification with what is still overdue. Tap to open the plan.">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={form.dailyDigestTime !== null}
+                        onChange={(e) => { setSaved(false); setForm((f) => ({ ...f, dailyDigestTime: e.target.checked ? '09:00' : null })) }}
+                      />
+                      <input
+                        type="time"
+                        lang="en-GB"
+                        disabled={form.dailyDigestTime === null}
+                        value={form.dailyDigestTime ?? '09:00'}
+                        onChange={(e) => { setSaved(false); setForm((f) => ({ ...f, dailyDigestTime: e.target.value || null })) }}
+                        className={inputCls}
+                      />
+                    </div>
+                  </SettingRow>
+                )}
 
                 <SectionFooter
                   status={saved && !saveMutation.isPending ? 'Changes saved.' : undefined}

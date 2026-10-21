@@ -3,7 +3,7 @@ using Loom.Core.Services;
 
 namespace Loom.Api;
 
-/// <summary>Sends due occurrence reminders every 30 seconds. Idle when no Firebase credential is set.</summary>
+/// <summary>Sends due occurrence reminders and daily overdue digests every 30 seconds. Idle when no Firebase credential is set.</summary>
 public class ReminderScheduler(IServiceScopeFactory scopes, IPushSender sender, ILogger<ReminderScheduler> logger)
     : BackgroundService
 {
@@ -24,8 +24,11 @@ public class ReminderScheduler(IServiceScopeFactory scopes, IPushSender sender, 
             {
                 using var scope = scopes.CreateScope();
                 var notifications = scope.ServiceProvider.GetRequiredService<NotificationService>();
-                var sent = await notifications.SendDueRemindersAsync(DateTimeOffset.UtcNow, stoppingToken);
+                var now = DateTimeOffset.UtcNow;
+                var sent = await notifications.SendDueRemindersAsync(now, stoppingToken);
                 if (sent > 0) logger.LogInformation("Sent {Count} reminder(s).", sent);
+                var digests = await notifications.SendDailyDigestsAsync(now, stoppingToken);
+                if (digests > 0) logger.LogInformation("Sent {Count} daily digest(s).", digests);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Loom.Core.Common;
 using Loom.Core.Dtos;
 using Loom.Core.Entities;
@@ -222,6 +223,63 @@ public class ReminderTests : IDisposable
         await _notifications.SendDueRemindersAsync(Start);
 
         Assert.Equal(["live"], _ctx.Db.PushDevices.Select(d => d.Token).ToList());
+    }
+
+    private async Task SetDigestAsync(Guid userId, string? time) =>
+        await _ctx.UserSettingsService.UpdateAsync(userId, new UpdateUserSettingsRequest(
+            3, "00:00", "UTC", DailyDigestTime: new Optional<string?>(true, time)));
+
+    [Fact]
+    public async Task SendDailyDigestsAsync_sends_overdue_once_a_day_at_the_chosen_time()
+    {
+        var userId = await CreateUserAsync();
+        await _notifications.RegisterDeviceAsync(userId, "tok");
+        var activity = await CreateActivityAsync(userId, null);
+        await CreateOccurrenceAsync(userId, activity.Id, Start, Start.AddHours(1));
+        await SetDigestAsync(userId, "18:00");
+        var day = DateTimeOffset.Parse("2026-06-02T00:00:00Z");
+
+        Assert.Equal(0, await _notifications.SendDailyDigestsAsync(day.AddHours(17)));
+        Assert.Equal(1, await _notifications.SendDailyDigestsAsync(day.AddHours(18)));
+        Assert.Equal(0, await _notifications.SendDailyDigestsAsync(day.AddHours(18).AddMinutes(1)));
+
+        var (token, message) = Assert.Single(_sender.Sent);
+        Assert.Equal("tok", token);
+        Assert.Equal("1 overdue item", message.Title);
+        Assert.Equal("Gym", message.Body);
+        Assert.Equal("/plan", message.Url);
+
+        Assert.Equal(1, await _notifications.SendDailyDigestsAsync(day.AddDays(1).AddHours(18)));
+    }
+
+    [Fact]
+    public async Task SendDailyDigestsAsync_stays_quiet_with_nothing_overdue_or_the_digest_off()
+    {
+        var userId = await CreateUserAsync();
+        await _notifications.RegisterDeviceAsync(userId, "tok");
+        var activity = await CreateActivityAsync(userId, null);
+        await CreateOccurrenceAsync(userId, activity.Id, Start, Start.AddHours(1));
+        var evening = DateTimeOffset.Parse("2026-06-02T18:00:00Z");
+
+        Assert.Equal(0, await _notifications.SendDailyDigestsAsync(evening));
+
+        await SetDigestAsync(userId, "18:00");
+        await _ctx.Db.Occurrences.ExecuteDeleteAsync();
+
+        Assert.Equal(0, await _notifications.SendDailyDigestsAsync(evening));
+        Assert.Empty(_sender.Sent);
+    }
+
+    [Fact]
+    public async Task SendDailyDigestsAsync_skips_a_digest_time_that_passed_long_ago()
+    {
+        var userId = await CreateUserAsync();
+        await _notifications.RegisterDeviceAsync(userId, "tok");
+        var activity = await CreateActivityAsync(userId, null);
+        await CreateOccurrenceAsync(userId, activity.Id, Start, Start.AddHours(1));
+        await SetDigestAsync(userId, "08:00");
+
+        Assert.Equal(0, await _notifications.SendDailyDigestsAsync(DateTimeOffset.Parse("2026-06-02T12:00:00Z")));
     }
 
     [Fact]

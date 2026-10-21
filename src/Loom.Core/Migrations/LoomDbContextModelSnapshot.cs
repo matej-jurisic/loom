@@ -551,8 +551,14 @@ namespace Loom.Core.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<TimeOnly?>("DailyDigestTime")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("DayBoundaryTime")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateOnly?>("LastDigestDate")
                         .HasColumnType("TEXT");
 
                     b.Property<int>("MaxFocusGoals")

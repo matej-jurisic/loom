@@ -67,6 +67,14 @@ public class UserSettingsService(LoomDbContext db)
         if (!TimeOnly.TryParseExact(req.DayBoundaryTime, ["HH:mm", "H:mm"], out var boundary))
             return Result<UserSettingsDto>.Fail(new Error(ErrorType.Validation, "Day boundary time must be in HH:mm format."));
 
+        TimeOnly? digest = null;
+        if (req.DailyDigestTime is { IsSet: true, Value: { } digestText })
+        {
+            if (!TimeOnly.TryParseExact(digestText, ["HH:mm", "H:mm"], out var parsed))
+                return Result<UserSettingsDto>.Fail(new Error(ErrorType.Validation, "Daily notification time must be in HH:mm format."));
+            digest = parsed;
+        }
+
         var err = Validators.ValidateTimezone(req.Timezone);
         if (err is not null) return Result<UserSettingsDto>.Fail(err);
 
@@ -77,6 +85,11 @@ public class UserSettingsService(LoomDbContext db)
         settings.MaxFocusGoals = req.MaxFocusGoals;
         settings.DayBoundaryTime = boundary;
         if (req.CalendarColorBy is { } colorBy) settings.CalendarColorBy = colorBy;
+        if (req.DailyDigestTime.IsSet && settings.DailyDigestTime != digest)
+        {
+            settings.DailyDigestTime = digest;
+            settings.LastDigestDate = null;
+        }
         user.Timezone = req.Timezone;
         await db.SaveChangesAsync();
 
