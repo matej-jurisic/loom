@@ -245,6 +245,27 @@ const statusMutation = useMutation({
             message={`"${occurrence.effectiveTitle}" will be permanently deleted.`}
           />
 
+          {nextRepeat && (
+            <button
+              type="button"
+              role="checkbox"
+              aria-checked={addNext}
+              onClick={() => setAddNext((v) => !v)}
+              disabled={busy}
+              title="Add the next occurrence when this one is done"
+              className="flex h-9 min-w-0 items-center gap-1.5 rounded-lg px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+            >
+              <span
+                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors ${
+                  addNext ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background'
+                }`}
+              >
+                {addNext && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+              </span>
+              <span className="truncate">Again {formatDay(nextRepeat)}</span>
+            </button>
+          )}
+
           <button
             ref={moreButtonRef}
             onClick={openMore}
@@ -328,49 +349,40 @@ const statusMutation = useMutation({
                   No date
                 </button>
               )}
-              {isPending && !isFloat && (
-                <button
-                  onClick={() => { setMoreOpen(false); setSkipOpen(true) }}
-                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
-                >
-                  <X className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2.5} />
-                  Skip
-                </button>
-              )}
             </div>,
             document.body,
           )}
 
           {isPending ? (
             <>
-              {nextRepeat && (
+              <button
+                type="button"
+                onClick={() => statusMutation.mutate('done')}
+                disabled={busy}
+                aria-label="Mark done"
+                title="Mark done"
+                className="group flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                {statusMutation.isPending
+                  ? <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  : (
+                    <span className="flex h-5 w-5 items-center justify-center rounded-[5px] border-2 border-border bg-background text-primary transition-colors group-hover:border-primary">
+                      <Check className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" strokeWidth={3} />
+                    </span>
+                  )}
+              </button>
+              {!isFloat && (
                 <button
                   type="button"
-                  role="checkbox"
-                  aria-checked={addNext}
-                  onClick={() => setAddNext((v) => !v)}
+                  onClick={() => setSkipOpen(true)}
                   disabled={busy}
-                  title="Add the next occurrence when this one is done"
-                  className="flex h-9 min-w-0 items-center gap-1.5 rounded-lg px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                  aria-label="Skip"
+                  title="Skip"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                 >
-                  <span
-                    className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border transition-colors ${
-                      addNext ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background'
-                    }`}
-                  >
-                    {addNext && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
-                  </span>
-                  <span className="truncate">Again {formatDay(nextRepeat)}</span>
+                  <X className="h-4 w-4" strokeWidth={2.5} />
                 </button>
               )}
-              <Button
-                onClick={() => statusMutation.mutate('done')}
-                loading={statusMutation.isPending && statusMutation.variables === 'done'}
-                disabled={deleteMutation.isPending}
-              >
-                <Check className="mr-1.5 h-3.5 w-3.5" strokeWidth={2.5} />
-                Done
-              </Button>
             </>
           ) : (
             <Button

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import { occurrencesApi } from '@/lib/api'
 import type { Occurrence } from '@/lib/types'
 import { invalidateOccurrences } from '@/lib/invalidate'
-import { nextRepeatDate } from '@/lib/repeat'
+import { nextRepeatFor } from '@/lib/repeat'
 
 function formatDateInput(d: Date): string {
   const z = (n: number) => String(n).padStart(2, '0')
@@ -13,11 +13,9 @@ function formatDateInput(d: Date): string {
 }
 
 function defaultDate(occurrence: Occurrence): string {
+  const nextRepeat = nextRepeatFor(occurrence)
+  if (nextRepeat) return formatDateInput(nextRepeat)
   const ref = occurrence.startAt ?? occurrence.endAt
-  const repeatAfterDays = occurrence.activity.repeatAfterDays
-  if (repeatAfterDays) {
-    return formatDateInput(nextRepeatDate(ref ? new Date(ref) : null, repeatAfterDays, new Date()))
-  }
   const base = ref ? new Date(ref) : new Date()
   base.setDate(base.getDate() + 1)
   return formatDateInput(base)
@@ -39,11 +37,11 @@ interface SkipRescheduleModalProps {
 
 export function SkipRescheduleModal({ open, onClose, occurrence, onDone }: SkipRescheduleModalProps) {
   const qc = useQueryClient()
-  const [date, setDate] = useState('')
+  const [date, setDate] = useState(() => (occurrence ? defaultDate(occurrence) : ''))
 
   useEffect(() => {
     if (occurrence) setDate(defaultDate(occurrence))
-  }, [occurrence])
+  }, [occurrence?.id])
 
   const mutation = useMutation({
     mutationFn: async (reschedule: boolean) => {

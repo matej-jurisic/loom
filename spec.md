@@ -311,7 +311,7 @@ there is no series and no backlog to catch up on.
 
 - **On completion**, marking an occurrence of such an activity done also adds the next one: the
   client follows the status change with `POST /api/occurrences/{id}/repeat`, which creates one pending
-  copy. The detail modal shows an "Again <date>" checkbox beside Done, ticked by default, and unticking
+  copy. The detail modal shows an "Again <date>" checkbox, ticked by default, and unticking
   it completes without a copy. The one-tap checkbox on a list row always adds it. Either way a toast
   names the date and offers Undo, which deletes the copy.
 - A pending occurrence of the same activity already on that day makes the endpoint a 409 and nothing
@@ -327,8 +327,8 @@ there is no series and no backlog to catch up on.
   copied.
 - The endpoint rejects an occurrence that is not done, an activity with no gap set, and events.
   Re-opening the completed occurrence afterwards leaves the copy in place.
-- **On skip**, the skip modal's default date becomes that same date in place of the day after the
-  occurrence's own.
+- **On skip**, the skip modal's default date becomes that same "Again" date in place of the day after
+  the occurrence's own.
 
 **Duplicate.** The occurrence detail modal and the Occurrences page row menu duplicate into a pre-filled create modal. No backend
 support is needed: it is a create with copied fields.
