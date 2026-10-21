@@ -426,10 +426,7 @@ export function GoalsPage() {
                   <path d="M12 3v2M12 19v2M3 12h2M19 12h2" />
                 </svg>
               </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">No goals yet</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">Create your first goal to start tracking progress.</p>
-              </div>
+              <p className="text-sm font-medium text-foreground">No goals yet</p>
               <button onClick={() => setGoalModal({ open: true })} className="flex h-8 items-center gap-1.5 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted transition-colors">
                 <Plus className="h-3.5 w-3.5" strokeWidth={2} /> New Goal
               </button>

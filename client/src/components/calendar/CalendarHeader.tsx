@@ -232,7 +232,7 @@ export function CalendarHeader({
               The needle rotates to the current position instead of listing three labels. */}
           <button
             onClick={onCycleView}
-            aria-label={`Calendar range: ${VIEW_OPTIONS.find((o) => o.value === view)?.label}. Tap to change.`}
+            aria-label={`Calendar range: ${VIEW_OPTIONS.find((o) => o.value === view)?.label}`}
             className="sm:hidden flex h-8 w-[86px] shrink-0 items-center gap-1.5 rounded-md border border-border px-2 text-xs text-foreground hover:bg-muted transition-colors"
           >
             <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0" fill="none">

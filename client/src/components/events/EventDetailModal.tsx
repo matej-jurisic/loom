@@ -242,7 +242,7 @@ const statusMutation = useMutation({
             onConfirm={() => deleteMutation.mutate()}
             loading={deleteMutation.isPending}
             title="Delete occurrence?"
-            message={`"${occurrence.effectiveTitle}" will be permanently deleted. This cannot be undone.`}
+            message={`"${occurrence.effectiveTitle}" will be permanently deleted.`}
           />
 
           <button

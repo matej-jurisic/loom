@@ -41,8 +41,7 @@ export function LoginPage() {
           </div>
           <span className="text-base font-semibold tracking-tight text-foreground">Loom</span>
         </div>
-        <h1 className="mb-1 text-xl font-semibold text-foreground">Sign in</h1>
-        <p className="mb-6 text-sm text-muted-foreground">Welcome back. Enter your credentials to continue.</p>
+        <h1 className="mb-6 text-xl font-semibold text-foreground">Sign in</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {isNative() && (
             <Field

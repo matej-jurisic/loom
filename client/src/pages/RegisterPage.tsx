@@ -42,8 +42,7 @@ export function RegisterPage() {
           </div>
           <span className="text-base font-semibold tracking-tight text-foreground">Loom</span>
         </div>
-        <h1 className="mb-1 text-xl font-semibold text-foreground">Create account</h1>
-        <p className="mb-6 text-sm text-muted-foreground">Get started with Loom. It only takes a moment.</p>
+        <h1 className="mb-6 text-xl font-semibold text-foreground">Create account</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {isNative() && (
             <Field

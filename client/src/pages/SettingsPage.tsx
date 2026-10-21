@@ -194,7 +194,7 @@ export function SettingsPage() {
                 </SettingRow>
 
                 {isNative() && (
-                  <SettingRow label="Daily overdue reminder" hint="A notification with what is still overdue. Tap to open the plan.">
+                  <SettingRow label="Daily overdue reminder" hint="A notification with what is still overdue.">
                     <div className="flex items-center gap-2">
                       <input
                         type="checkbox"
@@ -287,7 +287,7 @@ export function SettingsPage() {
               )}
 
               <SettingSection label="Data">
-                <SettingRow label="Export data" hint="Download everything as JSON: goals, checkpoints, categories, activities, occurrences.">
+                <SettingRow label="Export data" hint="Download your data as JSON.">
                   <Button variant="outline" size="sm" onClick={handleExport} loading={exporting}>
                     <Download className="mr-1.5 h-3.5 w-3.5" strokeWidth={2} />
                     Export
@@ -302,7 +302,7 @@ export function SettingsPage() {
               </SettingSection>
 
               <SettingSection label="Account">
-                <SettingRow label={user?.username ?? ''} hint="Signed in">
+                <SettingRow label={user?.username ?? ''}>
                   <Button variant="outline" size="sm" onClick={handleLogout}>
                     <LogOut className="mr-1.5 h-3.5 w-3.5" strokeWidth={2} />
                     Sign out

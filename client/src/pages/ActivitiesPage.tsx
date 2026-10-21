@@ -533,7 +533,7 @@ export function ActivitiesPage() {
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
         loading={deleteMutation.isPending}
         title="Delete activity?"
-        message={`"${deleting?.title ?? ""}" and all of its occurrences will be permanently deleted. This cannot be undone.`}
+        message={`"${deleting?.title ?? ""}" and all of its occurrences will be permanently deleted.`}
       />
 
       <ConfirmDialog
@@ -542,7 +542,7 @@ export function ActivitiesPage() {
         onConfirm={() => bulkDeleteMutation.mutate()}
         loading={bulkDeleteMutation.isPending}
         title={`Delete ${selected.size} ${selected.size === 1 ? "activity" : "activities"}?`}
-        message="The selected activities and all of their occurrences will be permanently deleted. This cannot be undone."
+        message="The selected activities and all of their occurrences will be permanently deleted."
       />
     </div>
   );

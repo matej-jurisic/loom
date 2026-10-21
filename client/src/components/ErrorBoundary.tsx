@@ -41,7 +41,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       >
         <h1 className="text-lg font-semibold text-foreground">Something went wrong</h1>
         <p className="max-w-sm text-sm text-muted-foreground">
-          This page hit an unexpected error. Your data is safe on the server. Try again, or reload the app.
+          This page hit an unexpected error. Try again, or reload the app.
         </p>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => this.setState({ error: null })}>
