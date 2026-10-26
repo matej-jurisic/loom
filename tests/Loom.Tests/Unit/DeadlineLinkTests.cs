@@ -46,7 +46,7 @@ public class DeadlineLinkTests : IDisposable
     }
 
     [Fact]
-    public async Task CreateAsync_rejects_a_non_event_target()
+    public async Task CreateAsync_rejects_a_floating_activity_target()
     {
         var userId = await CreateUserAsync();
         var activityId = await CreateActivityAsync(userId);
@@ -56,6 +56,37 @@ public class DeadlineLinkTests : IDisposable
 
         Assert.False(result.IsSuccess);
         Assert.Equal(ErrorType.Validation, result.Error!.Type);
+    }
+
+    [Fact]
+    public async Task CreateAsync_rejects_a_spanned_activity_target()
+    {
+        var userId = await CreateUserAsync();
+        var activityId = await CreateActivityAsync(userId);
+        var start = DateTimeOffset.UtcNow.AddDays(2);
+        var other = (await CreateSessionAsync(userId, activityId, null, start, start.AddHours(1))).Value!;
+
+        var result = await CreateSessionAsync(userId, activityId, other.Id);
+
+        Assert.False(result.IsSuccess);
+        Assert.Equal(ErrorType.Validation, result.Error!.Type);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CreateAsync_links_to_a_due_activity_target(bool startOnly)
+    {
+        var userId = await CreateUserAsync();
+        var activityId = await CreateActivityAsync(userId);
+        var due = DateTimeOffset.UtcNow.AddDays(2);
+        var target = (await CreateSessionAsync(userId, activityId, null,
+            startOnly ? due : null, startOnly ? null : due)).Value!;
+
+        var result = await CreateSessionAsync(userId, activityId, target.Id);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(target.Id, result.Value!.DeadlineOccurrenceId);
     }
 
     [Fact]
@@ -186,6 +217,7 @@ public class DeadlineLinkTests : IDisposable
         var row = list.Single(o => o.Id == deadline.Id);
         Assert.Equal(2, row.LinkedDoneCount);
         Assert.Equal(120, row.LinkedDoneMinutes);
+        Assert.Equal(3, row.LinkedCount);
     }
 
     [Fact]

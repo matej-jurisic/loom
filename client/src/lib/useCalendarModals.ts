@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { Activity, Occurrence } from '@/lib/types'
+import type { Activity, Occurrence, OccurrenceRef } from '@/lib/types'
 
 export function useCalendarModals() {
   const [modalOpen, setModalOpen] = useState(false)
@@ -13,8 +13,10 @@ export function useCalendarModals() {
   const [activityModalOpen, setActivityModalOpen] = useState(false)
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>()
   const [duplicateFromOccurrence, setDuplicateFromOccurrence] = useState<Occurrence | undefined>()
+  const [followUpOf, setFollowUpOf] = useState<OccurrenceRef | undefined>()
 
   function openCreate(startAt?: string, endAt?: string) {
+    setFollowUpOf(undefined)
     setDuplicateFromOccurrence(undefined)
     setEditingOccurrence(undefined)
     setDefaultStartAt(startAt)
@@ -25,6 +27,7 @@ export function useCalendarModals() {
   }
 
   function openDuplicate(o: Occurrence) {
+    setFollowUpOf(undefined)
     setDetailOpen(false)
     setDetailEvent(null)
     setEditingOccurrence(undefined)
@@ -49,6 +52,7 @@ export function useCalendarModals() {
   }
 
   function openEdit(o: Occurrence) {
+    setFollowUpOf(undefined)
     setDuplicateFromOccurrence(undefined)
     setEditingOccurrence(o)
     setDefaultStartAt(undefined)
@@ -59,6 +63,7 @@ export function useCalendarModals() {
   }
 
   function openSchedule(o: Occurrence) {
+    setFollowUpOf(undefined)
     setDuplicateFromOccurrence(undefined)
     setEditingOccurrence(o)
     setDefaultStartAt(undefined)
@@ -68,9 +73,23 @@ export function useCalendarModals() {
     setModalOpen(true)
   }
 
+  function openFollowUp(source: OccurrenceRef) {
+    setDetailOpen(false)
+    setDetailEvent(null)
+    setEditingOccurrence(undefined)
+    setDuplicateFromOccurrence(undefined)
+    setDefaultStartAt(undefined)
+    setDefaultEndAt(undefined)
+    setFollowUpOf(source)
+    setFocusStartAt(false)
+    setScheduleMode(false)
+    setModalOpen(true)
+  }
+
   return {
     openCreate,
     openDuplicate,
+    openFollowUp,
     openDetail,
     openEditActivity,
     openEdit,
@@ -84,6 +103,7 @@ export function useCalendarModals() {
       defaultStartAt,
       defaultEndAt,
       scheduleOnly: scheduleMode,
+      followUpOf,
     },
     detail: {
       open: detailOpen,

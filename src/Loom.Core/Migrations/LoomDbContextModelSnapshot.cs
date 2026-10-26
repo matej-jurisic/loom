@@ -70,6 +70,9 @@ namespace Loom.Core.Migrations
                     b.Property<int?>("RepeatAfterDays")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("ShortLabel")
+                        .HasColumnType("TEXT");
+
                     b.Property<bool>("ShowAsOverdue")
                         .HasColumnType("INTEGER");
 
@@ -281,6 +284,12 @@ namespace Loom.Core.Migrations
                     b.PrimitiveCollection<string>("Reminders")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<Guid?>("SourceOccurrenceId")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset?>("StartAt")
                         .HasColumnType("TEXT");
 
@@ -308,6 +317,8 @@ namespace Loom.Core.Migrations
                     b.HasIndex("ActivityId");
 
                     b.HasIndex("DeadlineOccurrenceId");
+
+                    b.HasIndex("SourceOccurrenceId");
 
                     b.HasIndex("UserId", "Status");
 
@@ -338,6 +349,9 @@ namespace Loom.Core.Migrations
 
                     b.Property<string>("Search")
                         .HasColumnType("TEXT");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -558,6 +572,9 @@ namespace Loom.Core.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("DeadlineHorizonDays")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateOnly?>("LastDigestDate")
                         .HasColumnType("TEXT");
 
@@ -689,9 +706,16 @@ namespace Loom.Core.Migrations
                         .HasForeignKey("DeadlineOccurrenceId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Loom.Core.Entities.Occurrence", "SourceOccurrence")
+                        .WithMany()
+                        .HasForeignKey("SourceOccurrenceId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("Activity");
 
                     b.Navigation("DeadlineOccurrence");
+
+                    b.Navigation("SourceOccurrence");
                 });
 
             modelBuilder.Entity("Loom.Core.Entities.OccurrenceList", b =>

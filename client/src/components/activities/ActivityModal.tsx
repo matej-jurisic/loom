@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
+import type { ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { activitiesApi, activitySubtasksApi } from '@/lib/api'
@@ -14,35 +15,46 @@ import { invalidateActivities, invalidateOccurrences } from '@/lib/invalidate'
 import { toastError } from '@/store/toasts'
 import { MAX_REPEAT_AFTER_DAYS, parseRepeatAfterDays } from '@/lib/repeat'
 
+/** Mirrors Validators.MaxShortLabelLength. */
+const MAX_SHORT_LABEL_LENGTH = 12
+
 interface ActivityModalProps {
   open: boolean
   onClose: () => void
   activity?: Activity
+  /** Pre-fills a create from this activity; nothing is saved until Create. */
+  duplicateFrom?: Activity
   goals: Goal[]
   categories: Category[]
   tags: Tag[]
 }
 
-export function ActivityModal({ open, onClose, activity, goals, categories, tags }: ActivityModalProps) {
+export function ActivityModal({ open, onClose, activity, duplicateFrom, goals, categories, tags }: ActivityModalProps) {
   const qc = useQueryClient()
   const isEdit = Boolean(activity)
-  const [title, setTitle] = useState(activity?.title ?? '')
-  const [goalIds, setGoalIds] = useState(() => activity?.goals.map((g) => g.id) ?? [])
-  const [tagIds, setTagIds] = useState(() => activity?.tags.map((t) => t.id) ?? [])
-  const [categoryId, setCategoryId] = useState(activity?.categoryId ?? '')
+  const source = activity ?? duplicateFrom
+  const [title, setTitle] = useState(source?.title ?? '')
+  const [shortLabel, setShortLabel] = useState(source?.shortLabel ?? '')
+  const [goalIds, setGoalIds] = useState(() => source?.goals.map((g) => g.id) ?? [])
+  const [tagIds, setTagIds] = useState(() => source?.tags.map((t) => t.id) ?? [])
+  const [categoryId, setCategoryId] = useState(source?.categoryId ?? '')
   const [titleError, setTitleError] = useState('')
-  const [repeatDays, setRepeatDays] = useState(activity?.repeatAfterDays?.toString() ?? '')
+  const [repeatDays, setRepeatDays] = useState(source?.repeatAfterDays?.toString() ?? '')
   const [repeatError, setRepeatError] = useState('')
-  const [showAsOverdue, setShowAsOverdue] = useState(activity?.showAsOverdue ?? true)
-  const [reminders, setReminders] = useState(activity?.reminders ?? [])
+  const [showAsOverdue, setShowAsOverdue] = useState(source?.showAsOverdue ?? true)
+  const [reminders, setReminders] = useState(source?.reminders ?? [])
   const [subtasks, setSubtasks] = useState(activity?.subtasks ?? [])
   const [newSubtask, setNewSubtask] = useState('')
-  const newSubtaskRef = useRef<HTMLInputElement>(null)
+  // Before the activity exists, subtasks and work types are drafts sent with the create.
+  const [draftSubtasks, setDraftSubtasks] = useState(() => duplicateFrom?.subtasks.map((s) => s.title) ?? [])
+  const [draftWorkTypes, setDraftWorkTypes] = useState(() => duplicateFrom?.workTypes.map((w) => w.title) ?? [])
+  const [newWorkType, setNewWorkType] = useState('')
 
   const mutation = useMutation({
     mutationFn: () => {
       const body = {
         title: title.trim(),
+        shortLabel: shortLabel.trim() || null,
         goalIds,
         tagIds,
         categoryId: categoryId || null,
@@ -50,7 +62,9 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
         showAsOverdue,
         reminders,
       }
-      return isEdit ? activitiesApi.update(activity!.id, body) : activitiesApi.create(body)
+      return isEdit
+        ? activitiesApi.update(activity!.id, body)
+        : activitiesApi.create({ ...body, subtasks: draftSubtasks, workTypes: draftWorkTypes })
     },
     onSuccess: () => {
       invalidateActivities(qc)
@@ -97,10 +111,19 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
   function handleAddSubtask() {
     const t = newSubtask.trim()
     if (!t) return
-    addSubtaskMutation.mutate(t)
+    if (isEdit) { addSubtaskMutation.mutate(t); return }
+    setDraftSubtasks((prev) => [...prev, t])
+    setNewSubtask('')
   }
 
-  const goalOptions = pickableGoals(goals, activity?.goals.map((g) => g.id) ?? [])
+  function handleAddWorkType() {
+    const t = newWorkType.trim()
+    if (!t) return
+    if (!draftWorkTypes.some((w) => w.toLowerCase() === t.toLowerCase())) setDraftWorkTypes((prev) => [...prev, t])
+    setNewWorkType('')
+  }
+
+  const goalOptions = pickableGoals(goals, source?.goals.map((g) => g.id) ?? [])
 
   return (
     <Modal
@@ -128,6 +151,22 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
           }`}
         />
         {titleError && <p className="text-xs text-destructive">{titleError}</p>}
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="activity-short-label" className="text-sm font-medium text-foreground">
+          Short label <span className="font-normal text-muted-foreground">(optional)</span>
+        </label>
+        <input
+          id="activity-short-label"
+          type="text"
+          placeholder="e.g. DL"
+          maxLength={MAX_SHORT_LABEL_LENGTH}
+          value={shortLabel}
+          onChange={(e) => setShortLabel(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
+          className="h-10 w-32 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        />
       </div>
 
       {goalOptions.length > 0 && (
@@ -191,72 +230,104 @@ export function ActivityModal({ open, onClose, activity, goals, categories, tags
         <ReminderPicker value={reminders} onChange={setReminders} />
       </div>
 
-      <label className="flex items-start gap-2.5 text-sm text-foreground">
+      <label className="flex items-center gap-2.5 text-sm text-foreground">
         <input
           type="checkbox"
           checked={showAsOverdue}
           onChange={(e) => setShowAsOverdue(e.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-primary"
+          className="h-4 w-4 accent-primary"
         />
-        <span>
-          Show as overdue
-          <span className="block text-xs text-muted-foreground">
-            When off, late occurrences stay out of Unfinished and are not marked overdue.
-          </span>
-        </span>
+        Show as unfinished when overdue
       </label>
 
-      {isEdit && (
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium text-foreground">Subtasks</label>
-          {subtasks.length > 0 && (
-            <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
-              {subtasks.map((s) => (
-                <li key={s.id} className="flex items-center gap-2 px-3 py-2">
-                  <span className="flex-1 text-sm text-foreground">{s.title}</span>
-                  <button
-                    onClick={() => deleteSubtaskMutation.mutate(s.id)}
-                    className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive"
-                  >
-                    <X className="h-3.5 w-3.5" strokeWidth={2} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="flex gap-2">
-            <input
-              ref={newSubtaskRef}
-              type="text"
-              placeholder="Add a subtask..."
-              value={newSubtask}
-              onChange={(e) => setNewSubtask(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddSubtask() } }}
-              className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            />
-            <Button variant="ghost" onClick={handleAddSubtask} disabled={!newSubtask.trim() || addSubtaskMutation.isPending}>
-              Add
-            </Button>
-          </div>
-          {applicableCount > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="self-start"
-              onClick={() => applySubtasksMutation.mutate()}
-              loading={applySubtasksMutation.isPending}
-            >
-              Add to {applicableCount} pending {applicableCount === 1 ? 'occurrence' : 'occurrences'}
-            </Button>
-          )}
-        </div>
-      )}
+      <EditableList
+        label="Subtasks"
+        placeholder="Add a subtask..."
+        items={isEdit
+          ? subtasks.map((s) => ({ key: s.id, title: s.title, onRemove: () => deleteSubtaskMutation.mutate(s.id) }))
+          : draftSubtasks.map((t, i) => ({ key: `${i}`, title: t, onRemove: () => setDraftSubtasks((prev) => prev.filter((_, j) => j !== i)) }))}
+        value={newSubtask}
+        onChange={setNewSubtask}
+        onAdd={handleAddSubtask}
+        addDisabled={addSubtaskMutation.isPending}
+      >
+        {applicableCount > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="self-start"
+            onClick={() => applySubtasksMutation.mutate()}
+            loading={applySubtasksMutation.isPending}
+          >
+            Add to {applicableCount} pending {applicableCount === 1 ? 'occurrence' : 'occurrences'}
+          </Button>
+        )}
+      </EditableList>
 
-      {isEdit && <WorkTypesSection activity={activity!} inModal />}
+      {isEdit ? <WorkTypesSection activity={activity!} inModal /> : (
+        <EditableList
+          label="Work types"
+          placeholder="Add a work type..."
+          items={draftWorkTypes.map((t, i) => ({ key: `${i}`, title: t, onRemove: () => setDraftWorkTypes((prev) => prev.filter((_, j) => j !== i)) }))}
+          value={newWorkType}
+          onChange={setNewWorkType}
+          onAdd={handleAddWorkType}
+        />
+      )}
 
       {mutation.error instanceof Error && (
         <p className="text-sm text-destructive">{mutation.error.message}</p>
       )}
     </Modal>
+  )
+}
+
+interface EditableListProps {
+  label: string
+  placeholder: string
+  items: { key: string; title: string; onRemove: () => void }[]
+  value: string
+  onChange: (value: string) => void
+  onAdd: () => void
+  addDisabled?: boolean
+  children?: ReactNode
+}
+
+function EditableList({ label, placeholder, items, value, onChange, onAdd, addDisabled, children }: EditableListProps) {
+  return (
+    <div className="flex flex-col gap-2">
+      <label className="text-sm font-medium text-foreground">{label}</label>
+      {items.length > 0 && (
+        <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
+          {items.map((item) => (
+            <li key={item.key} className="flex items-center gap-2 px-3 py-2">
+              <span className="flex-1 text-sm text-foreground">{item.title}</span>
+              <button
+                onClick={item.onRemove}
+                aria-label={`Remove ${item.title}`}
+                className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-destructive"
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={2} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder={placeholder}
+          value={value}
+          maxLength={255}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAdd() } }}
+          className="h-9 flex-1 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <Button variant="ghost" onClick={onAdd} disabled={!value.trim() || addDisabled}>
+          Add
+        </Button>
+      </div>
+      {children}
+    </div>
   )
 }

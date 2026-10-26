@@ -52,8 +52,8 @@ export function SettingsPage() {
     queryFn: settingsApi.get,
   })
 
-  const [form, setForm] = useState<{ timezone: string; dayBoundaryTime: string; maxFocusGoals: number; dailyDigestTime: string | null }>(
-    { timezone: '', dayBoundaryTime: '00:00', maxFocusGoals: 3, dailyDigestTime: null },
+  const [form, setForm] = useState<{ timezone: string; dayBoundaryTime: string; maxFocusGoals: number; dailyDigestTime: string | null; deadlineHorizonDays: number | null }>(
+    { timezone: '', dayBoundaryTime: '00:00', maxFocusGoals: 3, dailyDigestTime: null, deadlineHorizonDays: null },
   )
   const [saved, setSaved] = useState(false)
 
@@ -64,6 +64,7 @@ export function SettingsPage() {
         dayBoundaryTime: settings.dayBoundaryTime,
         maxFocusGoals: settings.maxFocusGoals,
         dailyDigestTime: settings.dailyDigestTime,
+        deadlineHorizonDays: settings.deadlineHorizonDays,
       })
     }
   }, [settings])
@@ -85,6 +86,7 @@ export function SettingsPage() {
       timezone: settings!.timezone,
       calendarColorBy,
       dailyDigestTime: settings!.dailyDigestTime,
+      deadlineHorizonDays: settings!.deadlineHorizonDays,
     }),
     onSuccess: (updated) => qc.setQueryData(['settings'], updated),
     onError: (err) => toastError(err),
@@ -189,6 +191,18 @@ export function SettingsPage() {
                     max={20}
                     value={form.maxFocusGoals}
                     onChange={(e) => { setSaved(false); setForm((f) => ({ ...f, maxFocusGoals: Number(e.target.value) })) }}
+                    className={`${inputCls} w-16 text-center`}
+                  />
+                </SettingRow>
+
+                <SettingRow label="Deadlines ahead (days)">
+                  <input
+                    type="number"
+                    min={0}
+                    max={365}
+                    placeholder="All"
+                    value={form.deadlineHorizonDays ?? ''}
+                    onChange={(e) => { setSaved(false); setForm((f) => ({ ...f, deadlineHorizonDays: e.target.value === '' ? null : Number(e.target.value) })) }}
                     className={`${inputCls} w-16 text-center`}
                   />
                 </SettingRow>

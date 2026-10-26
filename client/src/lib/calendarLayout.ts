@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import type { CalendarColorBy, Occurrence } from '@/lib/types'
 import type { TimeScale } from '@/lib/timeScale'
-import { sod } from '@/lib/calendarDates'
+import { eodMs, sod, wallMinute } from '@/lib/calendarDates'
 
 export const MIN_EVENT_PX = 16
 
@@ -62,19 +62,26 @@ export interface DayLayout {
   events: LayoutEvent[]
 }
 
-/** Lays out one day's events, packing transitively-overlapping spans into shared columns. */
+/**
+ * Lays out one day's events, packing transitively-overlapping spans into shared columns.
+ * Due pins are a moment, not a span, so they take no part in that packing: each is a line
+ * across the column with a pill hanging from it, and only pins whose pills would collide
+ * are packed against each other.
+ */
 export function layoutDay(events: Occurrence[], day: Date, scale: TimeScale): DayLayout {
   const dayStartMs = sod(day).getTime()
   const hourPx = scale.hourPx
 
-  const eventItems = events
-    .filter((e) => !!e.startAt)
+  const timed = events.filter((e) => !!e.startAt)
+
+  const eventItems = timed
+    .filter((e) => !isDueOccurrence(e))
     .map((e) => {
       const startMs = new Date(e.startAt!).getTime()
-      const endMs = e.endAt ? new Date(e.endAt).getTime() : startMs + DUE_SPAN_MINUTES * 60 * 1000
+      const endMs = new Date(e.endAt!).getTime()
       // Clip to this day's boundaries (handles cross-midnight events)
-      const clipStartMin = Math.max((startMs - dayStartMs) / 60000, 0)
-      const clipEndMin = Math.min((endMs - dayStartMs) / 60000, 24 * 60)
+      const clipStartMin = Math.max(wallMinute(startMs, dayStartMs), 0)
+      const clipEndMin = Math.min(wallMinute(endMs, dayStartMs), 24 * 60)
       const s = Math.round(clipStartMin)
       const end = Math.max(Math.round(clipEndMin), s + 15)
       return { event: e, s, end: Math.min(end, 24 * 60) }
@@ -99,23 +106,42 @@ export function layoutDay(events: Occurrence[], day: Date, scale: TimeScale): Da
       col,
       totalCols,
       topPx,
-      // Due pins keep their exact 30-minute height so they scale with zoom
-      heightPx: isDueOccurrence(event) ? spanPx : Math.max(spanPx, MIN_EVENT_PX),
+      heightPx: Math.max(spanPx, MIN_EVENT_PX),
       trueEndPx: topPx + spanPx,
     }
   })
 
-  return { events: eventLayout }
+  const pins = timed
+    .filter(isDueOccurrence)
+    .map((e) => {
+      const min = Math.max(0, Math.min(wallMinute(new Date(e.startAt!).getTime(), dayStartMs), 24 * 60))
+      return { event: e, topPx: scale.toPx(min) }
+    })
+    .sort((a, b) => a.topPx - b.topPx)
+  const pinCols = packColumns(pins.map((p) => ({ s: p.topPx, end: p.topPx + DUE_PIN_PX })))
+  const pinLayout: LayoutEvent[] = pins.map((p, k) => ({
+    event: p.event,
+    ...pinCols[k],
+    topPx: p.topPx,
+    heightPx: DUE_PIN_PX,
+    trueEndPx: p.topPx + DUE_PIN_PX,
+  }))
+
+  return { events: [...eventLayout, ...pinLayout] }
 }
 
 // ── Due occurrence helper ───────────────────────────────────────────────────
 
-// Due pins render as a 30-minute block: the smallest span that stays readable
-// at max zoom out (30 min at MIN_HOUR_PX = 16px), scaling up with zoom.
-export const DUE_SPAN_MINUTES = 30
+// A due pin's pill hangs this far below its line, whatever the zoom: it marks a moment,
+// so it has no span to scale with.
+export const DUE_PIN_PX = 14
 
-export function duePinHeight(hourPx: number): number {
-  return (DUE_SPAN_MINUTES / 60) * hourPx
+// The "Due" option of the event modal's type picker: one date and no span. Same test the
+// modal uses to pick that segment when it opens an occurrence, so the Plan's Deadlines section
+// and the deadline picker list exactly what the modal calls Due - including the end-only shape.
+// The server's deadline validation applies the same test.
+export function isDue(o: Occurrence): boolean {
+  return (o.startAt === null) !== (o.endAt === null)
 }
 
 export function isDueOccurrence(o: Occurrence): boolean {
@@ -223,7 +249,7 @@ export function snapToGridDue(day: Date, yPx: number, scale: TimeScale): Date {
 export function dragStartFor(day: Date, topPx: number, scale: TimeScale, durationMs: number): Date {
   const snapped = snapToGrid(day, topPx, scale)
   const dayStartMs = sod(day).getTime()
-  const latest = Math.max(dayStartMs, dayStartMs + 86400000 - durationMs)
+  const latest = Math.max(dayStartMs, eodMs(dayStartMs) - durationMs)
   return snapped.getTime() > latest ? new Date(latest) : snapped
 }
 
@@ -244,6 +270,18 @@ export function occursOnDay(e: Occurrence, dayStartMs: number, dayEndMs: number)
   return startMs < dayEndMs && new Date(e.endAt).getTime() > dayStartMs
 }
 
-export function titleWithTags(o: Occurrence): string {
-  return [o.status === 'skipped' ? `× ${o.effectiveTitle}` : o.effectiveTitle, ...o.effectiveTags.map((t) => `#${t.name}`)].join(' ')
+/** Goal names after the title, so same-titled occurrences in different goals ("Lab 2") stay apart. */
+/** The effective title with the activity's short label appended. */
+export function labelledTitle(o: Occurrence): string {
+  return o.activity.shortLabel ? `${o.effectiveTitle} ${o.activity.shortLabel}` : o.effectiveTitle
+}
+
+export function titleWithGoals(o: Occurrence): string {
+  const goals = o.activity.goals.map((g) => g.title).join(', ')
+  return goals ? `${labelledTitle(o)} · ${goals}` : labelledTitle(o)
+}
+
+export function calendarTitle(o: Occurrence): string {
+  const title = titleWithGoals(o)
+  return [o.status === 'skipped' ? `× ${title}` : title, ...o.effectiveTags.map((t) => `#${t.name}`)].join(' ')
 }

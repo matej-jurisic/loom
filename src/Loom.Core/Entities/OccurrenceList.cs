@@ -17,6 +17,8 @@ public class OccurrenceList
     public string? Goal { get; set; }
     public string? Search { get; set; }
     public string? GroupBy { get; set; }
+    // Manual position, set by dragging. OccurrenceListService.ReorderAsync rewrites it; new lists go last.
+    public int SortOrder { get; set; }
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public User User { get; set; } = null!;

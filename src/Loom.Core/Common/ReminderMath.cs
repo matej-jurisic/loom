@@ -6,8 +6,9 @@ namespace Loom.Core.Common;
 /// <summary>
 /// When an occurrence's reminders fire. A reminder is a number of minutes before the occurrence's
 /// anchor: its start for a timed occurrence, its end for a deadline-only one, and
-/// <see cref="AllDayAnchorTime"/> on the date for an all-day one. Planned, floating and no-date
-/// occurrences have no anchor, so they never fire.
+/// <see cref="AllDayAnchorTime"/> on the date for an all-day one. Floating and no-date occurrences
+/// have no anchor, so they never fire, and neither does a planned one unless it is a timed Due pin
+/// (exactly one of start and end): there the flag marks a date not yet confirmed, not a loose window.
 /// </summary>
 public static class ReminderMath
 {
@@ -24,7 +25,8 @@ public static class ReminderMath
 
     public static DateTimeOffset? Anchor(Occurrence o, DayContext ctx)
     {
-        if (o.IsPlanned || o.IsNoDate) return null;
+        if (o.IsNoDate) return null;
+        if (o.IsPlanned && (o.IsAllDay || (o.StartAt is null) == (o.EndAt is null))) return null;
         if (o.IsAllDay)
             return (o.StartAt ?? o.EndAt) is { } day
                 ? DayMath.AtLocalTime(DayMath.LocalDate(day, ctx), AllDayAnchorTime, ctx)

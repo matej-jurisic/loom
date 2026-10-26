@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'react'
 import type { ReactNode, RefObject } from 'react'
 import type { Occurrence } from '@/lib/types'
 import { DueRow, FloatingTasksRow, UpcomingRow } from './TrayPillRow'
@@ -15,6 +16,8 @@ interface CalendarTrayProps {
   onTaskClick: (o: Occurrence) => void
   onRescheduleDragStart: (info: FloatingDragInfo, o: Occurrence) => void
   onFloatDragStart: (info: FloatingDragInfo, o: Occurrence) => void
+  /** Fed the tray's height as it changes, and 0 once it is gone. */
+  onHeightChange?: (px: number) => void
   children?: ReactNode
 }
 
@@ -30,10 +33,24 @@ export function CalendarTray({
   onTaskClick,
   onRescheduleDragStart,
   onFloatDragStart,
+  onHeightChange,
   children,
 }: CalendarTrayProps) {
+  const trayRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    const el = trayRef.current
+    if (!el || !onHeightChange) return
+    const ro = new ResizeObserver(() => onHeightChange(el.offsetHeight))
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      onHeightChange(0)
+    }
+  }, [onHeightChange])
+
   return (
-    <div className="calendar-tray">
+    <div ref={trayRef} className="calendar-tray">
       {!trayDragActive && (
         <DueRow
           tasks={overduePastItems}
@@ -58,7 +75,7 @@ export function CalendarTray({
         onDragStart={onFloatDragStart}
         rowRef={floatRowRef}
         isHighlighted={floatHighlighted}
-        forceVisible={trayDragActive}
+        dragActive={trayDragActive}
         movingEventId={movingEventId}
         pendingDragId={pendingDragId}
       />

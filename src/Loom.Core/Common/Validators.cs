@@ -18,6 +18,17 @@ public static class Validators
             ? new Error(ErrorType.Validation, $"Notes cannot exceed {MaxNotesLength} characters.")
             : null;
 
+    public const int MaxShortLabelLength = 12;
+
+    public static Error? ValidateShortLabel(string? label) =>
+        label?.Trim() is { Length: > MaxShortLabelLength }
+            ? new Error(ErrorType.Validation, $"Short label cannot exceed {MaxShortLabelLength} characters.")
+            : null;
+
+    /// <summary>Trimmed label, or null when blank.</summary>
+    public static string? NormalizeShortLabel(string? label) =>
+        string.IsNullOrWhiteSpace(label) ? null : label.Trim();
+
     public const int MaxRepeatAfterDays = 365;
 
     public static Error? ValidateRepeatAfterDays(int? days) =>

@@ -3,6 +3,7 @@ import { ApiError, occurrencesApi } from '@/lib/api'
 import { invalidateOccurrences } from '@/lib/invalidate'
 import { toastError, useToastStore } from '@/store/toasts'
 import type { Occurrence } from '@/lib/types'
+import { weekdayDate } from './dates'
 
 export const MAX_REPEAT_AFTER_DAYS = 365
 
@@ -28,7 +29,7 @@ export function nextRepeatDate(from: Date | null, days: number, today: Date): Da
 }
 
 export function formatDay(date: Date): string {
-  return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  return weekdayDate(date)
 }
 
 export function repeatsOnDone(occurrence: Occurrence): boolean {

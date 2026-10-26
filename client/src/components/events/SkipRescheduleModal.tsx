@@ -56,6 +56,7 @@ export function SkipRescheduleModal({ open, onClose, occurrence, onDone }: SkipR
           isAllDay: o.isAllDay,
           isPlanned: o.isPlanned,
           deadlineOccurrenceId: o.deadline?.status === 'pending' ? o.deadline.id : null,
+          sourceOccurrenceId: o.sourceOccurrenceId,
         })
       }
     },

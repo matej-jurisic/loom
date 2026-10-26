@@ -75,6 +75,9 @@ public class UserSettingsService(LoomDbContext db)
             digest = parsed;
         }
 
+        if (req.DeadlineHorizonDays is { IsSet: true, Value: { } horizon } && (horizon < 0 || horizon > 365))
+            return Result<UserSettingsDto>.Fail(new Error(ErrorType.Validation, "Deadlines ahead must be between 0 and 365 days."));
+
         var err = Validators.ValidateTimezone(req.Timezone);
         if (err is not null) return Result<UserSettingsDto>.Fail(err);
 
@@ -90,6 +93,7 @@ public class UserSettingsService(LoomDbContext db)
             settings.DailyDigestTime = digest;
             settings.LastDigestDate = null;
         }
+        if (req.DeadlineHorizonDays.IsSet) settings.DeadlineHorizonDays = req.DeadlineHorizonDays.Value;
         user.Timezone = req.Timezone;
         await db.SaveChangesAsync();
 

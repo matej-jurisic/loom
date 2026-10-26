@@ -6,6 +6,7 @@ import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
 import type { Occurrence } from '@/lib/types'
 import { invalidateOccurrences } from '@/lib/invalidate'
+import { weekdayDate } from '@/lib/dates'
 
 // A drop that landed on a different date than the occurrence was on. The page hands
 // the resolved target over instead of committing, because the two readings of that
@@ -20,9 +21,6 @@ export interface PendingMove {
   commit: () => void
 }
 
-function formatDay(iso: string): string {
-  return new Date(iso).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })
-}
 
 interface MoveOrSkipModalProps {
   open: boolean
@@ -50,6 +48,7 @@ export function MoveOrSkipModal({ open, onClose, move }: MoveOrSkipModalProps) {
         isAllDay,
         isPlanned: occurrence.isPlanned,
         deadlineOccurrenceId: occurrence.deadline?.status === 'pending' ? occurrence.deadline.id : null,
+        sourceOccurrenceId: occurrence.sourceOccurrenceId,
       })
       invalidateOccurrences(qc)
       onClose()
@@ -64,7 +63,7 @@ export function MoveOrSkipModal({ open, onClose, move }: MoveOrSkipModalProps) {
     <Modal
       open={open}
       onClose={onClose}
-      title={`Move to ${formatDay(startAt)}?`}
+      title={`Move to ${weekdayDate(startAt)}?`}
     >
       <div className="flex flex-col gap-2">
         <button

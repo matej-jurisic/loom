@@ -74,7 +74,7 @@ public class NotificationService(LoomDbContext db, UserSettingsService settings,
             var candidates = await db.Occurrences
                 .AsNoTracking()
                 .Include(o => o.Activity)
-                .Where(o => o.UserId == userId && o.Status == EventStatus.pending && !o.IsPlanned && !o.IsNoDate
+                .Where(o => o.UserId == userId && o.Status == EventStatus.pending && !o.IsNoDate
                     && (o.StartAt != null || o.EndAt != null))
                 .ToListAsync(ct);
 
@@ -192,7 +192,7 @@ public class NotificationService(LoomDbContext db, UserSettingsService settings,
             var date = DayMath.LocalDate(at, ctx);
             if (date == today) return "Today";
             if (date == today.AddDays(1)) return "Tomorrow";
-            return date.ToString("ddd d MMM", CultureInfo.InvariantCulture);
+            return date.ToString(date.Year == today.Year ? "ddd d/M" : "ddd d/M/yyyy", CultureInfo.InvariantCulture);
         }
         string Clock(DateTimeOffset at) =>
             TimeZoneInfo.ConvertTime(at, ctx.TimeZone).ToString("HH:mm", CultureInfo.InvariantCulture);

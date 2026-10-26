@@ -42,8 +42,9 @@ export function Select({
   const searchRef = useRef<HTMLInputElement>(null)
 
   const selected = options.find((o) => o.value === value)
+  const query = search.toLowerCase()
   const filtered = search
-    ? options.filter((o) => o.label.toLowerCase().includes(search.toLowerCase()))
+    ? options.filter((o) => o.label.toLowerCase().includes(query) || o.sublabel?.toLowerCase().includes(query))
     : options
 
   useEffect(() => {
@@ -178,6 +179,9 @@ export function Select({
       >
         {icon && <span className="shrink-0 text-muted-foreground">{icon}</span>}
         <span className="min-w-0 flex-1 truncate">{selected ? selected.label : placeholder}</span>
+        {selected?.sublabel && (
+          <span className="max-w-[50%] shrink-0 truncate text-xs text-muted-foreground">{selected.sublabel}</span>
+        )}
         <ChevronDown
           className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${open ? 'rotate-180' : ''}`}
         />
@@ -231,7 +235,7 @@ export function Select({
                 >
                   <span className="min-w-0 flex-1 truncate text-foreground">{opt.label}</span>
                   {opt.sublabel && (
-                    <span className="shrink-0 text-xs text-muted-foreground">{opt.sublabel}</span>
+                    <span className="max-w-[50%] shrink-0 truncate text-xs text-muted-foreground">{opt.sublabel}</span>
                   )}
                   {opt.value === value && (
                     <Check className="h-3.5 w-3.5 shrink-0 text-primary" />

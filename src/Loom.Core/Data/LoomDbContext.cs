@@ -47,6 +47,12 @@ public class LoomDbContext(DbContextOptions<LoomDbContext> options) : DbContext(
             .HasForeignKey(o => o.DeadlineOccurrenceId)
             .OnDelete(DeleteBehavior.SetNull);
 
+        modelBuilder.Entity<Occurrence>()
+            .HasOne(o => o.SourceOccurrence)
+            .WithMany()
+            .HasForeignKey(o => o.SourceOccurrenceId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         // Every occurrence read filters by UserId (often together with Status); UserId is a bare
         // Guid with no relationship, so EF would not index it otherwise. Occurrences are the
         // highest-volume table, so this is the index that matters most.

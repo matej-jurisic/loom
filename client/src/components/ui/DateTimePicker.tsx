@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react'
+import { weekdayDate } from '@/lib/dates'
 
 const DOW = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su']
 const MONTHS = [
@@ -35,8 +36,7 @@ function toLocalStr(year: number, month: number, day: number, hour: number, minu
 function formatDisplay(value: string, mode: 'date' | 'datetime'): string {
   const p = parse(value)
   if (!p) return ''
-  const d = new Date(p.year, p.month, p.day)
-  const dateStr = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const dateStr = weekdayDate(new Date(p.year, p.month, p.day))
   if (mode === 'date') return dateStr
   return `${dateStr} · ${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`
 }

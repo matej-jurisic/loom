@@ -50,15 +50,15 @@ public class ActivityService(LoomDbContext db)
     /// <summary>
     /// Occurrences per activity within the recent window, so pickers can offer the activities the
     /// user actually reaches for first. An occurrence counts from its start, falling back to its
-    /// deadline and then to when it was created, so floating rows are not invisible here. There is
-    /// no upper bound: something scheduled for tomorrow is still evidence the activity is in use.
+    /// deadline and then to when it was created, so floating rows are not invisible here. "No date"
+    /// todos are not counted: they say nothing about what the user schedules. There is no upper bound: something scheduled for tomorrow is still evidence the activity is in use.
     /// SQLite can't translate a DateTimeOffset range WHERE, so the window is applied in memory.
     /// </summary>
     private async Task<Dictionary<Guid, int>> RecentOccurrenceCountsAsync(Guid userId)
     {
         var since = DateTimeOffset.UtcNow.AddDays(-RecentWindowDays);
         var refs = await db.Occurrences
-            .Where(o => o.UserId == userId)
+            .Where(o => o.UserId == userId && !o.IsNoDate)
             .Select(o => new { o.ActivityId, o.StartAt, o.EndAt, o.CreatedAt })
             .ToListAsync();
 
@@ -71,11 +71,29 @@ public class ActivityService(LoomDbContext db)
     public async Task<Result<ActivityDto>> CreateAsync(Guid userId, CreateActivityRequest req)
     {
         var err = Validators.ValidateTitle(req.Title, "Title")
+            ?? Validators.ValidateShortLabel(req.ShortLabel)
             ?? Validators.ValidateRepeatAfterDays(req.RepeatAfterDays)
-            ?? Validators.ValidateReminders(req.Reminders);
+            ?? Validators.ValidateReminders(req.Reminders)
+            ?? (req.Subtasks ?? []).Concat(req.WorkTypes ?? []).Select(t => Validators.ValidateTitle(t, "Title")).FirstOrDefault(e => e is not null);
         if (err is not null) return Result<ActivityDto>.Fail(err);
 
-        var a = new Activity { UserId = userId, Title = req.Title.Trim(), RepeatAfterDays = req.RepeatAfterDays, ShowAsOverdue = req.ShowAsOverdue, Reminders = ReminderMath.Normalize(req.Reminders ?? []) };
+        var now = DateTimeOffset.UtcNow;
+        // Children are ordered by CreatedAt, so each one gets a strictly increasing stamp.
+        var a = new Activity
+        {
+            UserId = userId,
+            Title = req.Title.Trim(),
+            ShortLabel = Validators.NormalizeShortLabel(req.ShortLabel),
+            RepeatAfterDays = req.RepeatAfterDays,
+            ShowAsOverdue = req.ShowAsOverdue,
+            Reminders = ReminderMath.Normalize(req.Reminders ?? []),
+            Subtasks = (req.Subtasks ?? [])
+                .Select((t, i) => new ActivitySubtask { Title = t.Trim(), CreatedAt = now.AddTicks(i) })
+                .ToList(),
+            WorkTypes = (req.WorkTypes ?? []).Select(t => t.Trim()).Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select((t, i) => new ActivityWorkType { Title = t, CreatedAt = now.AddTicks(i) })
+                .ToList(),
+        };
 
         if (req.CategoryId.HasValue)
         {
@@ -101,6 +119,7 @@ public class ActivityService(LoomDbContext db)
     public async Task<Result<ActivityDto>> UpdateAsync(Guid id, Guid userId, UpdateActivityRequest req)
     {
         var err = Validators.ValidateTitle(req.Title, "Title")
+            ?? Validators.ValidateShortLabel(req.ShortLabel)
             ?? Validators.ValidateRepeatAfterDays(req.RepeatAfterDays)
             ?? Validators.ValidateReminders(req.Reminders);
         if (err is not null) return Result<ActivityDto>.Fail(err);
@@ -115,6 +134,7 @@ public class ActivityService(LoomDbContext db)
         if (a is null) return Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."));
 
         a.Title = req.Title.Trim();
+        a.ShortLabel = Validators.NormalizeShortLabel(req.ShortLabel);
         a.RepeatAfterDays = req.RepeatAfterDays;
         a.ShowAsOverdue = req.ShowAsOverdue;
         a.Reminders = ReminderMath.Normalize(req.Reminders ?? []);
@@ -145,47 +165,6 @@ public class ActivityService(LoomDbContext db)
 
         await db.SaveChangesAsync();
         return Result<ActivityDto>.Success(ActivityDto.FromEntity(a));
-    }
-
-    /// <summary>
-    /// A new activity with the source's category, goals, tags, repeat gap, reminders, subtask template and live
-    /// work types. Occurrences stay with the source: the copy starts with no history.
-    /// </summary>
-    public async Task<Result<ActivityDto>> DuplicateAsync(Guid id, Guid userId)
-    {
-        var src = await db.Activities
-            .Include(a => a.Category)
-            .Include(a => a.Goals)
-            .Include(a => a.Tags)
-            .Include(a => a.Subtasks)
-            .Include(a => a.WorkTypes)
-            .FirstOrDefaultAsync(a => a.Id == id && a.UserId == userId && a.Kind == ActivityKind.activity);
-        if (src is null) return Result<ActivityDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."));
-
-        var title = $"{src.Title} (copy)";
-        var now = DateTimeOffset.UtcNow;
-        // Children are ordered by CreatedAt, so each copy gets a strictly increasing stamp.
-        var copy = new Activity
-        {
-            UserId = userId,
-            Title = title.Length > 255 ? src.Title : title,
-            CategoryId = src.CategoryId,
-            Category = src.Category,
-            RepeatAfterDays = src.RepeatAfterDays,
-            Reminders = [.. src.Reminders],
-            Goals = [.. src.Goals],
-            Tags = [.. src.Tags],
-            Subtasks = src.Subtasks.OrderBy(s => s.CreatedAt)
-                .Select((s, i) => new ActivitySubtask { Title = s.Title, CreatedAt = now.AddTicks(i) })
-                .ToList(),
-            WorkTypes = src.WorkTypes.Where(w => !w.IsArchived).OrderBy(w => w.CreatedAt)
-                .Select((w, i) => new ActivityWorkType { Title = w.Title, CreatedAt = now.AddTicks(i) })
-                .ToList(),
-        };
-
-        db.Activities.Add(copy);
-        await db.SaveChangesAsync();
-        return Result<ActivityDto>.Success(ActivityDto.FromEntity(copy));
     }
 
     internal static async Task<Result<List<Goal>>> ResolveGoalsAsync(LoomDbContext db, Guid userId, List<Guid>? goalIds)

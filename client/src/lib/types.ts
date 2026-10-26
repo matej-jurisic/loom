@@ -149,6 +149,8 @@ export interface Activity {
   id: string
   userId: string
   title: string
+  /** Marker shown beside occurrence titles on the calendar and in lists. */
+  shortLabel: string | null
   categoryId: string | null
   kind: ActivityKind
   createdAt: string
@@ -187,15 +189,26 @@ export interface Occurrence {
   effectiveTags: Tag[]
   activity: Activity
   deadlineOccurrenceId: string | null
-  deadline: DeadlineRef | null
+  deadline: OccurrenceRef | null
   linkedDoneCount: number
   linkedDoneMinutes: number
   /** The occurrence's own reminders; null inherits the activity's. */
   reminders: number[] | null
   effectiveReminders: number[]
+  /** Manual list position set by dragging; null sorts after every ranked occurrence. */
+  sortOrder: number | null
+  /** The occurrence this one follows up on. One level only: a source never has a source itself. */
+  sourceOccurrenceId: string | null
+  source: OccurrenceRef | null
+  followUpCount: number
+  followUpDoneCount: number
+  followUpDoneMinutes: number
+  /** Occurrences whose deadline link points here, any status. */
+  linkedCount: number
 }
 
-export interface DeadlineRef {
+/** A linked occurrence as another shows it: the deadline target or the follow-up source. */
+export interface OccurrenceRef {
   id: string
   effectiveTitle: string
   startAt: string | null
@@ -267,4 +280,5 @@ export interface UserSettings {
   timezone: string // IANA id
   calendarColorBy: CalendarColorBy
   dailyDigestTime: string | null // "HH:mm", null = off
+  deadlineHorizonDays: number | null // null = every upcoming deadline
 }

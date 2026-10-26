@@ -7,6 +7,8 @@ public class Activity
     public Guid Id { get; set; } = Guid.NewGuid();
     public Guid UserId { get; set; }
     public required string Title { get; set; }
+    // Shown beside an occurrence's title override, so "Lab 3" under two activities stays tellable apart.
+    public string? ShortLabel { get; set; }
     public Guid? CategoryId { get; set; }
     public ActivityKind Kind { get; set; } = ActivityKind.activity;
     public int? RepeatAfterDays { get; set; }

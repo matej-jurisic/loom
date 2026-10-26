@@ -45,6 +45,9 @@ public sealed record OccurrenceListDto(
 public sealed record SaveOccurrenceListRequest(
     string Name, string? Status, string? Category, string? Tag, string? Goal, string? Search, string? GroupBy);
 
+// Every list of the user, top to bottom.
+public sealed record ReorderOccurrenceListsRequest(List<Guid> ListIds);
+
 // Activities
 public sealed record ActivityDto(
     Guid Id,
@@ -61,6 +64,7 @@ public sealed record ActivityDto(
     int? RepeatAfterDays,
     bool ShowAsOverdue,
     List<int> Reminders,
+    string? ShortLabel,
     // How many occurrences this activity has in the recent window (see ActivityService.RecentWindowDays).
     // Only the list endpoint fills it; single-activity responses leave it at 0.
     int RecentOccurrenceCount = 0)
@@ -75,11 +79,12 @@ public sealed record ActivityDto(
         a.RepeatAfterDays,
         a.ShowAsOverdue,
         a.Reminders,
+        a.ShortLabel,
         recentOccurrenceCount);
 }
 
-public sealed record CreateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null, List<Guid>? TagIds = null, bool ShowAsOverdue = true, List<int>? Reminders = null);
-public sealed record UpdateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null, List<Guid>? TagIds = null, bool ShowAsOverdue = true, List<int>? Reminders = null);
+public sealed record CreateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null, List<Guid>? TagIds = null, bool ShowAsOverdue = true, List<int>? Reminders = null, List<string>? Subtasks = null, List<string>? WorkTypes = null, string? ShortLabel = null);
+public sealed record UpdateActivityRequest(string Title, Guid? CategoryId, List<Guid>? GoalIds = null, int? RepeatAfterDays = null, List<Guid>? TagIds = null, bool ShowAsOverdue = true, List<int>? Reminders = null, string? ShortLabel = null);
 
 // Activity subtasks (template)
 public sealed record ActivitySubtaskDto(Guid Id, Guid ActivityId, string Title, DateTimeOffset CreatedAt)
@@ -117,6 +122,9 @@ public sealed record TimeSplitDto(Guid Id, Guid WorkTypeId, string Title, int Mi
 public sealed record TimeSplitInput(Guid WorkTypeId, int? Minutes);
 public sealed record SetTimeSplitRequest(List<TimeSplitInput> Rows);
 
+/// <summary>The occurrences of one list section, top to bottom, after a drag.</summary>
+public sealed record ReorderOccurrencesRequest(List<Guid> OccurrenceIds);
+
 // Occurrence subtasks (per-occurrence copy)
 public sealed record OccurrenceSubtaskDto(Guid Id, Guid OccurrenceId, string Title, bool IsDone, DateTimeOffset CreatedAt)
 {
@@ -141,8 +149,10 @@ public sealed record CreateEventRequest(
     Guid? DeadlineOccurrenceId = null,
     bool IsNoDate = false,
     List<Guid>? TagIds = null,
-    List<int>? Reminders = null);
+    List<int>? Reminders = null,
+    Guid? SourceOccurrenceId = null);
 
+// A full replace: an omitted SourceOccurrenceId clears the follow-up link.
 public sealed record UpdateEventRequest(
     string Title,
     Guid? CategoryId,
@@ -156,7 +166,8 @@ public sealed record UpdateEventRequest(
     bool ClearDeadline = false,
     bool IsNoDate = false,
     List<Guid>? TagIds = null,
-    List<int>? Reminders = null);
+    List<int>? Reminders = null,
+    Guid? SourceOccurrenceId = null);
 
 // Occurrences
 public sealed record OccurrenceDto(
@@ -182,14 +193,22 @@ public sealed record OccurrenceDto(
     List<TagDto> EffectiveTags,
     ActivityDto Activity,
     Guid? DeadlineOccurrenceId = null,
-    DeadlineRefDto? Deadline = null,
+    OccurrenceRefDto? Deadline = null,
     int LinkedDoneCount = 0,
     int LinkedDoneMinutes = 0,
     bool IsBehind = false,
     bool IsNoDate = false,
     // The occurrence's own reminders: null inherits the activity's. EffectiveReminders is what fires.
     List<int>? Reminders = null,
-    List<int>? EffectiveReminders = null)
+    List<int>? EffectiveReminders = null,
+    int? SortOrder = null,
+    Guid? SourceOccurrenceId = null,
+    OccurrenceRefDto? Source = null,
+    int FollowUpCount = 0,
+    int FollowUpDoneCount = 0,
+    int FollowUpDoneMinutes = 0,
+    // Every occurrence whose deadline link points here, whatever its status.
+    int LinkedCount = 0)
 {
     public static OccurrenceDto FromEntity(Occurrence o, DayContext ctx, DateTimeOffset nowUtc) => new(
         o.Id, o.UserId, o.ActivityId, o.Title, o.Notes,
@@ -209,7 +228,9 @@ public sealed record OccurrenceDto(
         IsBehind: o.Activity.ShowAsOverdue && DayMath.IsBehind(o, ctx, nowUtc),
         IsNoDate: o.IsNoDate,
         Reminders: o.Reminders,
-        EffectiveReminders: ReminderMath.Effective(o));
+        EffectiveReminders: ReminderMath.Effective(o),
+        SortOrder: o.SortOrder,
+        SourceOccurrenceId: o.SourceOccurrenceId);
 
     public static List<TagDto> UnionTags(Occurrence o) =>
         o.Activity.Tags.Concat(o.Tags)
@@ -219,7 +240,8 @@ public sealed record OccurrenceDto(
             .ToList();
 }
 
-public sealed record DeadlineRefDto(
+// A linked occurrence as another one shows it: the deadline target, or the follow-up source.
+public sealed record OccurrenceRefDto(
     Guid Id,
     string EffectiveTitle,
     DateTimeOffset? StartAt,
@@ -227,7 +249,7 @@ public sealed record DeadlineRefDto(
     bool IsAllDay,
     string Status)
 {
-    public static DeadlineRefDto FromEntity(Occurrence d) => new(
+    public static OccurrenceRefDto FromEntity(Occurrence d) => new(
         d.Id, d.Title ?? d.Activity.Title, d.StartAt, d.EndAt, d.IsAllDay, d.Status.ToString());
 }
 
@@ -244,7 +266,8 @@ public sealed record CreateOccurrenceRequest(
     Guid? DeadlineOccurrenceId = null,
     bool IsNoDate = false,
     List<Guid>? TagIds = null,
-    List<int>? Reminders = null);
+    List<int>? Reminders = null,
+    Guid? SourceOccurrenceId = null);
 
 public sealed record PatchOccurrenceRequest(
     Optional<Guid?> ActivityId = default,
@@ -258,7 +281,8 @@ public sealed record PatchOccurrenceRequest(
     Optional<string?> Notes = default,
     Optional<bool> IsNoDate = default,
     List<Guid>? TagIds = null,
-    Optional<List<int>?> Reminders = default);
+    Optional<List<int>?> Reminders = default,
+    Optional<Guid?> SourceOccurrenceId = default);
 
 public sealed record RegisterPushDeviceRequest(string Token);
 
@@ -392,7 +416,8 @@ public sealed record ExportOccurrenceDto(
     List<TimeSplitDto> TimeSplit,
     Guid? DeadlineOccurrenceId,
     bool IsNoDate,
-    List<TagDto> Tags)
+    List<TagDto> Tags,
+    Guid? SourceOccurrenceId)
 {
     public static ExportOccurrenceDto FromEntity(Occurrence o) => new(
         o.Id, o.ActivityId, o.Title ?? o.Activity.Title, o.Notes, o.Status.ToString(),
@@ -402,7 +427,8 @@ public sealed record ExportOccurrenceDto(
         TimeSplitDto.FromOccurrence(o),
         o.DeadlineOccurrenceId,
         o.IsNoDate,
-        o.Tags.OrderBy(t => t.Name).Select(TagDto.FromEntity).ToList());
+        o.Tags.OrderBy(t => t.Name).Select(TagDto.FromEntity).ToList(),
+        o.SourceOccurrenceId);
 }
 
 public sealed record ExportDto(
@@ -418,15 +444,16 @@ public sealed record ExportDto(
 // UserSettings
 public sealed record UserSettingsDto(
     Guid UserId, int MaxFocusGoals, string DayBoundaryTime, string Timezone, string CalendarColorBy,
-    string? DailyDigestTime = null)
+    string? DailyDigestTime = null, int? DeadlineHorizonDays = null)
 {
     public static UserSettingsDto FromEntity(UserSettings us, string timezone) => new(
         us.UserId, us.MaxFocusGoals, us.DayBoundaryTime.ToString("HH:mm"), timezone, us.CalendarColorBy.ToString(),
-        us.DailyDigestTime?.ToString("HH:mm"));
+        us.DailyDigestTime?.ToString("HH:mm"), us.DeadlineHorizonDays);
 }
 
 // CalendarColorBy null keeps the stored value, so a client that predates it can still save settings.
 // DailyDigestTime absent keeps it, an explicit null turns the digest off.
+// DeadlineHorizonDays absent keeps it, an explicit null shows every upcoming deadline.
 public sealed record UpdateUserSettingsRequest(
     int MaxFocusGoals, string DayBoundaryTime, string Timezone, CalendarColorBy? CalendarColorBy = null,
-    Optional<string?> DailyDigestTime = default);
+    Optional<string?> DailyDigestTime = default, Optional<int?> DeadlineHorizonDays = default);

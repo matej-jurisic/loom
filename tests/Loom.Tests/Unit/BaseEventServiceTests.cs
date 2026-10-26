@@ -163,6 +163,20 @@ public class ActivityServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ListAsync_does_not_count_no_date_occurrences()
+    {
+        var (userId, goalId) = await CreateUserWithGoalAsync();
+        var activity = (await _ctx.ActivityService.CreateAsync(userId, new CreateActivityRequest("Todo", null, [goalId]))).Value!;
+
+        _ctx.Db.Occurrences.Add(new Occurrence { UserId = userId, ActivityId = activity.Id, IsNoDate = true });
+        await _ctx.Db.SaveChangesAsync();
+
+        var list = await _ctx.ActivityService.ListAsync(userId);
+
+        Assert.Equal(0, Assert.Single(list).RecentOccurrenceCount);
+    }
+
+    [Fact]
     public async Task ListAsync_does_not_count_another_users_occurrences()
     {
         var (userId, goalId) = await CreateUserWithGoalAsync();

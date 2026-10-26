@@ -10,5 +10,6 @@ public class UserSettings
     public CalendarColorBy CalendarColorBy { get; set; } = CalendarColorBy.category;
     public TimeOnly? DailyDigestTime { get; set; }
     public DateOnly? LastDigestDate { get; set; }
+    public int? DeadlineHorizonDays { get; set; }
     public User User { get; set; } = null!;
 }

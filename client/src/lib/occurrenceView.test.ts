@@ -1,15 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import type { Activity, Occurrence } from './types'
+import { shortDate } from './dates'
 import {
   NONE_BUCKET,
   NONE_FILTER,
+  applyReorder,
   classify,
   filterOccurrences,
   formatOccurrenceDate,
   groupOccurrences,
+  hasRelated,
   isNarrowed,
   listBody,
   listLook,
+  relatedSections,
   sameView,
   viewFromList,
   type OccurrenceFilters,
@@ -33,6 +37,7 @@ function activity(over: Partial<Activity> = {}): Activity {
     workTypes: [],
     repeatAfterDays: null,
     showAsOverdue: true,
+    shortLabel: null,
     recentOccurrenceCount: 0,
     ...over,
   }
@@ -67,6 +72,15 @@ function occ(over: Partial<Occurrence> = {}, act: Partial<Activity> = {}): Occur
     deadline: null,
     linkedDoneCount: 0,
     linkedDoneMinutes: 0,
+    reminders: null,
+    effectiveReminders: [],
+    sortOrder: null,
+    sourceOccurrenceId: null,
+    source: null,
+    followUpCount: 0,
+    followUpDoneCount: 0,
+    followUpDoneMinutes: 0,
+    linkedCount: 0,
     ...over,
   }
   return {
@@ -82,7 +96,7 @@ const none: OccurrenceFilters = { status: 'all', category: null, tag: null, goal
 describe('classify', () => {
   it('puts finished occurrences in done whatever their date', () => {
     expect(classify(occ({ status: 'done', startAt: at(7) }), now)).toBe('done')
-    expect(classify(occ({ status: 'skipped' }), now)).toBe('done')
+    expect(classify(occ({ status: 'skipped' }), now)).toBe('skipped')
   })
 
   it('lets planned beat overdue and floating beat nothing but planned', () => {
@@ -158,14 +172,47 @@ describe('groupOccurrences', () => {
   const cs = { id: 't1', name: 'CS101' }
   const math = { id: 't2', name: 'Math' }
 
+  describe('by follow-up source', () => {
+    const ref = (o: Occurrence) => ({
+      id: o.id, effectiveTitle: o.effectiveTitle, startAt: o.startAt, endAt: o.endAt, isAllDay: o.isAllDay, status: o.status,
+    })
+
+    it('puts a source with its follow-ups, in source date order, and unlinked last', () => {
+      const l2 = occ({ effectiveTitle: 'Lecture 02', startAt: at(9), followUpCount: 1 })
+      const l1 = occ({ effectiveTitle: 'Lecture 01', startAt: at(2), followUpCount: 2 })
+      const rows = [
+        occ({ effectiveTitle: 'Loose', startAt: at(1) }),
+        occ({ effectiveTitle: 'L02 read', startAt: at(10), sourceOccurrenceId: l2.id, source: ref(l2) }),
+        l2,
+        occ({ effectiveTitle: 'L01 practice', startAt: at(5), sourceOccurrenceId: l1.id, source: ref(l1) }),
+        occ({ effectiveTitle: 'L01 revise', startAt: at(3), sourceOccurrenceId: l1.id, source: ref(l1) }),
+        l1,
+      ]
+      const sections = groupOccurrences(rows, 'source', now)
+      expect(sections.map((s) => s.key)).toEqual([l1.id, l2.id, NONE_BUCKET])
+      expect(sections[0].label).toBe(`Lecture 01 - ${shortDate(at(2))}`)
+      expect(sections[0].items.map((o) => o.effectiveTitle)).toEqual(['Lecture 01', 'L01 revise', 'L01 practice'])
+      expect(sections[2].items.map((o) => o.effectiveTitle)).toEqual(['Loose'])
+    })
+
+    it('names the section from the follow-up when the source is filtered out', () => {
+      const lecture = occ({ effectiveTitle: 'Lecture 01', status: 'done', followUpCount: 1 })
+      const sections = groupOccurrences([occ({ sourceOccurrenceId: lecture.id, source: ref(lecture) })], 'source', now)
+      expect(sections).toHaveLength(1)
+      expect(sections[0].key).toBe(lecture.id)
+      expect(sections[0].label).toBe('Lecture 01')
+    })
+  })
+
   it('orders the when buckets and drops empty ones', () => {
     const rows = [
+      occ({ status: 'skipped' }),
       occ({ status: 'done' }),
       occ({ startAt: at(20) }),
       occ({ isOverdue: true, startAt: at(1) }),
     ]
     const sections = groupOccurrences(rows, 'when', now)
-    expect(sections.map((s) => s.key)).toEqual(['overdue', 'upcoming', 'done'])
+    expect(sections.map((s) => s.key)).toEqual(['overdue', 'upcoming', 'done', 'skipped'])
     expect(sections[0].tone).toBe('overdue')
   })
 
@@ -208,6 +255,29 @@ describe('groupOccurrences', () => {
   })
 })
 
+describe('manual order', () => {
+  it('puts ranked occurrences first by rank, then the rest in the section order', () => {
+    const rows = [
+      occ({ effectiveTitle: 'Sooner', startAt: at(10) }),
+      occ({ effectiveTitle: 'Pinned last', startAt: at(9), sortOrder: 5 }),
+      occ({ effectiveTitle: 'Later', startAt: at(20) }),
+      occ({ effectiveTitle: 'Pinned first', startAt: at(30), sortOrder: 2 }),
+    ]
+    const sections = groupOccurrences(rows, 'activity', now)
+    expect(sections[0].items.map((o) => o.effectiveTitle)).toEqual(['Pinned first', 'Pinned last', 'Sooner', 'Later'])
+  })
+
+  it('trades held ranks and gives unranked ones fresh ranks after every ranked one', () => {
+    const a = occ({ sortOrder: 0 })
+    const b = occ({ sortOrder: 1 })
+    const c = occ({ sortOrder: 2 })
+    const d = occ()
+    const out = applyReorder([a, b, c, d], [d.id, c.id, a.id])
+    const rank = (id: string) => out.find((o) => o.id === id)!.sortOrder
+    expect([rank(d.id), rank(c.id), rank(a.id), rank(b.id)]).toEqual([0, 2, 3, 1])
+  })
+})
+
 describe('lists', () => {
   const view: OccurrenceView = { status: 'open', category: null, tag: 't1', goal: null, search: ' milk ', group: 'when' }
 
@@ -228,10 +298,11 @@ describe('lists', () => {
   it('sees a grouping change as a difference but not as narrowing', () => {
     const regrouped = { ...view, group: 'tag' as const }
     expect(sameView(view, regrouped)).toBe(false)
-    const plain = { ...view, tag: null, search: '' }
+    const plain = { ...view, status: 'all' as const, tag: null, search: '' }
     expect(isNarrowed(plain)).toBe(false)
     expect(isNarrowed({ ...plain, group: 'tag' })).toBe(false)
     expect(isNarrowed({ ...plain, category: 'none' })).toBe(true)
+    expect(isNarrowed({ ...plain, status: 'open' })).toBe(true)
   })
 
   it('borrows its look from the goal, then the category, else none', () => {
@@ -244,5 +315,43 @@ describe('lists', () => {
     expect(listLook({ goal: 'g2', category: 'c1' }, goals, categories)).toEqual({ icon: 'Leaf', color: '#00ff00' })
     expect(listLook({ goal: 'gone', category: null }, goals, categories)).toBeNull()
     expect(listLook({ goal: 'none', category: 'none' }, goals, categories)).toBeNull()
+  })
+})
+
+describe('relatedSections', () => {
+  const deadline = occ({ effectiveTitle: 'Lab 3 report', endAt: '2026-10-20T10:00:00Z' })
+  const lecture = occ({ effectiveTitle: 'Lecture 01', startAt: '2026-10-01T10:00:00Z' })
+  const session = occ({
+    startAt: '2026-10-10T10:00:00Z',
+    deadlineOccurrenceId: deadline.id,
+    sourceOccurrenceId: lecture.id,
+  })
+  const otherSession = occ({ startAt: '2026-10-05T10:00:00Z', deadlineOccurrenceId: deadline.id })
+  const sibling = occ({ startAt: '2026-10-02T10:00:00Z', sourceOccurrenceId: lecture.id })
+  const unrelated = occ({ startAt: '2026-10-03T10:00:00Z' })
+  const all = [deadline, lecture, session, otherSession, sibling, unrelated]
+
+  const shape = (o: Occurrence) =>
+    relatedSections(all, o).map((s) => [s.key, s.items.map((i) => i.id)])
+
+  it('shows a session its target, fellow sessions, source and siblings, never itself', () => {
+    expect(shape(session)).toEqual([
+      ['deadline', [deadline.id]],
+      ['sessions', [otherSession.id]],
+      ['source', [lecture.id]],
+      ['related', [sibling.id]],
+    ])
+  })
+
+  it('shows a target its sessions and a source its follow-ups, in date order', () => {
+    expect(shape(deadline)).toEqual([['sessions', [otherSession.id, session.id]]])
+    expect(shape(lecture)).toEqual([['related', [sibling.id, session.id]]])
+  })
+
+  it('has nothing for an unlinked occurrence', () => {
+    expect(shape(unrelated)).toEqual([])
+    expect(hasRelated(unrelated)).toBe(false)
+    expect(hasRelated({ ...deadline, linkedCount: 2 })).toBe(true)
+    expect(hasRelated(sibling)).toBe(true)
   })
 })

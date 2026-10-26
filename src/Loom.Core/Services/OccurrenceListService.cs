@@ -10,14 +10,17 @@ public class OccurrenceListService(LoomDbContext db)
 {
     // Mirror the client's StatusFilter / OccurrenceGroupBy and NONE_FILTER (lib/occurrenceView.ts).
     private static readonly string[] Statuses = ["open", "done", "skipped", "all"];
-    private static readonly string[] GroupBys = ["when", "category", "tag", "goal", "activity", "none"];
+    private static readonly string[] GroupBys = ["when", "category", "tag", "goal", "activity", "source", "none"];
     private const string NoneFilter = "none";
     private const int MaxSearchLength = 255;
 
     public async Task<List<OccurrenceListDto>> ListAsync(Guid userId)
     {
         var lists = await db.OccurrenceLists.AsNoTracking().Where(l => l.UserId == userId).ToListAsync();
-        return lists.OrderBy(l => l.Name, StringComparer.OrdinalIgnoreCase).Select(OccurrenceListDto.FromEntity).ToList();
+        return lists
+            .OrderBy(l => l.SortOrder)
+            .ThenBy(l => l.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(OccurrenceListDto.FromEntity).ToList();
     }
 
     public async Task<Result<OccurrenceListDto>> CreateAsync(Guid userId, SaveOccurrenceListRequest req)
@@ -26,6 +29,7 @@ public class OccurrenceListService(LoomDbContext db)
         var err = await ApplyAsync(list, userId, req);
         if (err is not null) return Result<OccurrenceListDto>.Fail(err);
 
+        list.SortOrder = (await db.OccurrenceLists.Where(l => l.UserId == userId).MaxAsync(l => (int?)l.SortOrder) ?? -1) + 1;
         db.OccurrenceLists.Add(list);
         await db.SaveChangesAsync();
         return Result<OccurrenceListDto>.Success(OccurrenceListDto.FromEntity(list));
@@ -48,6 +52,21 @@ public class OccurrenceListService(LoomDbContext db)
         var list = await db.OccurrenceLists.FirstOrDefaultAsync(l => l.Id == id && l.UserId == userId);
         if (list is null) return Result.Fail(new Error(ErrorType.NotFound, "List not found."));
         db.OccurrenceLists.Remove(list);
+        await db.SaveChangesAsync();
+        return Result.Success();
+    }
+
+    public async Task<Result> ReorderAsync(Guid userId, ReorderOccurrenceListsRequest req)
+    {
+        var ids = req.ListIds ?? [];
+        if (ids.Distinct().Count() != ids.Count)
+            return Result.Fail(new Error(ErrorType.Validation, "A list can only appear once."));
+
+        var lists = await db.OccurrenceLists.Where(l => l.UserId == userId).ToDictionaryAsync(l => l.Id);
+        if (ids.Count != lists.Count || ids.Any(id => !lists.ContainsKey(id)))
+            return Result.Fail(new Error(ErrorType.Validation, "The order must name every list exactly once."));
+
+        for (var i = 0; i < ids.Count; i++) lists[ids[i]].SortOrder = i;
         await db.SaveChangesAsync();
         return Result.Success();
     }

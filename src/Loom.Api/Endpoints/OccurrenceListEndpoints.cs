@@ -27,6 +27,14 @@ public static class OccurrenceListEndpoints
                 : result.Error!.ToProblem();
         });
 
+        group.MapPut("/order", async (ReorderOccurrenceListsRequest req, ClaimsPrincipal principal, OccurrenceListService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.ReorderAsync(userId.Value, req);
+            return result.IsSuccess ? Results.NoContent() : result.Error!.ToProblem();
+        });
+
         group.MapPut("/{id:guid}", async (Guid id, SaveOccurrenceListRequest req, ClaimsPrincipal principal, OccurrenceListService svc) =>
         {
             var userId = principal.GetUserId();

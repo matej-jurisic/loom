@@ -1,7 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { ChevronRight, ListTodo, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ChevronRight, GripVertical, ListTodo, Pencil, Plus, Trash2 } from 'lucide-react'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type Modifier,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { categoriesApi, goalsApi, listsApi, occurrencesApi, tagsApi } from '@/lib/api'
 import { invalidateLists } from '@/lib/invalidate'
 import { toastError } from '@/store/toasts'
@@ -19,6 +37,8 @@ import { ListModal } from '@/components/lists/ListModal'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ActionMenu } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
+
+const verticalOnly: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
 /** `/occurrences`: the saved lists first, then the way into every occurrence. */
 export function ListsPage() {
@@ -53,6 +73,39 @@ export function ListsPage() {
     },
     onError: (err) => toastError(err, 'Could not delete the list.'),
   })
+
+  const reorderMutation = useMutation({
+    mutationFn: (ids: string[]) => listsApi.reorder(ids),
+    // Optimistic: the row stays where it was dropped instead of jumping back until the refetch.
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: ['lists'] })
+      const snapshot = qc.getQueryData<OccurrenceList[]>(['lists'])
+      if (snapshot) {
+        const byId = new Map(snapshot.map((l) => [l.id, l]))
+        qc.setQueryData(['lists'], ids.map((id) => byId.get(id)).filter((l) => l !== undefined))
+      }
+      return { snapshot }
+    },
+    onError: (err, _ids, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(['lists'], ctx.snapshot)
+      toastError(err, 'Could not save the order.')
+    },
+    onSettled: () => invalidateLists(qc),
+  })
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  function handleDragEnd({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id) return
+    const ids = lists.map((l) => l.id)
+    const from = ids.indexOf(String(active.id))
+    const to = ids.indexOf(String(over.id))
+    if (from < 0 || to < 0) return
+    reorderMutation.mutate(arrayMove(ids, from, to))
+  }
 
   // Old filtered links (`/occurrences?category=...`) belong to the full view.
   if (location.search) return <Navigate to={`/occurrences/all${location.search}`} replace />
@@ -113,35 +166,39 @@ export function ListsPage() {
                 </button>
               </div>
             ) : (
-              <div className="overflow-hidden rounded-lg border border-border">
-                <ul className="divide-y divide-border">
-                  {lists.map((l) => (
-                    <li key={l.id} className="flex items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40">
-                      <ListTile look={listLook(l, goals, categories)} />
-                      <Link to={`/occurrences/lists/${l.id}`} className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-foreground">{l.name}</span>
-                        <span className="block truncate text-xs text-muted-foreground">{describe(l)}</span>
-                      </Link>
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{counts.get(l.id) ?? 0}</span>
-                      <ActionMenu
-                        ariaLabel={`Actions for ${l.name}`}
-                        iconClassName="h-3.5 w-3.5"
-                        items={[
-                          {
-                            icon: Pencil,
-                            label: 'Edit',
-                            onClick: () => {
-                              setEditing(l)
-                              setModalOpen(true)
-                            },
-                          },
-                          'separator',
-                          { icon: Trash2, label: 'Delete', onClick: () => setDeleting(l), destructive: true },
-                        ]}
-                      />
-                    </li>
-                  ))}
-                </ul>
+              <div className="rounded-lg border border-border">
+                <DndContext sensors={sensors} collisionDetection={closestCenter} modifiers={[verticalOnly]} onDragEnd={handleDragEnd}>
+                  <SortableContext items={lists.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+                    <ul>
+                      {lists.map((l) => (
+                        <SortableListRow key={l.id} id={l.id}>
+                          <ListTile look={listLook(l, goals, categories)} />
+                          <Link to={`/occurrences/lists/${l.id}`} className="min-w-0 flex-1">
+                            <span className="block truncate text-sm text-foreground">{l.name}</span>
+                            <span className="block truncate text-xs text-muted-foreground">{describe(l)}</span>
+                          </Link>
+                          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{counts.get(l.id) ?? 0}</span>
+                          <ActionMenu
+                            ariaLabel={`Actions for ${l.name}`}
+                            iconClassName="h-3.5 w-3.5"
+                            items={[
+                              {
+                                icon: Pencil,
+                                label: 'Edit',
+                                onClick: () => {
+                                  setEditing(l)
+                                  setModalOpen(true)
+                                },
+                              },
+                              'separator',
+                              { icon: Trash2, label: 'Delete', onClick: () => setDeleting(l), destructive: true },
+                            ]}
+                          />
+                        </SortableListRow>
+                      ))}
+                    </ul>
+                  </SortableContext>
+                </DndContext>
               </div>
             )}
           </div>
@@ -178,5 +235,30 @@ export function ListsPage() {
         message={`"${deleting?.name ?? ''}" is removed. Its occurrences stay.`}
       />
     </div>
+  )
+}
+
+function SortableListRow({ id, children }: { id: string; children: ReactNode }) {
+  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id })
+  return (
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      className={`group relative flex items-center gap-3 border-b border-border bg-card py-2.5 pl-5 pr-3 transition-colors first:rounded-t-lg last:rounded-b-lg last:border-b-0 hover:bg-muted/40 ${
+        isDragging ? 'z-10 shadow-lg' : ''
+      }`}
+    >
+      <button
+        type="button"
+        ref={setActivatorNodeRef}
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to reorder"
+        className="absolute inset-y-0 left-0 flex w-5 cursor-grab touch-none items-center justify-center text-muted-foreground/60 transition-opacity hover:text-foreground focus-visible:opacity-100 active:cursor-grabbing [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
+      >
+        <GripVertical className="h-3.5 w-3.5" strokeWidth={2} />
+      </button>
+      {children}
+    </li>
   )
 }

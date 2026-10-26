@@ -369,24 +369,31 @@ public class OccurrenceTests : IDisposable
     }
 
     [Fact]
-    public async Task UpdateOccurrence_CannotMoveAnEventToAnActivity()
+    public async Task UpdateOccurrence_LinksAnEventToAnActivity()
     {
         var token = await _client.SetupUserAsync();
         _client.UseBearer(token);
         var activityId = await CreateActivityAsync();
 
-        // An event's activity is a backing row it owns 1:1, not a link the user chose
         var evt = await (await _client.PostAsJsonAsync("/api/occurrences/event", new { title = "Theater" }))
             .ReadAsync<OccurrenceDto>();
 
         var res = await _client.PatchAsJsonAsync($"/api/occurrences/{evt.Id}", new
         {
             activityId,
+            title = "Theater",
             isAllDay = false,
             isPlanned = false,
         });
 
-        Assert.Equal(HttpStatusCode.BadRequest, res.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, res.StatusCode);
+        var linked = await res.ReadAsync<OccurrenceDto>();
+        Assert.Equal(activityId, linked.ActivityId);
+        Assert.Equal("Theater", linked.EffectiveTitle);
+
+        // The backing row went with the link, so the event is gone and the occurrence is not.
+        Assert.Equal(HttpStatusCode.NotFound, (await _client.GetAsync($"/api/activities/{evt.ActivityId}")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await _client.GetAsync($"/api/occurrences/{evt.Id}")).StatusCode);
     }
 
     [Fact]

@@ -1,6 +1,8 @@
 // Every figure here is a count of things the user actually logged. Nothing is divided by the length
 // of a day, and a blank cell means "nothing recorded", not "nothing happened".
 
+import { shortDate } from '@/lib/dates'
+
 /**
  * One day's counts. `GoalHeatmap` (server-built, in the user's day-boundary timezone) is assignable
  * to this; the activity history modal builds the same shape client-side and adds `pending`, which
@@ -87,7 +89,7 @@ function cellStyle(day: HeatmapDayCounts | undefined, color: string, isToday: bo
 }
 
 function cellTitle(date: Date, day: HeatmapDayCounts | undefined): string {
-  const label = `${date.getDate()} ${MONTHS[date.getMonth()]}`
+  const label = shortDate(date)
   const parts: string[] = []
   if (day && day.done > 0) parts.push(`${day.done} done`)
   if (day && day.skipped > 0) parts.push(`${day.skipped} skipped`)

@@ -1,3 +1,5 @@
+import { shortDate, weekdayDate, weekdayName } from './dates'
+
 export type ViewMode = 'day' | '3day' | 'week'
 
 export const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
@@ -10,6 +12,20 @@ export function sod(d: Date): Date {
   const r = new Date(d)
   r.setHours(0, 0, 0, 0)
   return r
+}
+
+/** Start of the next local day. Not `+ 86400000`: a DST switch day is 23 or 25 hours long. */
+export function eodMs(dayStartMs: number): number {
+  return addDays(new Date(dayStartMs), 1).getTime()
+}
+
+/**
+ * Wall-clock minutes from a day's local midnight to an instant - the grid's own axis, which always
+ * runs 00:00 to 24:00. Elapsed minutes differ by the hour a DST switch adds or skips.
+ */
+export function wallMinute(ms: number, dayStartMs: number): number {
+  const shift = new Date(ms).getTimezoneOffset() - new Date(dayStartMs).getTimezoneOffset()
+  return (ms - dayStartMs) / 60000 - shift
 }
 
 export function addDays(d: Date, n: number): Date {
@@ -87,37 +103,17 @@ export function timeLabel(iso: string): string {
 }
 
 export function pageTitle(view: ViewMode, days: Date[]): string {
-  if (view === 'day') {
-    return days[0].toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric',
-    })
-  }
+  if (view === 'day') return weekdayDate(days[0], true, true)
   const f = days[0]
   const l = days[days.length - 1]
-  if (f.getFullYear() !== l.getFullYear()) {
-    return `${f.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} - ${l.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
-  }
-  if (f.getMonth() !== l.getMonth()) {
-    return `${f.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${l.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}, ${l.getFullYear()}`
-  }
-  return `${f.toLocaleDateString('en-US', { month: 'long' })} ${f.getDate()} – ${l.getDate()}, ${l.getFullYear()}`
+  return `${shortDate(f, f.getFullYear() !== l.getFullYear())} - ${shortDate(l, true)}`
 }
 
 export function compactTitle(view: ViewMode, days: Date[]): string {
-  if (view === 'day') {
-    return days[0].toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-  }
-  const f = days[0]
-  const l = days[days.length - 1]
-  if (f.getMonth() === l.getMonth() && f.getFullYear() === l.getFullYear()) {
-    return `${f.toLocaleDateString('en-US', { month: 'short' })} ${f.getDate()}-${l.getDate()}`
-  }
-  return `${f.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - ${l.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+  if (view === 'day') return weekdayDate(days[0])
+  return `${shortDate(days[0], false)} - ${shortDate(days[days.length - 1], false)}`
 }
 
 export function dayHeader(d: Date): string {
-  return d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' })
+  return `${weekdayName(d)} ${d.getDate()}`
 }

@@ -12,6 +12,8 @@ import { OccurrenceHeatmap } from '@/components/events/OccurrenceHeatmap'
 import { EventModal } from '@/components/events/EventModal'
 import { OccurrenceListRow } from '@/components/events/OccurrenceListRow'
 import { invalidateOccurrences } from '@/lib/invalidate'
+import { isDue } from '@/lib/calendarLayout'
+import { shortDate, weekdayDate } from '@/lib/dates'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -47,21 +49,11 @@ function formatDateInput(d: Date): string {
   return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`
 }
 
-function formatDayTitle(d: Date): string {
-  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-}
-
-function formatDayTitleCompact(d: Date): string {
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
-}
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
-function formatDayLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
 
 function formatTimeRange(event: Occurrence): string {
   if (event.isAllDay) return ''
@@ -74,26 +66,23 @@ function formatTimeRange(event: Occurrence): string {
 function agendaTimeText(event: Occurrence, showDate = false): string | null {
   const base = formatTimeRange(event)
   const dateRef = showDate ? event.startAt ?? event.endAt : null
-  if (dateRef) return base ? `${formatDayLabel(dateRef)}, ${base}` : formatDayLabel(dateRef)
+  if (dateRef) return base ? `${shortDate(dateRef)}, ${base}` : shortDate(dateRef)
   return base || null
 }
 
-// The "Due" option of the event modal's type picker: one date and no span. Same test the
-// modal uses to pick that segment when it opens an occurrence, so the Deadlines section
-// lists exactly what the picker calls Due - including the end-only shape.
-function isDue(o: Occurrence): boolean {
-  return (o.startAt === null) !== (o.endAt === null)
-}
 
 const DEADLINES_COLLAPSED_KEY = 'loom-plan-deadlines-collapsed'
-const NODATE_OPEN_KEY = 'loom-plan-nodate-open'
 
 // "Oct 12, 14:00 · in 6 days". Counted in calendar days from the effective today, so a
 // deadline tomorrow morning reads "tomorrow" late tonight rather than "in 0 days".
+function deadlineDays(o: Occurrence, today: Date): number {
+  return Math.round((sod(new Date((o.startAt ?? o.endAt)!)).getTime() - today.getTime()) / 86_400_000)
+}
+
 function deadlineText(o: Occurrence, today: Date): string {
   const ref = (o.startAt ?? o.endAt)!
-  const days = Math.round((sod(new Date(ref)).getTime() - today.getTime()) / 86_400_000)
-  const when = o.isAllDay ? formatDayLabel(ref) : `${formatDayLabel(ref)}, ${formatTime(ref)}`
+  const days = deadlineDays(o, today)
+  const when = o.isAllDay ? shortDate(ref) : `${shortDate(ref)}, ${formatTime(ref)}`
   const away = days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`
   return `${when} · ${away}`
 }
@@ -331,36 +320,22 @@ export function PlanPage() {
   // are measured against now, like the calendar's Soon row (same query, same cache entry).
   // Ones already behind today are Unfinished's job. Unlike Soon, nothing is dropped for
   // being visible elsewhere - today's deadlines sit on the agenda and here both, because
-  // this list is the one place that has to be complete.
+  // this list is the one place that has to be complete, up to the user's horizon setting.
   const deadlineCutoff = effectiveToday.toISOString()
   const { data: upcomingPending = [] } = useQuery({
     queryKey: ['events', 'upcoming', deadlineCutoff],
     queryFn: () => occurrencesApi.list({ startFrom: deadlineCutoff, status: 'pending' }),
     staleTime: 30 * 1000,
   })
+  const deadlineHorizon = settings?.deadlineHorizonDays ?? null
   const deadlines = useMemo(
     () =>
       upcomingPending
         .filter((o) => isDue(o) && refTime(o) >= effectiveToday.getTime())
+        .filter((o) => deadlineHorizon === null || deadlineDays(o, effectiveToday) <= deadlineHorizon)
         .sort((a, b) => refTime(a) - refTime(b)),
-    [upcomingPending, effectiveToday.getTime()],
+    [upcomingPending, effectiveToday.getTime(), deadlineHorizon],
   )
-
-  const { data: pendingAll = [] } = useQuery({
-    queryKey: ['events', 'nodate'],
-    queryFn: () => occurrencesApi.list({ status: 'pending' }),
-    staleTime: 30 * 1000,
-  })
-  const noDateEvents = useMemo(() => pendingAll.filter((o) => o.isNoDate), [pendingAll])
-
-  const [noDateOpen, setNoDateOpen] = useState(() => localStorage.getItem(NODATE_OPEN_KEY) === '1')
-  function toggleNoDate() {
-    setNoDateOpen((open) => {
-      if (open) localStorage.removeItem(NODATE_OPEN_KEY)
-      else localStorage.setItem(NODATE_OPEN_KEY, '1')
-      return !open
-    })
-  }
 
   const [deadlinesCollapsed, setDeadlinesCollapsed] = useState(() => localStorage.getItem(DEADLINES_COLLAPSED_KEY) === '1')
   function toggleDeadlines() {
@@ -445,8 +420,8 @@ export function PlanPage() {
             </button>
           </div>
           <h1 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
-            <span className="sm:hidden">{formatDayTitleCompact(current)}</span>
-            <span className="hidden sm:inline">{formatDayTitle(current)}</span>
+            <span className="sm:hidden">{weekdayDate(current)}</span>
+            <span className="hidden sm:inline">{weekdayDate(current, true)}</span>
           </h1>
           <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
             {!isToday && (
@@ -608,31 +583,6 @@ export function PlanPage() {
                         ))}
                       </ul>
                     </div>
-                  </section>
-                )}
-
-                {/* No date */}
-                {noDateEvents.length > 0 && (
-                  <section>
-                    <button
-                      type="button"
-                      onClick={toggleNoDate}
-                      aria-expanded={noDateOpen}
-                      className="mb-2 flex w-full items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      No date
-                      <span className="font-mono font-normal text-muted-foreground/70">{noDateEvents.length}</span>
-                      <ChevronDown className={`ml-auto h-3.5 w-3.5 transition-transform ${noDateOpen ? 'rotate-180' : ''}`} strokeWidth={2} />
-                    </button>
-                    {noDateOpen && (
-                      <div className="rounded-lg border border-border">
-                        <ul>
-                          {noDateEvents.map((event) => (
-                            <OccurrenceListRow key={event.id} occurrence={event} timeText={null} onEdit={openEdit} onSchedule={openSchedule} />
-                          ))}
-                        </ul>
-                      </div>
-                    )}
                   </section>
                 )}
 

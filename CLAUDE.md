@@ -16,6 +16,9 @@ Working guide for the Loom repository.
 There is no build-history doc: `spec.md` describes the app as it is now, in the present tense, with no
 record of what it used to do or what is planned. Git history is the changelog.
 
+Keep `spec.md` and `design.md` lean too: a rule in a sentence or two, no endpoint params, DTO field
+names, absent-vs-null semantics or "so that" reasoning. Prefer editing an existing sentence to adding a bullet.
+
 Keep `CLAUDE.md` small: it is a navigation and convention guide, not a product spec. Say where things live
 and what traps exist; behaviour belongs in `spec.md`, visual rules in `design.md`. Don't put Tailwind
 classes, endpoint walkthroughs or step-by-step feature behaviour here.
@@ -105,19 +108,21 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - `App.tsx` — auth-gated routing; index → `/plan`.
 - `pages/` — one file per route in `spec.md`'s Views table. `OccurrencesPage.tsx` holds the only occurrence
   list view (`OccurrencesView`, behind `AllOccurrencesPage` and `OccurrenceListPage`); its pure logic is in `lib/occurrenceView.ts`.
+  Drag-to-reorder is `events/SortableOccurrenceList.tsx` (`@dnd-kit`, one drag scope per section); `applyReorder` in `lib/occurrenceView.ts` mirrors
+  `OccurrenceService.ReorderAsync` for the optimistic update.
 - `lib/api.ts` — `request<T>` (bearer + one-shot 401 refresh), one namespace per resource (`activitiesApi`, `occurrencesApi`, ...).
 - `lib/types.ts` — mirrors backend DTOs.
 - `lib/invalidate.ts` — the query-invalidation helpers; every mutation goes through them.
 - `lib/repeat.ts` — `addNextOccurrence` (the "do again" call plus Undo toast), and the repeat-days parse/label helpers.
 - `lib/nativePush.ts` — FCM registration and tap routing (native only). A tap lands on `?occurrence=<id>`, which
   `events/OccurrenceLinkModal.tsx` (mounted in `AppShell`) opens on any page. `lib/reminders.ts` + `components/reminders/ReminderPicker.tsx`.
-- `lib/goals.ts`, `lib/theme.ts`, `lib/useMediaQuery.ts`, `lib/useOnline.ts` — small shared helpers.
 - `store/auth.ts` — Zustand; access token in memory only. `store/toasts.ts` — toast store; `toastError(err)`.
 - `components/ui/` — `Button, Badge, Card, Modal, Field, ConfirmDialog, ActionMenu, Toasts`, plus `input.ts` (`inputCls`).
 - `components/` is otherwise grouped by area (`events/`, `activities/`, `goals/`, `calendar/`, `categories/`, `tags/`,
   `lists/`, `insights/`, `settings/`, `layout/`). Shared pieces worth knowing: `events/OccurrenceListRow.tsx` (list row
   with optimistic status toggle), `events/OccurrenceHeatmap.tsx` (day grid used by Goals, Plan and the history modals),
   `events/OccurrenceHistoryModal.tsx` (generic read-only history; the activity and goal modals wrap it),
+  `events/RelatedOccurrencesModal.tsx` ("See related"; sections from `relatedSections` in `lib/occurrenceView.ts`),
   `goals/GoalPicker.tsx`, `tags/TagPicker.tsx`, `categories/categoryIcons.tsx` (`ICON_GROUPS`).
 - `components/layout/LoomMark.tsx` — brand mark; geometry lives once in `lib/brandMark.json`, and
   `npm run gen:brand` regenerates the favicon and native icons from it.
@@ -138,6 +143,8 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
 - **No em dashes in client-facing text.** Use a hyphen, comma, or colon. Code comments are exempt.
 - **24h clock everywhere.** Never render AM/PM. Format times as `HH:mm`; native `<input type="time">`
   needs `lang="en-GB"` or the browser falls back to its own locale.
+- **Dates go through `lib/dates.ts`** (`shortDate`, `weekdayDate`): day first, numeric month. Never
+  `toLocaleDateString`, whose output depends on the device locale.
 - **DTOs** in `Core/Dtos/Dtos.cs`; map via `FromEntity`. Don't leak entities.
 - **Auth model:** JWT access token in response body (~15 min); 6-month refresh token in httpOnly
   `Secure` cookie (path `/api/auth`), rotated on every refresh. Logic in `TokenService.cs`; cookie I/O in `RefreshCookieManager.cs`.
@@ -189,17 +196,17 @@ cp .env.example .env && docker compose up --build   # http://localhost:8080
   coordinate goes through `TimeScale` (`toPx`/`toMin`); any drag expands to the linear scale first
   (`expandForDrag`) and scroll position is held by `captureAnchor` + the anchor layout effect, captured
   *before* any state is queued. The `.calendar-tray` bottom edge doubles as the grid's 00:00 line when the
-  tray shows, so restyle it but don't remove it.
+  tray shows, so restyle it but don't remove it. Grid minutes are wall-clock: convert an instant with
+  `wallMinute` and end a day with `eodMs` (`lib/calendarDates.ts`), never `(ms - dayStart) / 60000` or
+  `+ 86400000`, which are an hour off on DST switch days.
 - ⚠️ **Android drops a push that arrives while the app is open** unless `capacitor.config.ts` keeps
   `PushNotifications.presentationOptions` with `alert`. Nothing errors; "Send test" from Settings just never shows.
 - **`dotnet ef database update` does not touch the app's database.** `LoomDbContextFactory` points
   design-time tooling at `loom-design.db`; `src/Loom.Api/loom.db` is migrated by the API on startup
   (`Database:MigrateOnStartup`), so restart the API to apply a new migration to dev data. If `dotnet ef`
   isn't found: `PATH="$PATH:$HOME/.dotnet/tools"`. SQLite only; no Postgres migration set exists.
-- **`Jwt:Secret` ≥32 bytes** (`JWT_SECRET` in `.env`); empty in `appsettings.json` by design. `docker-compose.yml` maps
-  `JWT_SECRET`/`COOKIE_SECURE` onto `Jwt__Secret` / `Auth__RefreshCookie__Secure` - a bare `JWT_SECRET` env var is never read by the app.
-  `COOKIE_SECURE` must be `false` for plain-HTTP local dev. Behind a reverse proxy set `BEHIND_PROXY=true`; leave it off
-  when the port is exposed directly, since forwarded headers are then client-controlled.
+- **A bare `JWT_SECRET` env var is never read by the app**: `docker-compose.yml` maps it onto `Jwt__Secret`.
+  Env vars and cookie/proxy settings are in `README.md`.
 - **Dev port:** `dotnet run` uses `launchSettings.json` (port 5200). Published DLL: set `ASPNETCORE_URLS`.
 - **`DayMath` is DST-tested** (`Unit/DayMathTests.cs`). Keep `StartOfDay`/`EndOfDay` going through
   `LocalToInstant`; using `GetUtcOffset` directly on a skipped wall-clock time puts the boundary late.

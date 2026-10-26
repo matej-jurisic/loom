@@ -16,9 +16,9 @@ import { useOccurrenceMutations } from '@/lib/useOccurrenceMutations'
 import { CalendarHeader } from '@/components/calendar/CalendarHeader'
 import { CalendarTray } from '@/components/calendar/CalendarTray'
 import type { FloatingDragInfo } from '@/components/calendar/TrayPillRow'
-import { VIEW_OPTIONS, addDays, assignAllDayRows, dayHeader, effectiveAllDayEnd, formatDateInput, formatDatetimeLocal, hourLabel, isSameDay, sod, startOfWeek } from '@/lib/calendarDates'
+import { VIEW_OPTIONS, addDays, assignAllDayRows, dayHeader, effectiveAllDayEnd, eodMs, formatDateInput, formatDatetimeLocal, hourLabel, isSameDay, sod, startOfWeek, timeLabel, wallMinute } from '@/lib/calendarDates'
 import type { ViewMode } from '@/lib/calendarDates'
-import { DUE_SPAN_MINUTES, MIN_EVENT_PX, dragStartFor, duePinHeight, dueRowRef, eventAllDayColors, isDueOccurrence, isEODDue, occurrenceColor, occursOnDay, snapToGrid, snapToGridDue, titleWithTags } from '@/lib/calendarLayout'
+import { DUE_PIN_PX, MIN_EVENT_PX, dragStartFor, dueRowRef, eventAllDayColors, isDueOccurrence, isEODDue, occurrenceColor, occursOnDay, snapToGrid, snapToGridDue, calendarTitle } from '@/lib/calendarLayout'
 import { useCalendarColorBy } from '@/lib/useCalendarColorBy'
 
 const DEFAULT_HOUR_PX = 64
@@ -61,7 +61,7 @@ export function CalendarPage() {
     return savedView === 'week' ? startOfWeek(d) : d
   })
   const modals = useCalendarModals()
-  const { openCreate, openDetail, openEdit, openEditActivity, openDuplicate, openSchedule } = modals
+  const { openCreate, openDetail, openEdit, openEditActivity, openDuplicate, openSchedule, openFollowUp } = modals
   const [pendingMove, setPendingMove] = useState<PendingMove | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -138,6 +138,9 @@ export function CalendarPage() {
   const [dragDropDayIdx, setDragDropDayIdx] = useState<number | null>(null)
   const [isDraggingGridEvent, setIsDraggingGridEvent] = useState(false)
   const [isDraggingPill, setIsDraggingPill] = useState(false)
+  // Only read as a dependency: the Due row's fold test measures where the grid
+  // starts, which moves whenever the tray above it changes height.
+  const [trayHeight, setTrayHeight] = useState(0)
 
   const [hourPx, setHourPx] = useState(() => {
     const saved = localStorage.getItem('loom-calendar-zoom')
@@ -493,8 +496,8 @@ export function CalendarPage() {
     // Short events render with a minimum height that extends the block below
     // the event's true end time. A pointer landing in that overflow zone falls
     // through to the grid (no stopPropagation) so drag-to-create still works in
-    // the slot right after the event. Due pins are exempt: their height always
-    // matches their 30-minute span exactly, so there is no overflow zone.
+    // the slot right after the event. Due pins are exempt: only their pill takes
+    // pointers, and it has no span to overflow.
     if (!isDue) {
       const block = (e.target as Element).closest('[data-true-end-px]') as HTMLElement | null
       const trueEndPx = block ? parseFloat(block.dataset.trueEndPx ?? '') : NaN
@@ -511,7 +514,7 @@ export function CalendarPage() {
     e.stopPropagation()
 
     const startMs = new Date(event.startAt!).getTime()
-    const endMs = event.endAt ? new Date(event.endAt).getTime() : startMs + DUE_SPAN_MINUTES * 60 * 1000
+    const endMs = event.endAt ? new Date(event.endAt).getTime() : startMs
     const durationMs = endMs - startMs
     const isTouch = e.pointerType === 'touch'
     const pointerId = e.pointerId
@@ -587,7 +590,7 @@ export function CalendarPage() {
         setMoveOverlay({
           dayIdx: curDayIdx,
           topPx: sc.toPx(startMin),
-          heightPx: isDue ? duePinHeight(sc.hourPx) : Math.max((durationMin / 60) * sc.hourPx, MIN_EVENT_PX),
+          heightPx: isDue ? DUE_PIN_PX : Math.max((durationMin / 60) * sc.hourPx, MIN_EVENT_PX),
         })
         startAutoScroll(mv.clientX, mv.clientY)
       }
@@ -815,7 +818,7 @@ export function CalendarPage() {
         setMoveOverlay({
           dayIdx: curDayIdx,
           topPx: sc.toPx(startMin),
-          heightPx: isDue ? duePinHeight(sc.hourPx) : Math.max((PILL_DROP_MINUTES / 60) * sc.hourPx, MIN_EVENT_PX),
+          heightPx: isDue ? DUE_PIN_PX : Math.max((PILL_DROP_MINUTES / 60) * sc.hourPx, MIN_EVENT_PX),
         })
         startAutoScroll(mv.clientX, mv.clientY)
       } else {
@@ -1070,8 +1073,8 @@ export function CalendarPage() {
         const s = snapToGrid(days[i], topY, sc)
         const en = snapToGrid(days[i], botY, sc)
         const dayStartMs = sod(days[i]).getTime()
-        const topPx = sc.toPx((s.getTime() - dayStartMs) / 60000)
-        const endPx = sc.toPx((en.getTime() - dayStartMs) / 60000)
+        const topPx = sc.toPx(wallMinute(s.getTime(), dayStartMs))
+        const endPx = sc.toPx(wallMinute(en.getTime(), dayStartMs))
         result.set(i, { topPx, heightPx: Math.max(endPx - topPx, hp / 4) })
       } else if (i === minIdx) {
         const anchorY = startDayIdx < endDayIdx ? startY : endY
@@ -1094,12 +1097,12 @@ export function CalendarPage() {
     const result = new Map<number, { topPx: number; heightPx: number }>()
     for (let i = 0; i < days.length; i++) {
       const dayStartMs = sod(days[i]).getTime()
-      const dayEndMs = dayStartMs + 86400000
+      const dayEndMs = eodMs(dayStartMs)
       if (endMs <= dayStartMs || startMs >= dayEndMs) continue
       const segStartMs = Math.max(startMs, dayStartMs)
       const segEndMs = Math.min(endMs, dayEndMs)
-      const startMin = (segStartMs - dayStartMs) / 60000
-      const endMin = (segEndMs - dayStartMs) / 60000
+      const startMin = wallMinute(segStartMs, dayStartMs)
+      const endMin = wallMinute(segEndMs, dayStartMs)
       const sc = scaleFor(i)
       result.set(i, {
         topPx: sc.toPx(startMin),
@@ -1276,7 +1279,7 @@ export function CalendarPage() {
           setMoveOverlay({
             dayIdx: curDayIdx,
             topPx: sc.toPx(startMin),
-            heightPx: isEvDue ? duePinHeight(sc.hourPx) : Math.max((durationMin / 60) * sc.hourPx, MIN_EVENT_PX),
+            heightPx: isEvDue ? DUE_PIN_PX : Math.max((durationMin / 60) * sc.hourPx, MIN_EVENT_PX),
           })
         } else if (resizeDragActiveRef.current && resizeStateRef.current) {
           const rs = resizeStateRef.current
@@ -1296,7 +1299,7 @@ export function CalendarPage() {
               ? snapToGridDue(days[curDayIdx], curY, sc)
               : dragStartFor(days[curDayIdx], curY, sc, PILL_DROP_MINUTES * 60000)
             const startMin = startSnapped.getHours() * 60 + startSnapped.getMinutes()
-            setMoveOverlay({ dayIdx: curDayIdx, topPx: sc.toPx(startMin), heightPx: isPillDue ? duePinHeight(sc.hourPx) : Math.max((PILL_DROP_MINUTES / 60) * sc.hourPx, MIN_EVENT_PX) })
+            setMoveOverlay({ dayIdx: curDayIdx, topPx: sc.toPx(startMin), heightPx: isPillDue ? DUE_PIN_PX : Math.max((PILL_DROP_MINUTES / 60) * sc.hourPx, MIN_EVENT_PX) })
           }
         }
       }
@@ -1382,7 +1385,7 @@ export function CalendarPage() {
     const dayIdx = getDayIdxFromX(clientX)
     const scale = scaleFor(dayIdx)
     const start = snapToGrid(days[dayIdx], getYInGrid(clientY), scale)
-    const minutes = Math.round((start.getTime() - sod(days[dayIdx]).getTime()) / 60000)
+    const minutes = Math.round(wallMinute(start.getTime(), sod(days[dayIdx]).getTime()))
     const label = `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`
     const topPx = scale.toPx(minutes)
     setHoverLine((prev) => (prev && prev.dayIdx === dayIdx && prev.topPx === topPx ? prev : { dayIdx, topPx, label }))
@@ -1514,7 +1517,7 @@ export function CalendarPage() {
     }
     return days.map((day) => {
       const ds = sod(day).getTime()
-      const de = ds + 86400000
+      const de = eodMs(ds)
       // Segments are exactly the spans handed over - nothing is padded - so a
       // block that draws taller than its own duration (layoutDay's 15-minute
       // floor, then MIN_EVENT_PX) would spill onto the block stacked under it.
@@ -1524,9 +1527,10 @@ export function CalendarPage() {
       for (const e of calendarEvents) {
         if (!occursOnDay(e, ds, de)) continue
         const startMs = new Date(e.startAt!).getTime()
-        const endMs = e.endAt ? new Date(e.endAt).getTime() : startMs + DUE_SPAN_MINUTES * 60000
-        const startMin = Math.max(0, (startMs - ds) / 60000)
-        const endMin = Math.max((endMs - ds) / 60000, startMin + minSpanMin)
+        // A due pin reserves the floor too, which already clears its pill.
+        const endMs = e.endAt ? new Date(e.endAt).getTime() : startMs
+        const startMin = Math.max(0, wallMinute(startMs, ds))
+        const endMin = Math.max(wallMinute(endMs, ds), startMin + minSpanMin)
         ranges.push([startMin, Math.min(DAY_MIN, endMin)])
       }
       // No anchor for "now": compact mode doesn't draw the now line, so reserving a
@@ -1580,7 +1584,7 @@ export function CalendarPage() {
   }, [scales, isDraggingGridEvent, isDraggingPill, dragExpanded])
   const dayAllDayEvents = useMemo(() => {
     const ds = sod(days[0]).getTime()
-    const de = ds + 86400000
+    const de = eodMs(ds)
     return allDayEvents.filter((e) => {
       const startMs = new Date(e.startAt!).getTime()
       const endMs = effectiveAllDayEnd(e)
@@ -1628,11 +1632,11 @@ export function CalendarPage() {
       const di = days.findIndex((day) => isSameDay(day, d))
       const sc = scales[di < 0 ? 0 : di]
       const pinScrollPos = gridOffset + sc.toPx(d.getHours() * 60 + d.getMinutes())
-      return pinScrollPos > visibleBottom - duePinHeight(hourPx)
+      return pinScrollPos > visibleBottom - DUE_PIN_PX
     })
     return [...eod, ...belowFold].sort((a, b) => new Date(a.startAt!).getTime() - new Date(b.startAt!).getTime())
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventsKey, scrollTop, hourPx, days, scales])
+  }, [eventsKey, scrollTop, hourPx, days, scales, trayHeight])
 
   return (
     <div className="flex flex-1 overflow-hidden">
@@ -1698,6 +1702,7 @@ export function CalendarPage() {
                   onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
                   onRescheduleDragStart={(info, o) => handleAllDayPillMoveStart(info, o, rescheduleEvent)}
                   onFloatDragStart={(info, o) => handleAllDayPillMoveStart(info, o, scheduleFloating)}
+                  onHeightChange={setTrayHeight}
                 >
                 {(allDayEvents.length > 0 || isDraggingGridEvent || isDraggingPill) && (
                   <div ref={allDayRowRef} className="flex">
@@ -1736,7 +1741,7 @@ export function CalendarPage() {
                             }}
                             className={`truncate rounded-[3px] px-1.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e, colorBy).className}`}
                           >
-                            {titleWithTags(e)}
+                            {calendarTitle(e)}
                           </button>
                         )
                       })}
@@ -1763,6 +1768,7 @@ export function CalendarPage() {
                 onTaskClick={(o) => { if (!suppressClickRef.current) openDetail(o) }}
                 onRescheduleDragStart={(info, o) => handleAllDayPillMoveStart(info, o, rescheduleEvent)}
                 onFloatDragStart={(info, o) => handleAllDayPillMoveStart(info, o, scheduleFloating)}
+                onHeightChange={setTrayHeight}
               >
                 {(dayAllDayEvents.length > 0 || isDraggingGridEvent) && (
                   <div ref={allDayRowRef} className={`flex transition-colors ${dragDropTarget === 'allday' ? 'bg-primary/10' : ''}`}>
@@ -1772,7 +1778,7 @@ export function CalendarPage() {
                     <div className="flex flex-1 flex-col gap-0.5 border-l border-r px-0.5 py-0.5 min-h-[26px]" style={{ borderColor: 'var(--calendar-line)' }}>
                       {dayAllDayEvents.map((e) => (
                         <button key={e.id} onPointerDown={(ev) => handleAllDayPillMoveStart(ev, e)} onClick={() => { if (!suppressClickRef.current) openDetail(e) }} className={`w-full truncate rounded-[3px] px-1.5 py-0.5 text-left text-[11px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${e.status === 'done' ? 'opacity-50 line-through' : movingEventId === e.id ? 'opacity-20' : pendingAllDayDragId === e.id ? 'opacity-50 scale-95' : ''} ${eventAllDayColors(e, colorBy).className}`} style={{ touchAction: 'none', ...eventAllDayColors(e, colorBy).style }}>
-                          {titleWithTags(e)}
+                          {calendarTitle(e)}
                         </button>
                       ))}
                     </div>
@@ -1861,7 +1867,7 @@ export function CalendarPage() {
                 const ds = sod(day).getTime()
                 const dayPins = duePinsForRow.filter((o) => {
                   const t = new Date(o.startAt!).getTime()
-                  return t >= ds && t < ds + 86400000
+                  return t >= ds && t < eodMs(ds)
                 })
                 return (
                   <div key={day.toISOString()} className={`flex min-w-0 flex-1 flex-col gap-0.5 overflow-hidden px-0.5 py-0.5 ${idx === 0 ? 'border-l border-r' : 'border-r'}`} style={{ borderColor: 'var(--calendar-line)' }}>
@@ -1871,18 +1877,18 @@ export function CalendarPage() {
                       const leftColor = pinColor ?? 'var(--color-border)'
                       const isHex = accentColor.startsWith('#')
                       const bgColor = isHex ? `${accentColor}18` : `color-mix(in srgb, ${accentColor} 9%, transparent)`
-                      const time = new Date(o.startAt!).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+                      const time = timeLabel(o.startAt!)
                       return (
                         <button
                           key={o.id}
                           onPointerDown={(ev) => handleAllDayPillMoveStart(ev, o, rescheduleEvent)}
                           onClick={() => { if (!suppressClickRef.current) openDetail(o) }}
                           className={`flex w-full items-center overflow-hidden rounded-[3px] text-left text-[10px] font-medium leading-tight transition-all duration-150 hover:opacity-80 cursor-grab active:cursor-grabbing select-none ${movingEventId === o.id ? 'opacity-20' : pendingAllDayDragId === o.id ? 'opacity-50 scale-95' : ''}`}
-                          style={{ border: `1px solid ${accentColor}`, backgroundColor: bgColor, touchAction: 'none' }}
+                          style={{ border: o.isPlanned ? `1.5px dashed ${accentColor}` : `1px solid ${accentColor}`, backgroundColor: bgColor, touchAction: 'none' }}
                         >
                           <div style={{ width: 3, minWidth: 3, alignSelf: 'stretch', background: leftColor }} className="shrink-0" />
                           <div className="flex min-w-0 flex-1 items-center gap-1 px-1.5 py-0.5">
-                            <p className="min-w-0 flex-1 truncate" style={{ color: accentColor }}>{titleWithTags(o)}</p>
+                            <p className="min-w-0 flex-1 truncate" style={{ color: accentColor }}>{calendarTitle(o)}</p>
                             <span className="shrink-0 text-[9px] leading-none opacity-60" style={{ color: accentColor }}>{time}</span>
                           </div>
                         </button>
@@ -1906,6 +1912,7 @@ export function CalendarPage() {
         onSchedule={(o) => { modals.detail.close(); openSchedule(o) }}
         onDuplicate={openDuplicate}
         onEditActivity={openEditActivity}
+        onAddFollowUp={openFollowUp}
       />
 
       <MoveOrSkipModal
@@ -1925,7 +1932,7 @@ export function CalendarPage() {
       />
 
       <EventModal
-        key={`${modals.eventModal.occurrence?.id ?? modals.eventModal.duplicateFrom?.id ?? modals.eventModal.defaultStartAt ?? 'new'}-${modals.eventModal.scheduleOnly}-${modals.eventModal.occurrence?.startAt ?? ''}`}
+        key={`${modals.eventModal.occurrence?.id ?? modals.eventModal.duplicateFrom?.id ?? modals.eventModal.followUpOf?.id ?? modals.eventModal.defaultStartAt ?? 'new'}-${modals.eventModal.scheduleOnly}-${modals.eventModal.occurrence?.startAt ?? ''}`}
         open={modals.eventModal.open}
         onClose={modals.eventModal.close}
         occurrence={modals.eventModal.occurrence}
@@ -1934,6 +1941,7 @@ export function CalendarPage() {
         defaultStartAt={modals.eventModal.defaultStartAt}
         defaultEndAt={modals.eventModal.defaultEndAt}
         scheduleOnly={modals.eventModal.scheduleOnly}
+        followUpOf={modals.eventModal.followUpOf}
       />
     </div>
   )

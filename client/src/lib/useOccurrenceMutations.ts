@@ -35,6 +35,7 @@ export function useOccurrenceMutations({
       isAllDay,
       isPlanned: ev.isPlanned,
       deadlineOccurrenceId: ev.deadline?.status === 'pending' ? ev.deadline.id : null,
+      sourceOccurrenceId: ev.sourceOccurrenceId,
     }).catch((err) => {
       toastError(err, 'Could not duplicate the occurrence.')
     }).finally(() => {
@@ -146,6 +147,8 @@ export function useOccurrenceMutations({
       duplicateOccurrence(ev, null, null, false)
       return
     }
+    // Dropped back where it came from: already floating, nothing to change.
+    if (ev.startAt === null && ev.endAt === null && !ev.isAllDay) return
     queryClient.cancelQueries({ queryKey: ['events'] })
     queryClient.setQueryData<Occurrence[]>(
       ['events', 'calendar', rangeStart.toISOString(), rangeEnd.toISOString()],
@@ -153,7 +156,7 @@ export function useOccurrenceMutations({
     )
     queryClient.setQueryData<Occurrence[]>(
       ['events', 'floating'],
-      (old) => [...(old ?? []), { ...ev, startAt: null, endAt: null, isAllDay: false }],
+      (old) => [...(old ?? []).filter((o) => o.id !== ev.id), { ...ev, startAt: null, endAt: null, isAllDay: false }],
     )
     occurrencesApi.patch(ev.id, {
       startAt: null,

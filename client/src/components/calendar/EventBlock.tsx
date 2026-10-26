@@ -1,6 +1,6 @@
 import type { Occurrence } from '@/lib/types'
 import { timeLabel } from '@/lib/calendarDates'
-import { eventColors, isDueOccurrence, occurrenceColor } from '@/lib/calendarLayout'
+import { eventColors, isDueOccurrence, occurrenceColor, titleWithGoals } from '@/lib/calendarLayout'
 import { useCalendarColorBy } from '@/lib/useCalendarColorBy'
 import type { LayoutEvent } from '@/lib/calendarLayout'
 
@@ -41,6 +41,9 @@ export function EventBlock({
     ? `${timeLabel(event.startAt)}${event.endAt ? ` – ${timeLabel(event.endAt)}` : ''}`
     : ''
 
+  const goalText = event.activity.goals.map((g) => g.title).join(', ')
+  // Goals ride on the title line, muted, so they cost no height.
+  const goalSuffix = goalText && <span className="font-normal opacity-70"> · {goalText}</span>
   const tagText = event.effectiveTags.map((t) => `#${t.name}`).join(' ')
   const showTags = tagText !== '' && heightPx >= (timeText ? 56 : 32)
 
@@ -82,7 +85,7 @@ export function EventBlock({
             compact ? 'whitespace-nowrap text-[10px] leading-none' : 'break-all text-[11px] leading-tight'
           }`}
         >
-          × {event.effectiveTitle}
+          × {event.effectiveTitle}{goalSuffix}
         </p>
         {heightPx >= 44 && timeText && (
           <p className="@max-[10px]:hidden overflow-hidden whitespace-nowrap text-[10px] leading-tight text-muted-foreground/70">
@@ -98,6 +101,61 @@ export function EventBlock({
     </button>
   )
 
+  if (isDue) {
+    // A deadline is a moment: a line across the whole column at its time, drawn over
+    // whatever blocks are there, with a pill hanging from it on the right. Only the pill
+    // takes pointers, so the blocks under the line stay clickable and draggable. Pins
+    // whose pills would collide share the right three quarters between them.
+    const lineColor = isSkipped ? 'color-mix(in srgb, var(--color-muted-foreground) 40%, transparent)' : accentColor
+    const pillLeftPct = 25 + col * (75 / totalCols)
+    // No z-index or opacity on the wrapper: either would make it a stacking context, and
+    // then a later pin's line would paint across an earlier pin's pill at the same time.
+    const fade = dimmed ? 'opacity-20' : isDone ? 'opacity-40' : ''
+    return (
+      <div
+        className="absolute inset-x-0"
+        data-event-id={event.id}
+        data-true-end-px={trueEndPx}
+        style={{ top: topPx, height: heightPx, pointerEvents: 'none' }}
+      >
+        <div
+          className={`absolute inset-x-0 top-0 z-[9] ${fade}`}
+          style={{ borderTop: `${isPlanned ? '1.5px dashed' : '1px solid'} ${lineColor}` }}
+        />
+        <div
+          className={`@container absolute top-0 z-10 flex h-full justify-end pr-0.5 ${fade}`}
+          style={{ left: `${pillLeftPct}%`, width: `${75 / totalCols}%` }}
+        >
+          <button
+            className="flex h-full max-w-full items-center gap-1 overflow-hidden rounded-b-[3px] px-1 text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing"
+            style={{
+              border: `${isPlanned ? '1.5px dashed' : '1px solid'} ${lineColor}`,
+              borderTop: 'none',
+              background: isSkipped ? 'var(--color-card)' : `linear-gradient(${accentFaded}, ${accentFaded}), var(--color-card)`,
+              touchAction: 'pan-y',
+              pointerEvents: 'auto',
+            }}
+            onPointerDown={bodyPointerProps.onPointerDown}
+            onClick={bodyPointerProps.onClick}
+          >
+            <span
+              className={`min-w-0 truncate text-[10px] font-medium leading-none ${isSkipped || isDone ? 'text-muted-foreground' : ''} ${isDone ? 'line-through' : ''}`}
+              style={isSkipped || isDone ? undefined : { color: accentColor }}
+            >
+              {isSkipped ? '× ' : ''}{titleWithGoals(event)}
+            </span>
+            <span
+              className={`@max-[64px]:hidden shrink-0 text-[9px] leading-none opacity-60 ${isSkipped ? 'text-muted-foreground' : ''}`}
+              style={isSkipped ? undefined : { color: accentColor }}
+            >
+              {timeLabel(event.startAt!)}
+            </span>
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div
       className={`absolute group/calev ${dimmed ? 'opacity-20' : ''}`}
@@ -112,127 +170,95 @@ export function EventBlock({
         pointerEvents: 'auto',
       }}
     >
-      {isSkipped && isDue ? (
+      {/* Top resize handle */}
+      <div
+        data-resize-handle="true"
+        className={`absolute inset-x-0 top-0 z-20 h-2.5 cursor-ns-resize ${handleVisibility} items-center justify-center`}
+        style={{ touchAction: 'none' }}
+        onMouseDown={stopAll}
+        onPointerDown={(e) => { e.stopPropagation(); onResizeStart?.(e, 'top') }}
+        onClick={stopAll}
+      >
+        <div className="h-0.5 w-6 rounded-full bg-primary/70" />
+      </div>
+
+      {/* Event body */}
+      {isSkipped ? (
         skippedBody
-      ) : isDue ? (
-        /* Due pin — flat deadline marker, no resize handles */
+      ) : isPlanned ? (
         <button
-          className={`absolute inset-0 flex items-start overflow-hidden rounded-[4px] text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-40' : ''}`}
+          className={`absolute inset-0 overflow-hidden rounded-[4px] text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-40' : ''}`}
           style={{
-            border: isPlanned ? `1.5px dashed ${accentColor}` : `1px solid ${accentColor}`,
-            // Opaque card base so the likely-free hatch never bleeds through
-            background: `linear-gradient(${accentColor}18, ${accentColor}18), var(--color-card)`,
+            // Opaque card base so the likely-free hatch (same stripe pattern)
+            // never shows through a planned block
+            background: `repeating-linear-gradient(135deg, transparent, transparent 4px, ${accentFaded} 4px, ${accentFaded} 8px), var(--color-card)`,
+            border: `1.5px dashed ${accentMid}`,
             touchAction: 'pan-y',
           }}
           onPointerDown={bodyPointerProps.onPointerDown}
           onClick={bodyPointerProps.onClick}
         >
-          <div style={{ width: 3, minWidth: 3, alignSelf: 'stretch', background: leftColor }} className="shrink-0" />
-          <div className="flex min-w-0 flex-1 items-center gap-1 px-1.5 py-0.5">
+          <div className={compact ? 'px-1.5 py-px' : 'px-1.5 py-0.5'}>
             <p
-              className={`min-w-0 flex-1 overflow-hidden whitespace-nowrap text-[10px] font-medium leading-none ${isDone ? 'line-through text-muted-foreground' : ''}`}
-              style={isDone ? undefined : { color: accentColor }}
+              className={`overflow-hidden whitespace-nowrap text-[10px] font-medium ${compact ? 'leading-none' : 'leading-tight'}`}
+              style={{ color: accentColor }}
             >
-              {event.effectiveTitle}
+              {titleWithGoals(event)}
             </p>
-            <span className="shrink-0 text-[9px] leading-none opacity-60" style={{ color: accentColor }}>
-              {timeLabel(event.startAt!)}
-            </span>
+            {showTags && (
+              <p className="overflow-hidden whitespace-nowrap text-[10px] leading-tight opacity-70" style={{ color: accentColor }}>
+                {tagText}
+              </p>
+            )}
           </div>
         </button>
       ) : (
-        <>
-          {/* Top resize handle */}
+        <button
+          className={`absolute inset-0 overflow-hidden rounded-[4px] border bg-card text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-50' : ''} ${isResizing ? 'border-primary/60 ring-1 ring-primary/40' : 'border-border/50'}`}
+          {...bodyPointerProps}
+        >
           <div
-            data-resize-handle="true"
-            className={`absolute inset-x-0 top-0 z-20 h-2.5 cursor-ns-resize ${handleVisibility} items-center justify-center`}
-            style={{ touchAction: 'none' }}
-            onMouseDown={stopAll}
-            onPointerDown={(e) => { e.stopPropagation(); onResizeStart?.(e, 'top') }}
-            onClick={stopAll}
-          >
-            <div className="h-0.5 w-6 rounded-full bg-primary/70" />
-          </div>
-
-          {/* Event body */}
-          {isSkipped ? (
-            skippedBody
-          ) : isPlanned ? (
-            <button
-              className={`absolute inset-0 overflow-hidden rounded-[4px] text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-40' : ''}`}
-              style={{
-                // Opaque card base so the likely-free hatch (same stripe pattern)
-                // never shows through a planned block
-                background: `repeating-linear-gradient(135deg, transparent, transparent 4px, ${accentFaded} 4px, ${accentFaded} 8px), var(--color-card)`,
-                border: `1.5px dashed ${accentMid}`,
-                touchAction: 'pan-y',
-              }}
-              onPointerDown={bodyPointerProps.onPointerDown}
-              onClick={bodyPointerProps.onClick}
-            >
-              <div className={compact ? 'px-1.5 py-px' : 'px-1.5 py-0.5'}>
-                <p
-                  className={`overflow-hidden whitespace-nowrap text-[10px] font-medium ${compact ? 'leading-none' : 'leading-tight'}`}
-                  style={{ color: accentColor }}
-                >
-                  {event.effectiveTitle}
+            className={`absolute inset-0 ${bgClass}`}
+            style={bgHex ? { backgroundColor: bgHex + '22' } : undefined}
+          />
+          <div className="relative flex h-full">
+            <div style={{ width: 3, minWidth: 3, background: leftColor }} className="shrink-0" />
+            <div className={`@container min-w-0 flex-1 px-1.5 ${compact ? 'py-px' : 'py-0.5'}`}>
+              <p
+                className={`@max-[10px]:hidden overflow-hidden font-medium ${
+                  compact ? 'whitespace-nowrap text-[10px] leading-none' : 'break-all text-[11px] leading-tight'
+                } ${
+                  isDone ? 'line-through text-muted-foreground' : textClass
+                }`}
+              >
+                {event.effectiveTitle}{goalSuffix}
+              </p>
+              {heightPx >= 44 && timeText && (
+                <p className={`@max-[10px]:hidden overflow-hidden whitespace-nowrap text-[10px] leading-tight opacity-70 ${isDone ? 'text-muted-foreground' : textClass}`}>
+                  {timeText}
                 </p>
-                {showTags && (
-                  <p className="overflow-hidden whitespace-nowrap text-[10px] leading-tight opacity-70" style={{ color: accentColor }}>
-                    {tagText}
-                  </p>
-                )}
-              </div>
-            </button>
-          ) : (
-            <button
-              className={`absolute inset-0 overflow-hidden rounded-[4px] border bg-card text-left transition-opacity hover:opacity-80 cursor-grab active:cursor-grabbing ${isDone ? 'opacity-50' : ''} ${isResizing ? 'border-primary/60 ring-1 ring-primary/40' : 'border-border/50'}`}
-              {...bodyPointerProps}
-            >
-              <div
-                className={`absolute inset-0 ${bgClass}`}
-                style={bgHex ? { backgroundColor: bgHex + '22' } : undefined}
-              />
-              <div className="relative flex h-full">
-                <div style={{ width: 3, minWidth: 3, background: leftColor }} className="shrink-0" />
-                <div className={`@container min-w-0 flex-1 px-1.5 ${compact ? 'py-px' : 'py-0.5'}`}>
-                  <p
-                    className={`@max-[10px]:hidden overflow-hidden font-medium ${
-                      compact ? 'whitespace-nowrap text-[10px] leading-none' : 'break-all text-[11px] leading-tight'
-                    } ${
-                      isDone ? 'line-through text-muted-foreground' : textClass
-                    }`}
-                  >
-                    {event.effectiveTitle}
-                  </p>
-                  {heightPx >= 44 && timeText && (
-                    <p className={`@max-[10px]:hidden overflow-hidden whitespace-nowrap text-[10px] leading-tight opacity-70 ${isDone ? 'text-muted-foreground' : textClass}`}>
-                      {timeText}
-                    </p>
-                  )}
-                  {showTags && (
-                    <p className={`@max-[10px]:hidden overflow-hidden whitespace-nowrap text-[10px] leading-tight opacity-70 ${isDone ? 'text-muted-foreground' : textClass}`}>
-                      {tagText}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </button>
-          )}
-
-          {/* Bottom resize handle */}
-          <div
-            data-resize-handle="true"
-            className={`absolute inset-x-0 bottom-0 z-20 h-2.5 cursor-ns-resize ${handleVisibility} items-center justify-center`}
-            style={{ touchAction: 'none' }}
-            onMouseDown={stopAll}
-            onPointerDown={(e) => { e.stopPropagation(); onResizeStart?.(e, 'bottom') }}
-            onClick={stopAll}
-          >
-            <div className="h-0.5 w-6 rounded-full bg-primary/70" />
+              )}
+              {showTags && (
+                <p className={`@max-[10px]:hidden overflow-hidden whitespace-nowrap text-[10px] leading-tight opacity-70 ${isDone ? 'text-muted-foreground' : textClass}`}>
+                  {tagText}
+                </p>
+              )}
+            </div>
           </div>
-        </>
+        </button>
       )}
+
+      {/* Bottom resize handle */}
+      <div
+        data-resize-handle="true"
+        className={`absolute inset-x-0 bottom-0 z-20 h-2.5 cursor-ns-resize ${handleVisibility} items-center justify-center`}
+        style={{ touchAction: 'none' }}
+        onMouseDown={stopAll}
+        onPointerDown={(e) => { e.stopPropagation(); onResizeStart?.(e, 'bottom') }}
+        onClick={stopAll}
+      >
+        <div className="h-0.5 w-6 rounded-full bg-primary/70" />
+      </div>
     </div>
   )
 }

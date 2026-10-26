@@ -25,6 +25,11 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             var deadlineErr = await ValidateDeadlineAsync(userId, null, deadlineId, null);
             if (deadlineErr is not null) return Result<OccurrenceDto>.Fail(deadlineErr);
         }
+        if (req.SourceOccurrenceId is { } sourceId)
+        {
+            var sourceErr = await ValidateSourceAsync(userId, null, sourceId);
+            if (sourceErr is not null) return Result<OccurrenceDto>.Fail(sourceErr);
+        }
         // An event's activity is a backing row owned by exactly one occurrence, so it is never a
         // target here: CreateEventAsync is the only thing allowed to attach one.
         if (activity.Kind == ActivityKind.@event)
@@ -49,6 +54,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             WindowEnd = req.WindowEnd,
             WindowDurationMinutes = req.WindowDurationMinutes,
             DeadlineOccurrenceId = req.DeadlineOccurrenceId,
+            SourceOccurrenceId = req.SourceOccurrenceId,
             Reminders = ReminderMath.NormalizeOrNull(req.Reminders),
             Tags = tags.Value!,
         };
@@ -82,7 +88,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         DateTimeOffset? endBefore = null,
         bool floatingOnly = false,
         Guid? goalId = null,
-        Guid? activityId = null)
+        Guid? activityId = null,
+        Guid? sourceId = null,
+        bool undatedOnly = false)
     {
         var query = WithFullIncludes()
             .AsNoTracking()
@@ -96,6 +104,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             && (!o.Activity.Goals.Any() || o.Activity.Goals.Any(g => g.Status != GoalStatus.bench)));
         if (goalId.HasValue) query = query.Where(o => o.Activity.Goals.Any(g => g.Id == goalId.Value));
         if (activityId.HasValue) query = query.Where(o => o.ActivityId == activityId.Value);
+        if (sourceId.HasValue) query = query.Where(o => o.SourceOccurrenceId == sourceId.Value);
+        // Floating and no-date alike, benched goals included: everything with no date to range over.
+        if (undatedOnly) query = query.Where(o => o.StartAt == null && o.EndAt == null && o.WindowStart == null);
 
         // A ranged query never returns fully-floating (all-null anchor) occurrences: the exact
         // in-memory filter below always drops them. Excluding them in SQL is safe because it is a
@@ -159,22 +170,21 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         var rangeErr = Validators.ValidateDateRange(startAt, endAt);
         if (rangeErr is not null) return Result<OccurrenceDto>.Fail(rangeErr);
 
-        // Re-pointing at a different activity. Both ends must be activity-kind: an event's activity
-        // is a backing row this occurrence owns outright (DeleteAsync removes it, UpdateEventAsync
-        // edits it in place), so moving either end of that pair would orphan a row on one side or
-        // give a backing activity two occurrences on the other.
+        // Re-pointing at a different activity. The target must be activity-kind: an event's activity
+        // is a backing row its occurrence owns outright, so nothing else may join it. An event may
+        // leave its backing row (linking it to an activity after the fact); the row then has no
+        // occurrence and is deleted with the save.
+        Activity? orphanedBacking = null;
         if (req.ActivityId.Value is { } targetId && targetId != o.ActivityId)
         {
-            if (o.Activity.Kind == ActivityKind.@event)
-                return Result<OccurrenceDto>.Fail(new Error(ErrorType.Validation,
-                    "An event cannot be moved to another activity."));
-
             var target = await FindActivityAsync(targetId, userId);
             if (target is null)
                 return Result<OccurrenceDto>.Fail(new Error(ErrorType.NotFound, "Activity not found."));
             if (target.Kind == ActivityKind.@event)
                 return Result<OccurrenceDto>.Fail(new Error(ErrorType.Validation,
                     "An occurrence cannot be moved onto an event."));
+
+            if (o.Activity.Kind == ActivityKind.@event) orphanedBacking = o.Activity;
 
             o.ActivityId = target.Id;
             o.Activity = target;
@@ -184,6 +194,10 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         }
 
         if (req.Title.IsSet) o.Title = string.IsNullOrWhiteSpace(req.Title.Value) ? null : req.Title.Value.Trim();
+        // A linked event carries its old title over as an override, unless it would only repeat
+        // the activity's own.
+        if (orphanedBacking is not null && string.Equals(o.Title, o.Activity.Title, StringComparison.OrdinalIgnoreCase))
+            o.Title = null;
         if (req.Notes.IsSet) o.Notes = string.IsNullOrWhiteSpace(req.Notes.Value) ? null : req.Notes.Value.Trim();
         if (req.Reminders.IsSet) o.Reminders = ReminderMath.NormalizeOrNull(req.Reminders.Value);
         o.StartAt = startAt;
@@ -205,11 +219,19 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             o, userId, req.DeadlineOccurrenceId.Value, clear: req.DeadlineOccurrenceId is { IsSet: true, Value: null });
         if (linkErr is not null) return Result<OccurrenceDto>.Fail(linkErr);
 
+        if (req.SourceOccurrenceId.IsSet)
+        {
+            var sourceErr = await ApplySourceAsync(o, userId, req.SourceOccurrenceId.Value);
+            if (sourceErr is not null) return Result<OccurrenceDto>.Fail(sourceErr);
+        }
+
         var subtaskErr = ApplySubtasks(o, req.Subtasks);
         if (subtaskErr is not null) return Result<OccurrenceDto>.Fail(subtaskErr);
 
         var tagErr = await ApplyTagsAsync(o, userId, req.TagIds);
         if (tagErr is not null) return Result<OccurrenceDto>.Fail(tagErr);
+
+        if (orphanedBacking is not null) db.Activities.Remove(orphanedBacking);
 
         await db.SaveChangesAsync();
         return Result<OccurrenceDto>.Success(await ToDtoAsync(o, userId));
@@ -305,6 +327,11 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             var deadlineErr = await ValidateDeadlineAsync(userId, null, deadlineId, null);
             if (deadlineErr is not null) return Result<OccurrenceDto>.Fail(deadlineErr);
         }
+        if (req.SourceOccurrenceId is { } sourceId)
+        {
+            var sourceErr = await ValidateSourceAsync(userId, null, sourceId);
+            if (sourceErr is not null) return Result<OccurrenceDto>.Fail(sourceErr);
+        }
 
         db.Activities.Add(a);
 
@@ -319,6 +346,7 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
             IsPlanned = req.IsPlanned,
             IsNoDate = req.IsNoDate,
             DeadlineOccurrenceId = req.DeadlineOccurrenceId,
+            SourceOccurrenceId = req.SourceOccurrenceId,
             Reminders = ReminderMath.NormalizeOrNull(req.Reminders),
             Tags = tags.Value!,
         };
@@ -373,6 +401,9 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
 
         var linkErr = await ApplyDeadlineAsync(o, userId, req.DeadlineOccurrenceId, req.ClearDeadline);
         if (linkErr is not null) return Result<OccurrenceDto>.Fail(linkErr);
+
+        var sourceErr = await ApplySourceAsync(o, userId, req.SourceOccurrenceId);
+        if (sourceErr is not null) return Result<OccurrenceDto>.Fail(sourceErr);
 
         var subtaskErr = ApplySubtasks(o, req.Subtasks);
         if (subtaskErr is not null) return Result<OccurrenceDto>.Fail(subtaskErr);
@@ -444,6 +475,39 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         return Result<OccurrenceDto>.Success(await ToDtoAsync(o, userId));
     }
 
+    public const int MaxReorder = 2000;
+
+    /// <summary>
+    /// Puts the given occurrences in this order without moving them past anything else: they trade
+    /// the sort positions they already hold, and the unranked ones take fresh positions after every
+    /// ranked occurrence. Other lists that show some of them keep their place relative to the rest.
+    /// </summary>
+    public async Task<Result> ReorderAsync(Guid userId, ReorderOccurrencesRequest req)
+    {
+        var ids = req.OccurrenceIds ?? [];
+        if (ids.Count == 0)
+            return Result.Fail(new Error(ErrorType.Validation, "Nothing to reorder."));
+        if (ids.Count > MaxReorder)
+            return Result.Fail(new Error(ErrorType.Validation, $"At most {MaxReorder} occurrences can be reordered at once."));
+        if (ids.Distinct().Count() != ids.Count)
+            return Result.Fail(new Error(ErrorType.Validation, "An occurrence can only appear once."));
+
+        var rows = await db.Occurrences
+            .Where(o => o.UserId == userId && ids.Contains(o.Id))
+            .ToDictionaryAsync(o => o.Id);
+        if (rows.Count != ids.Count)
+            return Result.Fail(new Error(ErrorType.NotFound, "Occurrence not found."));
+
+        var next = (await db.Occurrences.Where(o => o.UserId == userId).MaxAsync(o => o.SortOrder) ?? -1) + 1;
+        var slots = rows.Values.Where(o => o.SortOrder is not null).Select(o => o.SortOrder!.Value).ToList();
+        slots.AddRange(Enumerable.Range(next, ids.Count - slots.Count));
+        slots.Sort();
+
+        for (var i = 0; i < ids.Count; i++) rows[ids[i]].SortOrder = slots[i];
+        await db.SaveChangesAsync();
+        return Result.Success();
+    }
+
     public async Task<Result<OccurrenceDto>> SetStatusAsync(Guid id, Guid userId, EventStatus status)
     {
         var o = await WithFullIncludes()
@@ -504,7 +568,8 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
 
         return await CreateAsync(userId, new CreateOccurrenceRequest(
             source.ActivityId, source.Title, startAt, endAt, isAllDay, isPlanned, null, null, null, deadlineId,
-            TagIds: source.Tags.Select(t => t.Id).ToList(), Reminders: source.Reminders));
+            TagIds: source.Tags.Select(t => t.Id).ToList(), Reminders: source.Reminders,
+            SourceOccurrenceId: source.SourceOccurrenceId));
     }
 
     private static DateOnly AnchorDay(DateTimeOffset at, bool isAllDay, DayContext ctx) =>
@@ -584,19 +649,35 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
     {
         var links = await db.Occurrences
             .AsNoTracking()
-            .Where(o => o.UserId == userId && o.DeadlineOccurrenceId != null)
-            .Select(o => new { o.DeadlineOccurrenceId, o.Status, o.StartAt, o.EndAt })
+            .Where(o => o.UserId == userId && (o.DeadlineOccurrenceId != null || o.SourceOccurrenceId != null))
+            .Select(o => new { o.DeadlineOccurrenceId, o.SourceOccurrenceId, o.Status, o.StartAt, o.EndAt })
             .ToListAsync();
 
         var stats = links
-            .Where(l => l.Status == EventStatus.done)
+            .Where(l => l.DeadlineOccurrenceId != null && l.Status == EventStatus.done)
             .GroupBy(l => l.DeadlineOccurrenceId!.Value)
             .ToDictionary(
                 g => g.Key,
                 g => (Count: g.Count(), Minutes: g.Sum(l => LinkedMinutes(l.StartAt, l.EndAt))));
 
+        var linkedCounts = links
+            .Where(l => l.DeadlineOccurrenceId != null)
+            .GroupBy(l => l.DeadlineOccurrenceId!.Value)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        var followUps = links
+            .Where(l => l.SourceOccurrenceId != null)
+            .GroupBy(l => l.SourceOccurrenceId!.Value)
+            .ToDictionary(
+                g => g.Key,
+                g => (
+                    Count: g.Count(),
+                    Done: g.Count(l => l.Status == EventStatus.done),
+                    Minutes: g.Where(l => l.Status == EventStatus.done).Sum(l => LinkedMinutes(l.StartAt, l.EndAt))));
+
         var targetIds = dtos.Where(d => d.DeadlineOccurrenceId.HasValue)
             .Select(d => d.DeadlineOccurrenceId!.Value)
+            .Concat(dtos.Where(d => d.SourceOccurrenceId.HasValue).Select(d => d.SourceOccurrenceId!.Value))
             .Distinct()
             .ToList();
         var refs = targetIds.Count == 0
@@ -606,14 +687,25 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
                 .Include(o => o.Activity)
                 .Where(o => o.UserId == userId && targetIds.Contains(o.Id))
                 .ToListAsync())
-                .ToDictionary(o => o.Id, DeadlineRefDto.FromEntity);
+                .ToDictionary(o => o.Id, OccurrenceRefDto.FromEntity);
 
         return dtos.Select(d =>
         {
             var deadline = d.DeadlineOccurrenceId is { } id && refs.TryGetValue(id, out var r) ? r : null;
-            return stats.TryGetValue(d.Id, out var s)
-                ? d with { Deadline = deadline, LinkedDoneCount = s.Count, LinkedDoneMinutes = s.Minutes }
-                : d with { Deadline = deadline };
+            var source = d.SourceOccurrenceId is { } sid && refs.TryGetValue(sid, out var sr) ? sr : null;
+            var linked = stats.TryGetValue(d.Id, out var s) ? s : default;
+            var follow = followUps.TryGetValue(d.Id, out var f) ? f : default;
+            return d with
+            {
+                Deadline = deadline,
+                LinkedDoneCount = linked.Count,
+                LinkedDoneMinutes = linked.Minutes,
+                Source = source,
+                FollowUpCount = follow.Count,
+                FollowUpDoneCount = follow.Done,
+                FollowUpDoneMinutes = follow.Minutes,
+                LinkedCount = linkedCounts.GetValueOrDefault(d.Id),
+            };
         }).ToList();
     }
 
@@ -638,6 +730,38 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         return null;
     }
 
+    private async Task<Error?> ApplySourceAsync(Occurrence o, Guid userId, Guid? sourceId)
+    {
+        if (sourceId == o.SourceOccurrenceId) return null;
+        if (sourceId is { } id)
+        {
+            var err = await ValidateSourceAsync(userId, o.Id, id);
+            if (err is not null) return err;
+        }
+        o.SourceOccurrenceId = sourceId;
+        return null;
+    }
+
+    // One level only: the source must not follow up on anything itself, and an occurrence that
+    // already has follow-ups cannot become one. That rules out loops without walking a chain.
+    private async Task<Error?> ValidateSourceAsync(Guid userId, Guid? selfId, Guid sourceId)
+    {
+        if (sourceId == selfId)
+            return new Error(ErrorType.Validation, "An occurrence cannot follow up on itself.");
+
+        var source = await db.Occurrences
+            .AsNoTracking()
+            .Where(o => o.Id == sourceId && o.UserId == userId)
+            .Select(o => new { o.SourceOccurrenceId })
+            .FirstOrDefaultAsync();
+        if (source is null) return new Error(ErrorType.NotFound, "Occurrence to follow up on not found.");
+        if (source.SourceOccurrenceId is not null)
+            return new Error(ErrorType.Validation, "That occurrence is itself a follow-up.");
+        if (selfId is { } self && await db.Occurrences.AnyAsync(o => o.SourceOccurrenceId == self))
+            return new Error(ErrorType.Validation, "An occurrence with follow-ups cannot be a follow-up.");
+        return null;
+    }
+
     private async Task<Error?> ValidateDeadlineAsync(Guid userId, Guid? selfId, Guid targetId, Guid? currentId)
     {
         if (targetId == selfId)
@@ -646,11 +770,12 @@ public class OccurrenceService(LoomDbContext db, UserSettingsService settings)
         var target = await db.Occurrences
             .AsNoTracking()
             .Where(o => o.Id == targetId && o.UserId == userId)
-            .Select(o => new { o.Status, o.DeadlineOccurrenceId, IsEvent = o.Activity.Kind == ActivityKind.@event })
+            .Select(o => new { o.Status, o.DeadlineOccurrenceId, o.StartAt, o.EndAt, IsEvent = o.Activity.Kind == ActivityKind.@event })
             .FirstOrDefaultAsync();
         if (target is null) return new Error(ErrorType.NotFound, "Deadline not found.");
-        if (!target.IsEvent)
-            return new Error(ErrorType.Validation, "A deadline must be an event.");
+        // Due shape: exactly one of start/end, the same test as the Daily Plan's Deadlines section.
+        if (!target.IsEvent && (target.StartAt is null) == (target.EndAt is null))
+            return new Error(ErrorType.Validation, "A deadline must be an event or a Due occurrence.");
         if (target.Status != EventStatus.pending && targetId != currentId)
             return new Error(ErrorType.Validation, "A deadline must be pending.");
 

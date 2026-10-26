@@ -9,12 +9,12 @@ import {
 import { ActivityList, activitiesFromOccurrences } from '@/components/insights/TimeByActivityList'
 import { toastError } from '@/store/toasts'
 import type { Occurrence } from '@/lib/types'
+import { weekdayDate } from '@/lib/dates'
 
 /** Columns in the heatmap, one per week. Both are suffixes of the same window, with counts picked so
  *  the squares land near 14px inside the modal's fixed width. */
 const HEATMAP_WEEKS_NARROW = 18
 const HEATMAP_WEEKS_WIDE = 26
-const RECENT_LIMIT = 10
 
 export function OccurrenceHistoryModal({
   open,
@@ -181,9 +181,9 @@ function RecentRow({ occ }: { occ: Occurrence }) {
       <div className="min-w-0 flex-1">
         <span className="block truncate text-sm text-foreground">{occ.effectiveTitle}</span>
         <span className="block text-[11px] text-muted-foreground">
-          {occ.startAt ? formatDay(occ.startAt) : 'No date'}
-          {occ.startAt && !occ.isAllDay && (
-            <span className="ml-2 font-mono">{hhmm(new Date(occ.startAt))}</span>
+          {weekdayDate(occ.startAt!)}
+          {!occ.isAllDay && (
+            <span className="ml-2 font-mono">{hhmm(new Date(occ.startAt!))}</span>
           )}
         </span>
       </div>
@@ -221,15 +221,10 @@ function summarise(occurrences: Occurrence[]): Summary {
     .map((o) => new Date(o.startAt!))
     .sort((a, b) => b.getTime() - a.getTime())
 
+  const now = Date.now()
   const recent = occurrences
-    .slice()
-    .sort((a, b) => {
-      if (a.startAt && b.startAt) return new Date(b.startAt).getTime() - new Date(a.startAt).getTime()
-      if (a.startAt) return -1
-      if (b.startAt) return 1
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    })
-    .slice(0, RECENT_LIMIT)
+    .filter((o) => o.startAt && !(o.status === 'pending' && new Date(o.startAt).getTime() > now))
+    .sort((a, b) => new Date(b.startAt!).getTime() - new Date(a.startAt!).getTime())
 
   const completions = occurrences.filter((o) => o.status === 'done')
 
@@ -307,14 +302,6 @@ function relativeDayLabel(d: Date): string {
   return `${days}d ago`
 }
 
-function formatDay(iso: string): string {
-  const d = new Date(iso)
-  const sameYear = d.getFullYear() === new Date().getFullYear()
-  return d.toLocaleDateString('en-GB', {
-    weekday: 'short', day: 'numeric', month: 'short',
-    ...(sameYear ? {} : { year: 'numeric' }),
-  })
-}
 
 /** Whole days between two instants, counted on local calendar days rather than by elapsed hours. */
 function daysBetween(from: Date, to: Date): number {

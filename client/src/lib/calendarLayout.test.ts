@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import type { Occurrence } from './types'
 import { linearScale } from './timeScale'
 import {
-  DUE_SPAN_MINUTES,
+  DUE_PIN_PX,
   MIN_EVENT_PX,
   dragStartFor,
   dueRowRef,
@@ -78,10 +78,25 @@ describe('layoutDay', () => {
     expect(events[0].trueEndPx).toBe(10 * 64 + 0.25 * 64)
   })
 
-  it('gives a due pin its exact fixed span', () => {
+  it('draws a due pin at its moment with a fixed pill height', () => {
     const { events } = layoutDay([occ('a', at(9), null)], day, scale)
 
-    expect(events[0].heightPx).toBe((DUE_SPAN_MINUTES / 60) * 64)
+    expect(events[0].topPx).toBe(9 * 64)
+    expect(events[0].heightPx).toBe(DUE_PIN_PX)
+  })
+
+  it('leaves a block overlapping a due pin at full width', () => {
+    const { events } = layoutDay([occ('a', at(9), at(11)), occ('b', at(10), null)], day, scale)
+    const block = events.find((l) => l.event.id === 'a')!
+
+    expect(block.totalCols).toBe(1)
+  })
+
+  it('packs only due pins whose pills collide', () => {
+    const { events } = layoutDay([occ('a', at(10), null), occ('b', at(10), null), occ('c', at(12), null)], day, scale)
+    const cols = Object.fromEntries(events.map((l) => [l.event.id, l.totalCols]))
+
+    expect(cols).toEqual({ a: 2, b: 2, c: 1 })
   })
 
   it('clips an event that crosses midnight to the day', () => {

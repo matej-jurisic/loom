@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useState, type CSSProperties, type HTMLAttributes, type MouseEvent } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, X, Pencil, Trash2, CalendarPlus, Copy, Clock, History, ListChecks, Flag, Layers } from 'lucide-react'
+import { Check, X, Pencil, Trash2, CalendarPlus, Copy, Clock, History, ListChecks, Flag, Layers, GripVertical, CornerDownRight, ListPlus, Link2 } from 'lucide-react'
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
-import type { Activity, Occurrence, EventStatus } from '@/lib/types'
+import type { Activity, Occurrence, OccurrenceRef, EventStatus } from '@/lib/types'
 import { GoalBadge } from '@/components/goals/GoalBadge'
 import { ActionMenu, type ActionMenuEntry } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -13,12 +13,22 @@ import { SkipRescheduleModal } from '@/components/events/SkipRescheduleModal'
 import { ActivityHistoryModal } from '@/components/activities/ActivityHistoryModal'
 import { invalidateOccurrences } from '@/lib/invalidate'
 import { addNextOccurrence } from '@/lib/repeat'
+import { hasRelated } from '@/lib/occurrenceView'
+import { RelatedOccurrencesModal } from '@/components/events/RelatedOccurrencesModal'
 
 function formatMinutes(minutes: number): string {
   const h = Math.floor(minutes / 60)
   const m = minutes % 60
   if (h > 0 && m > 0) return `${h}h ${m}m`
   return h > 0 ? `${h}h` : `${m}m`
+}
+
+/** Wiring from `SortableOccurrenceList`: the row becomes draggable by a grip in its left gutter. */
+export interface RowDrag {
+  ref: (el: HTMLElement | null) => void
+  style: CSSProperties
+  handle: HTMLAttributes<HTMLElement> & { ref: (el: HTMLElement | null) => void }
+  dragging: boolean
 }
 
 interface OccurrenceListRowProps {
@@ -29,13 +39,17 @@ interface OccurrenceListRowProps {
   onSchedule?: (o: Occurrence) => void
   onDuplicate?: (o: Occurrence) => void
   onEditActivity?: (a: Activity) => void
+  /** Called with the occurrence to follow up on: this one, or its own source when it is a follow-up. */
+  onAddFollowUp?: (source: OccurrenceRef) => void
+  drag?: RowDrag
 }
 
-export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, onDuplicate, onEditActivity }: OccurrenceListRowProps) {
+export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, onDuplicate, onEditActivity, onAddFollowUp, drag }: OccurrenceListRowProps) {
   const qc = useQueryClient()
   const [subtasksOpen, setSubtasksOpen] = useState(false)
   const [skipOpen, setSkipOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [relatedOpen, setRelatedOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
 
   const isPending = occurrence.status === 'pending'
@@ -46,6 +60,10 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, on
   const cat = occurrence.activity.category
   const goals = occurrence.activity.goals
   const deadline = occurrence.deadline
+  const source = occurrence.source
+  const followUpLabel = occurrence.followUpCount > 0
+    ? `${occurrence.followUpDoneCount}/${occurrence.followUpCount} related${occurrence.followUpDoneMinutes > 0 ? `, ${formatMinutes(occurrence.followUpDoneMinutes)}` : ''}`
+    : null
   const linkedLabel = occurrence.linkedDoneCount > 0
     ? `${occurrence.linkedDoneCount} ${occurrence.linkedDoneCount === 1 ? 'session' : 'sessions'}${occurrence.linkedDoneMinutes > 0 ? `, ${formatMinutes(occurrence.linkedDoneMinutes)}` : ''}`
     : null
@@ -101,7 +119,9 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, on
       ? [{ icon: CalendarPlus, label: 'Schedule', onClick: () => onSchedule(occurrence) }]
       : []),
     { icon: History, label: 'History', onClick: () => setHistoryOpen(true) },
+    ...(hasRelated(occurrence) ? [{ icon: Link2, label: 'See related', onClick: () => setRelatedOpen(true) }] : []),
     ...(onDuplicate ? [{ icon: Copy, label: 'Duplicate', onClick: () => onDuplicate(occurrence) }] : []),
+    ...(onAddFollowUp ? [{ icon: ListPlus, label: 'Add related', onClick: () => onAddFollowUp(source ?? occurrence) }] : []),
     { icon: Pencil, label: 'Edit', onClick: () => onEdit(occurrence) },
     ...(onEditActivity && occurrence.activity.kind === 'activity'
       ? [{ icon: Layers, label: 'Edit activity', onClick: () => onEditActivity(occurrence.activity) }]
@@ -110,10 +130,33 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, on
     { icon: Trash2, label: 'Delete', onClick: () => setConfirmDelete(true), destructive: true },
   ]
 
+  // A click on the row body edits. Its own controls keep their behaviour, and the modals it mounts
+  // portal out of the <li> but still bubble React clicks through it, hence the `contains` check.
+  function handleRowClick(e: MouseEvent<HTMLLIElement>) {
+    const target = e.target as HTMLElement
+    if (!e.currentTarget.contains(target) || target.closest('button, a, input, [role="menu"]')) return
+    onEdit(occurrence)
+  }
+
   return (
-    <li className={`group relative flex items-center gap-3 border-b border-border px-5 py-3 last:border-b-0 first:rounded-t-lg last:rounded-b-lg transition-colors ${
-      isPending && occurrence.isOverdue ? 'bg-destructive/10 hover:bg-destructive/15' : 'bg-card hover:bg-muted/40'
-    }`}>
+    <li
+      ref={drag?.ref}
+      style={drag?.style}
+      onClick={handleRowClick}
+      className={`group relative flex cursor-pointer items-center gap-3 border-b border-border px-5 py-3 last:border-b-0 first:rounded-t-lg last:rounded-b-lg transition-colors ${
+        isPending && occurrence.isOverdue ? 'bg-destructive/10 hover:bg-destructive/15' : 'bg-card hover:bg-muted/40'
+      } ${drag?.dragging ? 'z-10 shadow-lg' : ''}`}
+    >
+      {drag && (
+        <button
+          type="button"
+          {...drag.handle}
+          aria-label="Drag to reorder"
+          className="absolute inset-y-0 left-0 flex w-5 cursor-grab touch-none items-center justify-center text-muted-foreground/60 transition-opacity hover:text-foreground focus-visible:opacity-100 active:cursor-grabbing [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100"
+        >
+          <GripVertical className="h-3.5 w-3.5" strokeWidth={2} />
+        </button>
+      )}
       {/* Status checkbox */}
       <button
         onClick={() => statusMutation.mutate(isPending ? 'done' : 'pending')}
@@ -138,9 +181,19 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, on
           <span className={`text-sm ${!isPending ? 'line-through text-muted-foreground' : 'text-foreground'}`}>
             {occurrence.effectiveTitle}
           </span>
+          {occurrence.activity.shortLabel && (
+            <span className="inline-flex items-center rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium leading-none text-muted-foreground">
+              {occurrence.activity.shortLabel}
+            </span>
+          )}
           {goals.map((g) => <GoalBadge key={g.id} goal={g} />)}
+          {occurrence.isPlanned && (
+            <span className="inline-flex items-center rounded-md border border-dashed border-muted-foreground/60 px-1.5 py-0.5 text-[11px] font-medium leading-none tracking-wide text-muted-foreground">
+              PLAN
+            </span>
+          )}
         </div>
-        {(timeText || cat || hasSubtasks || deadline || linkedLabel || occurrence.effectiveTags.length > 0) && (
+        {(timeText || cat || hasSubtasks || deadline || linkedLabel || source || followUpLabel || occurrence.effectiveTags.length > 0) && (
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1">
             {timeText && (
               <span className="flex items-center gap-1 whitespace-nowrap text-xs text-muted-foreground">
@@ -163,6 +216,17 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, on
               <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground" title="Deadline">
                 <Flag className="h-3 w-3 shrink-0" strokeWidth={2} />
                 <span className="truncate">{deadline.effectiveTitle}</span>
+              </span>
+            )}
+            {source && (
+              <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground" title="Related to">
+                <CornerDownRight className="h-3 w-3 shrink-0" strokeWidth={2} />
+                <span className="truncate">{source.effectiveTitle}</span>
+              </span>
+            )}
+            {followUpLabel && (
+              <span className="whitespace-nowrap text-xs text-muted-foreground" title="Related done">
+                {followUpLabel}
               </span>
             )}
             {linkedLabel && (
@@ -206,6 +270,13 @@ export function OccurrenceListRow({ occurrence, timeText, onEdit, onSchedule, on
           open={historyOpen}
           activity={occurrence.activity}
           onClose={() => setHistoryOpen(false)}
+        />
+      )}
+      {relatedOpen && (
+        <RelatedOccurrencesModal
+          open={relatedOpen}
+          occurrence={occurrence}
+          onClose={() => setRelatedOpen(false)}
         />
       )}
       <SkipRescheduleModal

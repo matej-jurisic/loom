@@ -14,12 +14,14 @@ import {
   X,
 } from 'lucide-react'
 import { categoriesApi, goalsApi, listsApi, occurrencesApi, tagsApi } from '@/lib/api'
-import { invalidateLists } from '@/lib/invalidate'
+import { invalidateLists, invalidateOccurrences } from '@/lib/invalidate'
 import { toastError } from '@/store/toasts'
-import type { Activity, Occurrence, OccurrenceList } from '@/lib/types'
+import type { Activity, Occurrence, OccurrenceList, OccurrenceRef } from '@/lib/types'
 import {
   DEFAULT_GROUP,
+  DEFAULT_STATUS,
   GROUP_OPTIONS,
+  applyReorder,
   STATUS_OPTIONS,
   filterOccurrences,
   formatOccurrenceDate,
@@ -36,6 +38,7 @@ import { ActivityModal } from '@/components/activities/ActivityModal'
 import { EventModal } from '@/components/events/EventModal'
 import { OccurrenceFilterFields } from '@/components/events/OccurrenceFilterFields'
 import { OccurrenceListRow } from '@/components/events/OccurrenceListRow'
+import { SortableOccurrenceList } from '@/components/events/SortableOccurrenceList'
 import { ListModal } from '@/components/lists/ListModal'
 import { PageHeader } from '@/components/layout/PageHeader'
 import { ActionMenu } from '@/components/ui/ActionMenu'
@@ -53,7 +56,7 @@ function storedGroupBy(): OccurrenceGroupBy {
 }
 
 function parseStatus(raw: string | null): StatusFilter {
-  return STATUS_OPTIONS.some((s) => s.value === raw) ? (raw as StatusFilter) : 'open'
+  return STATUS_OPTIONS.some((s) => s.value === raw) ? (raw as StatusFilter) : DEFAULT_STATUS
 }
 
 const URL_FILTERS = ['status', 'category', 'tag', 'goal'] as const
@@ -95,7 +98,7 @@ export function AllOccurrencesPage() {
           for (const k of URL_FILTERS) {
             if (!(k in patch)) continue
             const value = patch[k]
-            if (!value || (k === 'status' && value === 'open')) next.delete(k)
+            if (!value || (k === 'status' && value === DEFAULT_STATUS)) next.delete(k)
             else next.set(k, value)
           }
           return next
@@ -260,17 +263,35 @@ interface OccurrencesViewProps {
 }
 
 function OccurrencesView({ title, view, onChange, menu, footer, emptyMessage }: OccurrencesViewProps) {
+  const qc = useQueryClient()
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   const [filtersOpen, setFiltersOpen] = useState(false)
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<Occurrence | undefined>()
   const [duplicating, setDuplicating] = useState<Occurrence | undefined>()
+  const [followUpOf, setFollowUpOf] = useState<OccurrenceRef | undefined>()
   const [scheduleMode, setScheduleMode] = useState(false)
 
   const { data: occurrences = [], isLoading } = useQuery({
     queryKey: ['events', 'all'],
     queryFn: () => occurrencesApi.list(),
+  })
+
+  const reorderMutation = useMutation({
+    mutationFn: (ids: string[]) => occurrencesApi.reorder(ids),
+    // Optimistic: the row stays where it was dropped instead of jumping back until the refetch.
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: ['events', 'all'] })
+      const snapshot = qc.getQueryData<Occurrence[]>(['events', 'all'])
+      if (snapshot) qc.setQueryData(['events', 'all'], applyReorder(snapshot, ids))
+      return { snapshot }
+    },
+    onError: (err, _ids, ctx) => {
+      if (ctx?.snapshot) qc.setQueryData(['events', 'all'], ctx.snapshot)
+      toastError(err, 'Could not save the order.')
+    },
+    onSettled: () => invalidateOccurrences(qc),
   })
 
   const [editingActivity, setEditingActivity] = useState<Activity | undefined>()
@@ -307,6 +328,7 @@ function OccurrencesView({ title, view, onChange, menu, footer, emptyMessage }: 
   function openCreate() {
     setEditing(undefined)
     setDuplicating(undefined)
+    setFollowUpOf(undefined)
     setScheduleMode(false)
     setModalOpen(true)
   }
@@ -314,13 +336,23 @@ function OccurrencesView({ title, view, onChange, menu, footer, emptyMessage }: 
   function openEdit(o: Occurrence) {
     setEditing(o)
     setDuplicating(undefined)
+    setFollowUpOf(undefined)
     setScheduleMode(false)
     setModalOpen(true)
   }
 
   function openDuplicate(o: Occurrence) {
     setEditing(undefined)
+    setFollowUpOf(undefined)
     setDuplicating(o)
+    setScheduleMode(false)
+    setModalOpen(true)
+  }
+
+  function openFollowUp(source: OccurrenceRef) {
+    setEditing(undefined)
+    setDuplicating(undefined)
+    setFollowUpOf(source)
     setScheduleMode(false)
     setModalOpen(true)
   }
@@ -328,6 +360,7 @@ function OccurrencesView({ title, view, onChange, menu, footer, emptyMessage }: 
   function openSchedule(o: Occurrence) {
     setEditing(o)
     setDuplicating(undefined)
+    setFollowUpOf(undefined)
     setScheduleMode(true)
     setModalOpen(true)
   }
@@ -340,7 +373,7 @@ function OccurrencesView({ title, view, onChange, menu, footer, emptyMessage }: 
   const sections = useMemo(() => groupOccurrences(visible, group), [visible, group])
 
   const activeFilterCount =
-    (status !== 'open' ? 1 : 0) + (category !== null ? 1 : 0) + (tag !== null ? 1 : 0) + (goal !== null ? 1 : 0)
+    (status !== DEFAULT_STATUS ? 1 : 0) + (category !== null ? 1 : 0) + (tag !== null ? 1 : 0) + (goal !== null ? 1 : 0)
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -465,19 +498,22 @@ function OccurrencesView({ title, view, onChange, menu, footer, emptyMessage }: 
                     )}
                     {!isCollapsed && (
                       <div className="rounded-lg border border-border">
-                        <ul>
-                          {section.items.map((o) => (
+                        <SortableOccurrenceList
+                          items={section.items}
+                          onReorder={(ids) => reorderMutation.mutate(ids)}
+                          renderRow={(o, drag) => (
                             <OccurrenceListRow
-                              key={o.id}
                               occurrence={o}
                               timeText={formatOccurrenceDate(o) || null}
                               onEdit={openEdit}
                               onSchedule={openSchedule}
                               onDuplicate={openDuplicate}
                               onEditActivity={openEditActivity}
+                              onAddFollowUp={openFollowUp}
+                              drag={drag}
                             />
-                          ))}
-                        </ul>
+                          )}
+                        />
                       </div>
                     )}
                   </div>
@@ -489,11 +525,12 @@ function OccurrencesView({ title, view, onChange, menu, footer, emptyMessage }: 
       </div>
 
       <EventModal
-        key={`${editing?.id ?? duplicating?.id ?? 'new'}-${duplicating ? 'dup' : scheduleMode}`}
+        key={`${editing?.id ?? duplicating?.id ?? followUpOf?.id ?? 'new'}-${duplicating ? 'dup' : followUpOf ? 'follow' : scheduleMode}`}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         occurrence={editing}
         duplicateFrom={duplicating}
+        followUpOf={followUpOf}
         focusStartAt={scheduleMode}
         scheduleOnly={scheduleMode}
       />

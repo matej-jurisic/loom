@@ -137,14 +137,25 @@ public class ReminderTests : IDisposable
     }
 
     [Fact]
-    public void FireTimes_planned_or_done_never_fire()
+    public void FireTimes_planned_window_or_done_never_fire()
     {
         var activity = new Activity { Title = "Gym", Reminders = [0] };
         var ctx = new DayContext(TimeZoneInfo.Utc, TimeOnly.MinValue);
 
-        Assert.Empty(ReminderMath.FireTimes(new Occurrence { Activity = activity, StartAt = Start, IsPlanned = true }, ctx));
+        Assert.Empty(ReminderMath.FireTimes(new Occurrence { Activity = activity, StartAt = Start, EndAt = Start.AddHours(1), IsPlanned = true }, ctx));
+        Assert.Empty(ReminderMath.FireTimes(new Occurrence { Activity = activity, StartAt = Start, IsAllDay = true, IsPlanned = true }, ctx));
         Assert.Empty(ReminderMath.FireTimes(new Occurrence { Activity = activity, StartAt = Start, Status = EventStatus.done }, ctx));
         Assert.Empty(ReminderMath.FireTimes(new Occurrence { Activity = activity }, ctx));
+    }
+
+    [Fact]
+    public void FireTimes_planned_due_pin_fires()
+    {
+        var activity = new Activity { Title = "Lab deadline", Reminders = [60] };
+        var ctx = new DayContext(TimeZoneInfo.Utc, TimeOnly.MinValue);
+
+        Assert.Equal([Start.AddMinutes(-60)], ReminderMath.FireTimes(new Occurrence { Activity = activity, StartAt = Start, IsPlanned = true }, ctx));
+        Assert.Equal([Start.AddMinutes(-60)], ReminderMath.FireTimes(new Occurrence { Activity = activity, EndAt = Start, IsPlanned = true }, ctx));
     }
 
     [Fact]

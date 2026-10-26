@@ -50,6 +50,7 @@ export function ActivitiesPage() {
   const qc = useQueryClient();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Activity | undefined>();
+  const [duplicating, setDuplicating] = useState<Activity | undefined>();
   const [deleting, setDeleting] = useState<Activity | null>(null);
   const [historyFor, setHistoryFor] = useState<Activity | null>(null);
   const [group, setGroup] = useState<GroupBy>(storedGroupBy);
@@ -108,23 +109,21 @@ export function ActivitiesPage() {
     onError: (err) => toastError(err, "Could not delete the selected activities."),
   });
 
-  // The copy opens straight in the edit modal, so it can be renamed before anything else.
-  const duplicateMutation = useMutation({
-    mutationFn: (a: Activity) => activitiesApi.duplicate(a.id),
-    onSuccess: (copy) => {
-      invalidateActivities(qc);
-      openEdit(copy);
-    },
-    onError: (err) => toastError(err, "Could not duplicate the activity."),
-  });
-
   function openCreate() {
     setEditing(undefined);
+    setDuplicating(undefined);
+    setModalOpen(true);
+  }
+
+  function openDuplicate(a: Activity) {
+    setEditing(undefined);
+    setDuplicating(a);
     setModalOpen(true);
   }
 
   function openEdit(a: Activity) {
     setEditing(a);
+    setDuplicating(undefined);
     setModalOpen(true);
   }
 
@@ -441,7 +440,7 @@ export function ActivitiesPage() {
                               selected={selected.has(a.id)}
                               onToggleSelect={() => toggleSelected(a.id)}
                               onEdit={() => openEdit(a)}
-                              onDuplicate={() => duplicateMutation.mutate(a)}
+                              onDuplicate={() => openDuplicate(a)}
                               onDelete={() => setDeleting(a)}
                               onHistory={() => setHistoryFor(a)}
                               hiddenGoalId={group === "goal" ? section.key : undefined}
@@ -508,10 +507,11 @@ export function ActivitiesPage() {
       />
 
       <ActivityModal
-        key={editing?.id ?? "new"}
+        key={editing?.id ?? (duplicating ? `copy-${duplicating.id}` : "new")}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         activity={editing}
+        duplicateFrom={duplicating}
         goals={goals}
         categories={categories}
         tags={tags}

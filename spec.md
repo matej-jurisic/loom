@@ -1,146 +1,93 @@
 # Loom — Product Spec
 
-A brain space for goals, deadlines and motivation. Built around three primitives: **Goals**,
-**Activities**, and **Occurrences**. Single user in practice; the schema, auth layer, and every query
-are scoped by `UserId`.
+A brain space for goals, deadlines and motivation, built around **Goals**, **Activities** and
+**Occurrences**. Single user in practice; every query is scoped by user.
 
-This document describes what the app does today. Visual rules live in `design.md`; code navigation
-and conventions live in `CLAUDE.md`.
+This document describes what the app does today, as product rules. API shapes live in the code and
+tests, visual rules in `design.md`, code navigation in `CLAUDE.md`.
 
 ## What Loom is not
 
 Loom does not ask you to log your life. There is no suggestion engine, no scheduling model, and no
-stat that divides by the length of a day - so **sleep, work and commuting do not belong in it** unless
-you want them there for your own reasons. Nothing computes a wrong answer because they are missing.
-
-This is a hard product boundary, and the test for any new feature is:
+stat that divides by the length of a day, so sleep, work and commuting never need entering and
+nothing is wrong when they are missing. The test for any new feature:
 
 > Does this still produce a correct answer if the user logs only the things they care about?
 
-A feature that needs a complete calendar to be right - free-slot placement, "unaccounted" time,
-inferred availability, anything that reads meaning into an empty hour - fails that test and does not
-belong here, however useful it looks. Everything that ships today passes it: totals sum what was
-logged, cadence looks only at one activity's own completions, and checkpoint progress is entered by
-hand.
-
-The calendar is a **visualization and a fast way to add things**, not a planner and not a log.
+Free-slot placement, "unaccounted" time and inferred availability fail it. The calendar is a
+**visualization and a fast way to add things**, not a planner and not a log.
 
 ---
 
 ## Timezone & day semantics
 
-All day-bucketing happens **server-side**, in the user's IANA timezone (`User.Timezone`) offset by
-the configurable day boundary (`UserSettings.DayBoundaryTime`).
+All day logic runs server-side (`DayMath`), in the user's timezone offset by the day boundary setting.
 
-- A **day** runs from the boundary time to the next day's boundary. With a 04:00 boundary, 02:30
-  belongs to the previous day.
-- An **occurrence belongs to the day it starts on**. Occurrences that cross midnight are not split;
-  the calendar draws them on their start day, clamped to it.
-- **"Today"** is the day the current instant falls in, by those rules.
-- **Overdue** is computed server-side and shipped as `isOverdue` on the occurrence DTO. The client
-  never recomputes it. Purely presentational date formatting stays client-side.
-- An unknown timezone id resolves to UTC rather than throwing.
-- **Daylight saving:** a day is 23 or 25 hours long on a transition day, and consecutive days always tile
-  time with no gap or overlap. A boundary that a spring-forward transition skips (02:30 on the night the
-  clocks jump 02:00 to 03:00) falls at the first instant that exists, the end of the gap. One that a
-  fall-back repeats falls at its second occurrence.
-
-The implementation is `Loom.Core/Common/DayMath.cs`; every feature that reasons about days goes
-through it, via a `DayContext` from `UserSettingsService.GetDayContextAsync`.
+- A **day** runs from the boundary to the next day's boundary (with 04:00, 02:30 belongs to the day before).
+- An **occurrence belongs to the day it starts on**; one crossing midnight is drawn on its start day.
+- **Overdue** is decided by the server; the client never recomputes it.
+- An unknown timezone falls back to UTC.
+- **Daylight saving:** transition days are 23 or 25 hours and days always tile with no gap. A boundary
+  skipped by spring-forward falls at the end of the gap; one repeated by fall-back, at its second occurrence.
 
 ---
 
 ## Activities
 
-An **Activity** is the definition of a piece of work. An **Occurrence** is one instance of it in
-time. Activities are managed at `/activities`.
+An **Activity** is the definition of a piece of work; an **Occurrence** is one instance of it in time.
 
 | Field | Notes |
 |---|---|
-| Title | Required, max 255 characters |
-| Goals | Optional, any number. An occurrence of the activity counts toward every one of them. |
+| Title | Required, max 255 |
+| Short label | Optional, max 12. Shown beside every occurrence of the activity (after the title on the calendar, as a pill in lists), to tell apart occurrences that share a title under different activities ("Lab 3" deadline vs defence). |
+| Goals | Any number. An occurrence counts toward each. |
 | Category | Optional |
-| Tags | Optional, any number. Free-form labels for grouping and searching, such as a course name. |
-| Kind | `activity` or `event`. Internal, never shown. |
-| Subtasks | Ordered checklist template, copied onto every new occurrence. |
-| Work types | Labels for the kinds of work a session can be split into. Not copied anywhere. |
-| Repeat after days | Optional, 1 to 365. The gap offered for the next occurrence when one is completed or skipped. Activity kind only. |
-| Reminders | Optional, up to 5 offsets in minutes before an occurrence (0 to 30 days). Inherited by its occurrences; see Reminders. |
-| Show as overdue | Default on. When off, the activity's occurrences are never `isOverdue` or `isBehind`: they stay out of the Daily Plan's Unfinished section and the Overdue group of the occurrence lists; on the Occurrences page a dated pending one before today lands in a neutral Past group instead. |
+| Tags | Any number. Free-form labels for grouping and search. |
+| Subtasks | Checklist template copied onto every new occurrence. |
+| Work types | Labels a session's time can be split into. |
+| Repeat after days | Optional, 1-365. See Do again. |
+| Reminders | Up to 5 offsets before an occurrence (0 to 30 days), inherited by its occurrences. |
+| Show as unfinished when overdue | Default on. Off: its occurrences are never overdue or behind, so they stay out of Unfinished and the Overdue group; a past pending one lands in a neutral Past group on the Occurrences page. |
 
-Deleting an activity cascades to its occurrences. Deleting a category set-nulls the link and deleting
-a goal or a tag removes only that link; either way the activity stays alive, with its other goals and tags.
+Deleting an activity deletes its occurrences. Deleting a category, goal or tag only removes the link.
 
-The goal link is many-to-many (`ActivityGoals`). Create and update take the full set as `goalIds`
-(absent or empty means none), and responses carry `goals`, ordered by status then title. Per-goal
-figures therefore overlap: an occurrence on an activity with two goals is in both goals' counts,
-heatmaps and history, so they are never presented as parts of a total. Anything summed *across*
-goals counts the occurrence once.
+**Goals are many-to-many**, so per-goal figures overlap: an occurrence on an activity with two goals
+is in both goals' counts, heatmaps and history, and these are never presented as parts of a total.
+Anything summed across goals counts the occurrence once.
 
-The tag link is many-to-many (`ActivityTags`), shaped like the goal link: create and update take the
-full set as `tagIds` (absent or empty means none) and responses carry `tags`, ordered by name. Tags
-belong to the user and are managed at `/api/tags` (list, create, rename, delete). A name is unique per
-user ignoring case; a clash is a 409. Activity tags exist only on activities of kind `activity`.
-`GET /api/activities` takes an optional `tagId` filter beside `goalId`.
-A tag has no status, colour or archive: it groups and searches, nothing more.
+**Tags** belong to the user, unique by name ignoring case, with no colour, status or archive. An
+occurrence can also carry its own tags, for light variants of one activity ("Remote" / "Office" on
+Work). What a thing *is* belongs on the activity: different courses' lectures are separate activities,
+not one activity tagged per course. The two layers add up: an occurrence's effective tags are its
+activity's plus its own, and every tag filter, grouping and search uses those. A repeat copy keeps
+the occurrence's own tags.
 
-An occurrence can carry tags of its own (`OccurrenceTags`), meant for light variants of one activity,
-such as "Remote" or "Office" on the same work. What a thing is belongs on the activity: lectures for
-different classes or homework for different labs are separate activities, not one activity tagged per
-course. Create, patch and the event endpoints take the full set as
-`tagIds` (on patch and event update an absent `tagIds` leaves the set alone, an empty list clears it)
-and responses carry `tags` (the occurrence's own) and `effectiveTags` (the activity's tags plus the
-occurrence's, by name, each once). The two layers are additive and independent: retagging the
-activity still reaches every occurrence of it, and an occurrence cannot hide a tag its activity has.
-Events have no activity tags, so their occurrence tags are the only ones. A repeat copy takes the
-tags of the occurrence it was made from. Every tag filter, grouping and search over occurrences
-works on `effectiveTags`. Deleting a tag removes it from both layers.
-
-`GET /api/activities` also returns a derived `recentOccurrenceCount` per activity: its occurrences in
-the last 365 days, each counted from its start, falling back to its deadline and then to when it was
-created, with no upper bound so something scheduled for tomorrow still counts. Single-activity
-responses leave it at 0. It exists to order the activity picker.
+The activity picker orders activities by how many occurrences they had in the last year (not counting
+"No date" ones), most first, then alphabetically.
 
 ### Kinds: activity vs event
 
-- **`activity`** — a reusable definition. It owns many occurrences and is what `/api/activities`
-  lists and what the activity picker offers.
-- **`event`** — a one-off. `POST /api/occurrences/event` creates a backing activity row and its
-  single occurrence together; `PUT /api/occurrences/{id}/event` edits both (the event's title *is*
-  the activity's title); deleting the occurrence deletes the backing row. Events are excluded from
-  the activity list endpoint, so nothing can pick one, and the UI shows a Title field instead of an
-  activity picker.
+- **Activity** — reusable; owns many occurrences; what the activity picker offers.
+- **Event** — a one-off: one hidden backing activity with one occurrence, created, edited and deleted
+  together. The UI shows a Title field instead of a picker, and nothing can pick an event.
+- **Linking an event to an activity.** Edit Event's Activity / Event toggle moves the occurrence onto
+  an activity (picked or created there). It keeps dates, status, notes, subtasks, tags, reminders and
+  deadline link; the title stays as an override unless it equals the activity's; the activity's
+  category and goals take over; the time split is cleared. The reverse is not offered.
 
 ### Subtasks
 
-Two levels, deliberately separate:
-
-- **Activity subtasks** are the template: title only, in creation order, CRUD at
-  `/api/activities/{id}/subtasks`. Edited in the Edit Activity dialog.
-- **Occurrence subtasks** are the copy made when the occurrence is created, and carry `IsDone`. They
-  can be toggled from the occurrence detail modal, edited individually, or replaced as a full set on
-  an occurrence update (id present = keep and rename, id absent = create, missing = delete, whole
-  field omitted = leave untouched).
-- **Applying the template later.** Because the copy happens once, a title added to the template does
-  not reach occurrences that already exist on its own. The Edit Activity dialog shows "Add to N pending
-  occurrences" under the subtask list while any **pending** occurrence of the activity lacks a template
-  title (compared trimmed, case-insensitive); `GET /api/activities/{id}/subtasks/apply` returns that N
-  and `POST` to the same path does it. It only appends the missing titles, in template order, after
-  the occurrence's own: it never renames, removes or unticks a subtask, done and skipped occurrences
-  keep the checklist they were done with, and running it again adds nothing.
+The activity holds the template; each occurrence gets its own copy with done ticks at creation.
+Template titles added later can be pushed to pending occurrences that lack them ("Add to N pending
+occurrences" in Edit Activity): it only appends missing titles, never renames, removes or unticks,
+and leaves done and skipped occurrences alone.
 
 ### Work types
 
-A short list of labels on the activity ("Coding", "Report writing", "Meeting" on "Project work"),
-CRUD at `/api/activities/{id}/work-types`, edited in the Edit Activity dialog, or created from
-an occurrence's time split. Unlike subtasks they are a vocabulary, not a template: nothing is copied
-onto an occurrence, and an occurrence only references the ones it actually used.
-
-- Titles are unique per activity, ignoring case; a duplicate is a 409.
-- Renaming keeps every logged row pointing at the same type, so history stays in one bucket.
-- Removing a type that has time logged against it archives it: it leaves the activity's list and the
-  picker, and the rows that used it keep their label and their time. An unused type is deleted
-  outright. Creating a type with an archived one's title restores that one.
+A vocabulary on the activity ("Coding", "Report writing"), not a template: an occurrence references
+only the ones it used. Titles are unique per activity. Renaming keeps history in one bucket. Removing
+a type with logged time archives it (logged rows keep it); an unused one is deleted; re-adding an
+archived title restores it.
 
 ---
 
@@ -148,302 +95,165 @@ onto an occurrence, and an occurrence only references the ones it actually used.
 
 | Field | Notes |
 |---|---|
-| Activity | Required. Which activity this is an instance of. |
-| Title | Optional, overrides the activity title for this instance. Max 255. |
-| Notes | Optional free text about this instance. Max 4000. Written from the occurrence detail modal. |
-| Start datetime | Absent for floating; window start when `IsPlanned`. |
-| End datetime | Window end when `IsPlanned`; deadline or span end otherwise. Must be after start. |
-| Is all day | Marks a date-only occurrence. |
-| Is planned | Marks a flexible/windowed occurrence (dashed on the calendar, never overdue). May be set on a floating occurrence. |
-| Is no date | Marks a todo with no date: floating in shape, listed on the Occurrences page only. Excludes a start, an end, all-day and planned. |
-| Status | `pending`, `done`, `skipped`. Marking done clears `IsPlanned`. |
-| Subtasks | Per-occurrence checklist with `IsDone`, seeded from the activity's template. |
-| Time split | Optional rows of work type + time, saying where this occurrence's time went. |
-| Deadline | Optional link to a pending event-kind occurrence (`DeadlineOccurrenceId`). Any occurrence may point at one, including another event, so a draft can feed a final. |
-| Reminders | Optional override of the activity's reminders. Null inherits them; a list, even an empty one, replaces them. |
+| Activity | Required |
+| Title | Optional override of the activity title, max 255 |
+| Notes | Optional, max 4000. Not copied by duplicate or reschedule. |
+| Start / End | See Scheduling states. End must be after start. |
+| All day | Date only |
+| Planned | Flexible: dashed on the calendar, never overdue. Cleared when marked done. |
+| No date | A written-down todo. Excludes start, end, all-day and planned. |
+| Status | `pending`, `done`, `skipped` |
+| Subtasks | Own checklist, seeded from the template |
+| Time split | Optional work type + time rows |
+| Deadline | Optional link to what this works toward |
+| Related to | Optional link to what this follows up on |
+| Reminders | Optional override of the activity's; an empty list silences them |
+| Sort order | Manual position in lists, set by dragging |
 
-**Deadline link.** A "Lab work" session can point at the "Lab 3 report" event it is working toward.
-It is a plain optional reference, so nothing depends on it being filled in: an unlinked occurrence
-behaves exactly as before and a partly linked history is still correct.
+**Deadline link.** A "Lab work" session can point at the "Lab 3 report" it works toward. The target
+must be pending when linked and either an event or a Due-shaped occurrence (exactly one of start and
+end); no self-links or loops. The link survives the target later being completed. The picker lists
+valid targets with their goals and date, those sharing a goal with the occurrence first, then those
+sharing its category. The target shows how many linked sessions are done and their summed time; there
+is deliberately no progress percentage. Deleting either side only clears the link. Reschedule,
+move-or-skip and duplicate carry it while the target is pending.
 
-- The target must be the user's own, event-kind, and pending when the link is set. Self-links and
-  loops (A to B to A) are rejected. A link set earlier survives its target later being completed.
-- Deleting the target clears the link on whatever pointed at it; nothing cascades either way.
-- On a partial update, an absent `DeadlineOccurrenceId` leaves the link alone and an explicit null
-  removes it. Create takes the id directly.
-- The DTO carries `deadline` (title, dates, status of the target) on the session, and on the target
-  `linkedDoneCount` / `linkedDoneMinutes`: completed linked sessions and their summed time (elapsed
-  between start and end when both are set, else nothing). Skipped and pending sessions
-  contribute nothing. There is deliberately no progress percentage or "on track" signal.
-- Skip-and-reschedule, move-or-skip and calendar duplicate carry the link onto the new copy while the
-  target is still pending.
+**Related link.** "L01 - revise" points back at "Lecture 01". It points backward at something usually
+done, so it is separate from the deadline link and both can be set. One level only: a follow-up
+cannot have follow-ups and cannot be one if it already has them. The source shows how many follow-ups
+are done and their summed time. The picker offers occurrences from the last 60 days onward (same
+goal-then-category ordering) followed by pending undated ones. "Add related" creates a follow-up with
+the link filled in (on a follow-up, linking to its source). Do again, reschedule, move-or-skip and
+duplicate keep the link. Deleting the source only clears it.
 
-**Time split.** One block on the calendar can cover several kinds of work. Instead of one occurrence
-per kind, the occurrence carries optional rows, each naming one of its activity's work types
-(`PUT /api/occurrences/{id}/time-split`, the full ordered set; an empty list clears it).
+**See related.** An occurrence with either link, or linked to by one, has a "See related" action listing
+its deadline, the sessions working toward it (or toward this), its source, and the follow-ups of that
+source (or of this).
 
-- A row is **pinned** (it stores minutes) or **auto** (it stores nothing). Auto rows share whatever
-  the pinned rows leave of the occurrence's length (end minus start) equally, leftover minutes going
-  to the earliest rows. So picking two types with no numbers is an even split, and typing one number
-  leaves the rest to the others. The DTO sends each row's resolved `minutes` and `isPinned`.
-- Pinned minutes may add up to less than the length. The remainder is simply the activity's own
-  time; an occurrence with no rows, or a partly split one, is still correct.
-- Pinned minutes may not add up to more than the length: setting such a split is rejected, and so is
-  an update that shortens the occurrence below its pinned total. Auto rows follow a resize. An
-  occurrence with no measurable length keeps its rows untouched and unchecked.
-- A work type appears at most once per occurrence and must belong to the occurrence's activity.
-  Re-pointing the occurrence at another activity drops its rows.
-- Copies (skip-and-reschedule, duplicate) start with no split: it records what happened, not a plan.
+**Time split.** One block can cover several kinds of work. Each row names one of the activity's work
+types and is either **pinned** (fixed minutes) or **auto** (shares what the pinned rows leave, evenly).
+Pinned minutes may total less than the occurrence's length (the rest is unsplit) but never more,
+including after a resize. Re-pointing the occurrence drops its split; copies start without one.
 
-**Notes.** Free text on one occurrence, for either kind: how it went, what to pick up next time.
-Set through `PATCH /api/occurrences/{id}` (`notes`; absent keeps them, null or blank clears them,
-surrounding whitespace is trimmed). Create does not take notes, so copies (skip-and-reschedule,
-duplicate) start without them, and editing an event through its full-replace `PUT` leaves them alone.
-
-`effectiveTitle` on the DTO is `title ?? activity.title`. The DTO also carries the full activity
-(with its category and goal), which is why occurrence lists are invalidated after an activity write.
 ### Scheduling states
 
-**Scheduled** — a start datetime and `IsPlanned = false`. Participates in overdue detection and is
-drawn as a solid calendar block.
-
-**Due pin** — a start with no end. A deadline rather than a commitment to a span: the grid draws it
-30 minutes tall and pins it in the calendar's sticky Due row.
-
-**Planned** — `IsPlanned = true`. `StartAt`/`EndAt` act as window bounds when both are present;
-`EndAt` alone is a soft due date; `IsAllDay` marks a flexible all-day task. Drawn as a dashed,
-diagonally striped block spanning the window and never overdue - the flag says the time is flexible,
-not that a commitment is missing. List views group it under "Planned", except the Daily Plan's
-agenda, which keeps a planned occurrence with a start time on the day's timeline where its hour puts
-it and reserves its Planned section for the ones with no hour at all.
-
-**Floating** — no start, no end, not all-day. This is the "keep it somewhere" state, and the reason
-the app can hold an intention without turning it into an appointment. `IsPlanned` splits where it
-surfaces: a planned floating occurrence is already committed to and only needs a time, an unplanned
-one is not yet.
-
-The calendar's FLOAT row shows both, planned first, and either can be dragged into the grid to give
-it a time. The Daily Plan lists unplanned floating occurrences in its "Floating" group on every day,
-since they have no day of their own. On the Occurrences page, grouped by When, a planned floating occurrence groups
-under "Planned" and an unplanned one under "Floating". Floating occurrences are never overdue. The
-`floating=true` list filter also drops occurrences whose activity has goals and every one of them is
-benched; one goal that is not benched keeps it in.
-
-**No date** — a floating occurrence with `IsNoDate = true`: a todo that is written down and nothing
-more. It has no start, no end, is not all-day and is not planned, and the server rejects the flag
-alongside any of those. It is left out of the `floating=true` list filter, so it appears on neither
-the calendar's FLOAT row nor the Daily Plan's Floating list; the Occurrences page is where it lives, under its own
-"No date" group when grouped by When, and the Daily Plan has a collapsed "No date" section for it. Everything else treats it as the floating occurrence it is: it
-is never overdue, can be completed or skipped in place, and still counts in its activity's history
-and its goals' occurrence counts. Giving it a date ends the state: a partial update that sets a
-start, an end, all-day or planned without mentioning the flag clears it, so scheduling it needs no
-extra step.
-
-**All-day planned** is the other holding state: a date with no time, for something that belongs to a
-day without belonging to an hour of it.
+- **Scheduled** — a start, not planned. Solid block; can be overdue.
+- **Due pin** — a start with no end, a deadline rather than a span: drawn as a line over other blocks
+  and pinned in the calendar's Due row. (An end with no start is also Due-shaped.)
+- **Planned** — window bounds when both start and end are set; end alone is a soft due date; all-day
+  marks a flexible day task. Dashed and striped, never overdue, grouped under "Planned" in lists. The
+  Daily Plan keeps a planned occurrence with a start time on its timeline.
+- **Floating** — no date. Planned floating means committed, just needs a time; unplanned means not yet.
+  Shown in the calendar's FLOAT row (planned first) and the Daily Plan's Floating group (unplanned
+  only). Never overdue. Hidden from the FLOAT row when every goal of its activity is benched.
+- **No date** — a todo and nothing more: lives only on the Occurrences page ("No date" group), never on
+  the plan or calendar, never overdue, still counted in history and goal counts. Giving it a date
+  ends the state.
+- **All-day planned** — belongs to a day but not an hour of it.
 
 ### Reminders
 
-A reminder is a push notification to the native app, a number of minutes before an occurrence. It
-reminds about something the user already put on the calendar and creates nothing.
+A push to the native app some minutes before an occurrence. It creates nothing.
 
-- **Where they are set.** The activity carries the list (`reminders`, full set on create and update) and
-  every occurrence of it inherits it. An occurrence may override it with its own list (`reminders` on
-  create, patch and the event endpoints): on patch an absent field keeps the current state, `null`
-  returns to inheriting, a list overrides. The event `PUT` is a full replace, so an omitted list clears
-  it. Events have no activity reminders, so their own list is the only one. The DTO carries
-  `reminders` (the occurrence's own, or null) and `effectiveReminders` (what fires). Lists are stored
-  distinct and ascending; at most 5, each from 0 to 30 days.
-- **The anchor.** A timed occurrence counts back from its start (a deadline-only one from its end), an
-  all-day one from 09:00 on its date in the user's timezone. Planned, floating and no-date occurrences
-  have no anchor and never fire, and neither does anything done or skipped.
-- **Sending** (`NotificationService.SendDueRemindersAsync`, every 30 seconds). A reminder goes out once
-  per fire time (`ReminderDelivery`), when that time has passed by less than 10 minutes and is not before
-  the occurrence was created, so adding something that starts soon does not set off its earlier
-  reminders and a long outage does not release a burst. Moving the occurrence gives it new fire times,
-  which fire again. Several reminders of one occurrence due together send one notification. The title
-  is the effective title, the body the time in the user's timezone ("Today, 10:00 - 11:00", "Tomorrow,
-  due 17:00", or the date alone for all-day), and a tap opens `/plan?occurrence=<id>`, which shows the
-  occurrence's edit dialog on top of the Daily Plan.
-- **Devices.** The native app registers its FCM token after sign-in (`POST /api/notifications/devices`)
-  and drops it on sign-out (`POST /api/notifications/devices/remove`); a token FCM reports as gone is
-  pruned on the next send. Without a Firebase credential on the server nothing is sent and the
-  scheduler stays idle. `POST /api/notifications/test` sends a test notification to the caller's devices.
+- The activity's list is inherited; an occurrence may override it. Events have only their own.
+- **Anchor:** start for a timed occurrence, end for an end-only one, 09:00 local for all-day. Floating,
+  no-date, done and skipped never fire. A planned occurrence fires only as a timed Due pin (an
+  unconfirmed date); planned windows and all-day ones never do.
+- Each fire time sends once, only within 10 minutes after it and not if it predates the occurrence,
+  so new items and outages cause no bursts. Moving an occurrence gives new fire times. Reminders due
+  together send one push: effective title, time in the user's timezone ("Today, 10:00 - 11:00"),
+  tapping opens it on the Daily Plan.
+- The app registers its device on sign-in and drops it on sign-out; dead tokens are pruned. Without a
+  Firebase credential on the server nothing is sent.
 
 ### Daily overdue notification
 
-Optional (`dailyDigestTime`, "HH:mm" in the user's timezone, off by default). Once a day, at or within an
-hour after that time, `NotificationService.SendDailyDigestsAsync` sends one push to the user's devices
-listing what is overdue right then (`isOverdue` rules, so activities with "Show as overdue" off are
-left out): the title is the count, the body the first three titles plus "+N more". Nothing is sent
-when nothing is overdue. It is sent at most once per local date (`LastDigestDate`, reset when the time
-is changed), and a missed window is not made up. A tap opens `/plan`. It creates nothing and reads only
-what the user already put on the calendar.
+Optional, at a chosen time (off by default). Once per local day, within an hour of that time, one
+push lists what is overdue: the count as title, the first three titles plus "+N more". Nothing is sent
+when nothing is overdue, and a missed window is not made up. Tapping opens the Daily Plan.
 
 ### Overdue
 
-An occurrence is overdue when it is pending, not planned, has a start, and:
-
-- it has an end datetime that has passed, **or**
-- it is all-day and its calendar date is before today, **or**
-- it has a start only and its day has ended (the boundary on the following date has passed).
+Pending, not planned, has a start, and: its end has passed; or it is all-day and its date is before
+today; or it has a start only and its day has ended.
 
 ### Creating, editing, scheduling
 
-One modal covers all of it. It creates either an occurrence of an existing activity (activity picker,
-with inline quick-create) or a one-off event (title field). The picker is ordered by how many
-occurrences each activity has had in the last year, most first, so the things actually being logged
-sit at the top; ties and never-used activities fall back to alphabetical. Time mode is a four-way choice - **due**
-(end only), **scheduled** (start, optional end), **floating** (neither), **no date** (neither, and
-kept off the plan and the calendar) - with `all day` and `planned` as independent flags, neither of
-which applies to no date. The occurrence detail menu has the same two as one-tap actions: **Float**
-and **No date**. Scheduling an occurrence means giving it a start; rescheduling means
-changing it. From the calendar, blocks can be dragged to move, dragged from the FLOAT or all-day row
-into the grid, and resized.
+One modal creates an occurrence of an activity (picker with quick-create) or a one-off event. Time
+mode is **due** (end only), **scheduled** (start, optional end), **floating** or **no date**, with
+**all day** and **planned** as flags (not for no date). The detail menu has one-tap **Float** and
+**No date**. On the calendar, blocks drag to move, drop in from the FLOAT and all-day rows, and resize.
 
-**Skip with reschedule.** Marking an occurrence skipped opens a modal offering a new date, defaulting
-to the day after the occurrence's own. Confirming skips the original and creates a pending copy with
-the start/end shifted to the chosen date.
+**Skip with reschedule.** Skipping offers a new date (default: the next day, or the Do-again date).
+Confirming skips the original and creates a pending copy on that date.
 
-**Do again.** An activity may carry a gap in days (`repeatAfterDays`). It never creates anything by
-itself: nothing is scheduled ahead, and an occurrence that is left alone produces no follow-up, so
-there is no series and no backlog to catch up on.
+**Do again.** An activity's repeat gap never creates anything by itself; there is no series and no backlog.
 
-- **On completion**, marking an occurrence of such an activity done also adds the next one: the
-  client follows the status change with `POST /api/occurrences/{id}/repeat`, which creates one pending
-  copy. The detail modal shows an "Again <date>" checkbox, ticked by default, and unticking
-  it completes without a copy. The one-tap checkbox on a list row always adds it. Either way a toast
-  names the date and offers Undo, which deletes the copy.
-- A pending occurrence of the same activity already on that day makes the endpoint a 409 and nothing
-  is added, so completing, re-opening and completing again leaves one copy, not two.
-- **The date** steps N days at a time from the occurrence's own day and stops at the first day after
-  today. A weekly occurrence due Monday therefore lands on next Monday whether it is done on Monday,
-  on Thursday, or three weeks late, and one done ahead of its date lands N days after that date. The
-  copy is never on today or in the past.
-- The copy keeps the title, the reminder override, the clock time and length, all-day, the planned flag the occurrence had
-  before it was completed, and the deadline link while its target is still pending. An all-day
-  occurrence moves by calendar date. One with no date at all has nothing to step from, so it becomes
-  an all-day planned occurrence on today + N. Subtasks come fresh from the activity's template; notes and the time split are not
-  copied.
-- The endpoint rejects an occurrence that is not done, an activity with no gap set, and events.
-  Re-opening the completed occurrence afterwards leaves the copy in place.
-- **On skip**, the skip modal's default date becomes that same "Again" date in place of the day after
-  the occurrence's own.
+- Completing an occurrence of such an activity adds one pending copy. The detail modal has an
+  "Again <date>" checkbox (ticked by default); the list-row checkbox always adds it. A toast names
+  the date and offers Undo.
+- The date steps N days from the occurrence's own day to the first day after today, so a weekly
+  Monday item lands on next Monday however late it is done. Never today or the past. An undated one
+  becomes all-day planned on today + N.
+- The copy keeps title, reminder override, clock time and length, all-day, the planned flag it had,
+  the deadline link while the target is pending, and the related link. Subtasks come fresh from the
+  template; notes and time split are not copied.
+- Nothing is added if a pending occurrence of the activity already sits on that day. Events never repeat.
 
-**Duplicate.** The occurrence detail modal and the Occurrences page row menu duplicate into a pre-filled create modal. No backend
-support is needed: it is a create with copied fields.
+**Duplicate** opens a pre-filled create modal.
 
-**Re-pointing.** An occurrence's activity can be changed after creation, from the same picker used to
-create it. `activityId` on the update request is optional: omitting it leaves the link alone. Only
-valid between activity-kind activities, and enforced on both ends - an event occurrence cannot be
-moved onto an activity, and nothing can be created on or moved onto an event's backing row (that
-would give it two occurrences, and deleting either would cascade both away). The main use is
-correcting history in bulk after splitting one activity into several.
-
-**Edit activity from a block.** The occurrence detail modal opens the parent activity's editor
-directly, shown only for activity-kind rows.
+**Re-pointing.** An occurrence can move to another activity from the same picker, mainly to correct
+history after splitting an activity. Never onto or off an event.
 
 ---
 
 ## Categories
 
-A user-defined label with a colour and an optional icon, for grouping activities that are not tied to
-a goal.
-
-| Field | Notes |
-|---|---|
-| Name | Required |
-| Color | Required, `#RRGGBB` |
-| Icon | Optional icon key |
-
-Activities carry an optional `CategoryId`; deleting a category set-nulls it. Categories are managed
-on the `/categories` page, a plain list that works the same on every screen size. The category's colour drives every occurrence row and calendar block for
-its activities.
+Name, `#RRGGBB` colour, optional icon. The colour draws every row and block of its activities.
+Managed on `/categories`.
 
 ---
 
 ## Goals
 
-A sustained intention with measurable progress.
-
 | Field | Notes |
 |---|---|
 | Title | Required |
-| Description | Optional |
-| Notes | Optional free text; edited in the goal dialog, shown on the expanded card |
+| Description, Notes | Optional |
 | Status | `focus`, `active`, `bench`, `closed` |
 | Kind | `goal` (default) or `track` |
-| End date | Optional day. Display only, see below |
-| Color | Optional 6-digit hex, validated like a category's |
-| Icon | Optional name from the category icon set |
-| Checkpoints | Unordered list of milestones |
+| End date | Optional, display only |
+| Color, Icon | Optional |
+| Checkpoints | Unordered milestones |
 
-The goal PUT is a full replace: kind, end date, colour and icon reset when omitted.
+**Status.** Focus: what you are working on, shown on the Daily Plan. Active: live. Bench:
+deprioritised, its activities leave the FLOAT row. Closed: archived, dimmed. The number of Focus
+goals is a hard limit (a setting).
 
-### Status
+**Tracks** group activities that are not an outcome, like a college course. A track is only active or
+closed (never stale, so a semester break isn't neglect), has its own section on the Goals page before
+Closed, and does not count as goal work on the Plan page's Goal activity grid.
 
-- **Focus** — what you are actually working on. Shown at the top of the Daily Plan.
-- **Active** — live, but not the current focus.
-- **Bench** — deprioritised. Its activities are hidden from the calendar's float row.
-- **Closed** — archived. Shown dimmed in a Closed section.
+**End date** shows as "ends in 12 days" / "ends today" / "ended". Past it, a goal sorts last in its
+group and is never stale. It never closes the goal by itself.
 
-### Tracks
-
-A **track** groups activities that belong together without being an outcome: a college course, an
-ongoing area. It differs from a goal in three ways and is otherwise the same (heatmap, history,
-checkpoints, the Occurrences goal filter and grouping):
-- **Only `active` or `closed`.** Setting focus or bench on a track is a 400; turning a focus or bench
-  goal into a track moves it to active. Since staleness only applies to Focus, a track is never stale,
-  so a semester break does not read as neglect.
-- **Its own section** on the Goals page, after the goal tiers and before Closed (a closed track is in Closed).
-- **Not goal work.** The Plan page's Goal activity strip only counts activities linked to at least
-  one `goal`-kind goal; an activity linked only to tracks stays off it.
-
-### End date
-
-`GoalDto.DaysUntilEnd` is the end date minus today by `DayMath` (0 on the last day, negative once
-past), so the card reads "ends in 12 days" / "ends tomorrow" / "ends today" / "ended". Past its end a
-goal sorts last within its status and is never stale. **Passing the end date never closes the goal**:
-the state changes only when the user closes it, from the card menu as always.
-
-The number of simultaneous Focus goals is a user setting and a **hard boundary**: promoting a goal
-past the limit returns 409 with a message naming it. Goals are listed grouped Focus → Active → Bench
-→ Closed (tracks between Bench and Closed), goals past their end date last within a group, otherwise most recently active first (latest completion across its activities; goals with none fall back to creation order, after the active ones). Deleting a goal removes its checkpoints and its links to
-activities; the activities stay, with whatever other goals they have.
+**Order:** Focus → Active → Bench → Tracks → Closed; within a group, ended goals last, otherwise most
+recently active first. Deleting a goal removes its checkpoints and links; activities stay.
 
 ### Checkpoints
 
-| Field | Notes |
-|---|---|
-| Title | Required |
-| Size | `tiny`, `small`, `normal`, `big`, `huge` — relative weight, not a percentage |
-| Target date | Optional |
-| Status | `pending`, `reached` |
-
-Checkpoints have no required order and can be reached in any sequence. Progress is
-`sum(weight of reached) / sum(weight of all)`, with weights tiny=1, small=2, normal=3, big=5,
-huge=8, and 0 when there are no checkpoints. It is computed client-side from the checkpoint list.
+Title, size (tiny 1, small 2, normal 3, big 5, huge 8), optional target date, pending or reached.
+Any order. Progress = weight reached / total weight.
 
 ### Progress signals
 
-- **Checkpoints**: a goal with checkpoints shows a progress ring (a plain status dot otherwise), a
-  weight-proportional composition bar (one segment per checkpoint, sized by its weight, filled when
-  reached), and the checkpoints themselves as chips on desktop or a checklist on mobile - each
-  toggling reached in place. Goals without checkpoints show none of these.
-- **Occurrences**: a goal with linked occurrences shows a heatmap: one square per day for the last 280
-  days, across every activity linked to the goal, shaded by how many occurrences were completed that day, with a faint red for a
-  day that only holds skips. Days are bucketed server-side in the user's timezone and day boundary,
-  so the client never decides which day something belongs to. Pending occurrences are not on the
-  grid (nothing has happened yet), and a floating occurrence lands on no day at all. Goals with no
-  linked occurrence show no grid rather than an empty one.
-  Goals also carry `OccurrenceStats` (lifetime done / skipped / pending counts), rendered as a
-  proportional bar on the Plan page's goal chip.
-- **Every goal** carries `lastOccurrenceAt`, the most recent completion across its activities, and
-  `daysSinceLastOccurrence`, the whole days between that completion's day and today in the user's
-  timezone and day boundary (`DayMath`, so a session at 23:00 yesterday is "yesterday" at 08:00).
-  Rendered as "active today" / "active 3d ago" / "2w since last"; null reads "no activity yet".
-  A Focus goal whose last completion is 14 or more days back (and whose end date has not passed) shows its recency in emphasised text,
-  a quiet hint rather than an alert. It is derived only from what was logged.
+- **Checkpoints:** progress ring, a bar with one segment per checkpoint by weight, and the checkpoints
+  as toggleable chips (desktop) or checklist (mobile). None of this without checkpoints.
+- **Heatmap:** the last 280 days across the goal's activities, shaded by completions per day, faint
+  red for a day of only skips. Pending and undated occurrences are not on it. No grid without linked
+  occurrences. Lifetime done / skipped / pending counts show as a bar on the Plan goal chip.
+- **Recency:** days since the last completion, "active today" / "active 3d ago" / "no activity yet".
+  A Focus goal 14+ days quiet (and not ended) shows it emphasised, as a hint, not an alert.
 
 ---
 
@@ -451,211 +261,105 @@ huge=8, and 0 when there are no checkpoints. It is computed client-side from the
 
 | Route | Purpose |
 |---|---|
-| `/plan` | Daily Plan: one day's agenda. Index route. |
-| `/calendar` | Day / 3-day / week grid. Visualization, and the fastest way to add something. |
-| `/occurrences` | The saved Lists, then an "All occurrences" entry. Opened with filter params, it redirects to `/occurrences/all` with them. |
-| `/occurrences/all` | Every occurrence, filtered and grouped. The one place occurrences are listed and sliced. |
-| `/occurrences/lists/{id}` | The same list view, starting from one saved List's filters and grouping. |
-| `/categories` | Category management: add, rename, recolour, delete. |
-| `/tags` | Tag management: add, rename, delete. |
-| `/goals` | Goal list grouped by status, with tracks in their own section before Closed. Focus goals are always expanded and their section shows slots used (`2/3`); Active, Bench and Closed goals are one-line rows that a chevron expands to checkpoints, notes and heatmap (Closed has no heatmap). Tapping a goal opens its History; the menu edits, adds a checkpoint, changes status or deletes. |
-| `/activities` | Activity list; clicking a title edits, the row menu opens History. |
+| `/plan` | Daily Plan, the index route. |
+| `/calendar` | Day / 3-day / week grid. |
+| `/occurrences` | Saved Lists, then "All occurrences". |
+| `/occurrences/all` | Every occurrence, filtered and grouped. Clicking a row opens it. |
+| `/occurrences/lists/{id}` | The same view from a saved List. |
+| `/categories`, `/tags` | Add, rename, recolour, delete. |
+| `/goals` | Goals by status, tracks before Closed. Focus goals expanded with slots used (`2/3`); others expand by chevron. Tapping opens History. |
+| `/activities` | Activity list; title edits, menu opens History. |
 | `/insights` | Totals over what was logged. |
-| `/settings` | Preferences, data export, sign out. |
+| `/guide` | In-app guide to the concepts. |
+| `/settings` | Preferences, export, sign out. |
 
-`/inbox` redirects to `/occurrences`.
+`/inbox` redirects to `/occurrences`. The Tags page shows, per tag, its activities and the occurrences it reaches.
 
-Navigation: a 240px desktop sidebar (Daily Plan, Calendar, Occurrences, Goals, Activities, Categories, Tags,
-Insights, then a "Lists" section - one link per saved occurrence list - that opens
-its list view, and Guide and Settings pinned at the bottom); on mobile a
-5-slot bottom bar (Plan, Activities, Calendar, Occurrences) plus a "More" sheet holding Goals,
-Categories, Tags, Insights, Guide and Settings. `/guide` is an in-app guide to using Loom; it
-currently defines activity, occurrence, category, tag, goal, work type and subtask and how they relate. Nav items are not `end`-matched, so drilling into a goal or activity keeps the parent item
-lit.
+Navigation: desktop sidebar (the pages, then one link per saved List, Guide and Settings at the
+bottom); mobile bottom bar (Plan, Activities, Calendar, Occurrences) plus a More sheet.
 
 ### Daily Plan
 
-One day, read as a list. There is no score for the day: no completion ring and no done/left counts,
-because those rate how much of a day was executed, which is the planner reading this app is not for.
+One day as a list, with no score for the day (no completion ring, no done/left counts).
 
-The page opens on the day's own lists - Unfinished, the agenda, Deadlines, Planned, Floating, No date - and closes with
-the goal sections, which are standing context rather than something to clear before starting.
-
-- **Unfinished** — on today's view only, every pending occurrence whose date has passed, regardless
-  of the day it was scheduled for, with its date, above the agenda and not in it. Wider than the
-  overdue rule: planned occurrences are never *overdue*, but a planned one whose date is behind you
-  is listed here too, since not being late is no reason to disappear. Only dates before today count:
-  something earlier today stays on the agenda, styled overdue if it is. The exception is a
-  deadline-only occurrence (end, no start): it has no hour on the agenda, so it moves here once its
-  end has passed. A date-only (all-day) occurrence is judged by its calendar date, so the day
-  boundary never makes today's one count as behind. Undated (floating) occurrences
-  are not included - they have no date to be behind. One button moves the whole set to tomorrow,
-  preserving each clock time and each occurrence's planned / all-day flags.
-- **Timeline agenda** — every dated occurrence on the day. All-day ones sit in their own bordered list above, with no time text; timed ones follow as a spine with a time gutter, split by a
-  live **now** marker into past and upcoming, with relative labels ("now", "in 40m") on today. Rows
-  carry a one-tap done checkbox, a skip action, and an action menu. A planned occurrence with a start
-  time belongs here too, not in the Planned section: it is a commitment on this day like any other,
-  and the row says which it is with a `~` on the gutter time and a hollow spine dot - the list-view
-  echo of the calendar's dashed block.
-- **Deadlines** — every pending **Due** occurrence (the modal's Due type: one date, no span) dated
-  today or later, soonest first, each with its date and how many days away it is. Shown on every
-  day and always counted from today, not from the day being viewed. It is the complete list, so a
-  deadline due today appears here and on the agenda; ones already past are in Unfinished instead.
-  The section collapses to its header and count, and the choice is remembered on the device.
-  It is open by default, unlike No date below.
-- **Planned** — the planned occurrences with no hour to place them at: all-day ones, and windows
-  whose start was never set. Below Deadlines.
-- **Floating** — unplanned occurrences with no date at all, on every day. Below Planned.
-- **No date** — every pending No date occurrence, on every day, below Floating. Collapsed to its
-  header and count until expanded; the choice is remembered on the device. Hidden when there are none.
-- **Focus goals** — one chip per focus goal (click opens its history): title, last-session recency, its checkpoint
-  percentage when it has checkpoints, and its occurrence bar when it has linked occurrences.
-- **Goal activity** — a heatmap below the focus chips, same shape and shading as a goal's
-  own grid, but summed across every occurrence on an activity linked to *any* goal of kind `goal`, regardless of
-  that goal's status (tracks don't count), each occurrence counted once however many goals its activity has: "did I work toward something today", not one goal's own record. Only
-  completed occurrences count here - a skipped one isn't progress, so it puts no day on this grid
-  even though it would on a single goal's own heatmap. Hidden when nothing has ever been logged
-  toward a goal.
-- Day navigation (prev / next / today / date picker) using the same boundary semantics as the
-  calendar.
+- **Unfinished** (today only) — every pending occurrence dated before today, planned ones included,
+  plus end-only ones whose end has passed. Not floating. One button moves them all to tomorrow, keeping
+  times and flags.
+- **Agenda** — the day's all-day items, then timed ones on a spine with a live **now** marker and
+  relative labels on today. Rows have a done checkbox, skip and a menu. Planned ones show `~` and a hollow dot.
+- **Deadlines** — every pending Due occurrence from today on, soonest first, with days remaining,
+  counted from today whatever day is viewed and capped by the Deadlines ahead setting. Collapsible.
+- **Planned** — planned occurrences with no hour: all-day ones and windows without a start.
+- **Floating** — unplanned undated occurrences, on every day.
+- **Focus goals** — a chip per focus goal: recency, checkpoint percentage, occurrence bar.
+- **Goal activity** — a heatmap of completions on activities linked to any goal-kind goal, each
+  counted once; skips don't count. Hidden when nothing was ever logged toward a goal.
+- Day navigation: prev / next / today / date picker.
 
 ### Calendar
 
-Day, 3-day, and week views (choice persisted), with prev/next, jump-to-today, and a date picker.
+Day, 3-day and week views (remembered), with navigation. A picture of what you decided; an empty grid
+means nothing.
 
-The calendar is a **picture of what you have decided**, not a plan the app made and not a record it
-expects you to complete. Empty grid means nothing in particular.
-
-- Scheduled occurrences as solid blocks, planned ones dashed and striped. They are packed in one
-  pass, so an overlap renders side by side; every block in a cluster of transitively-overlapping
-  spans shares one width.
-- A sticky header with an **all-day row** and a **FLOAT row**; occurrences can be dragged between
-  those rows, from a row into the grid (which gives them a time), and between day columns.
-- **Clicking (or tapping) empty grid creates** a 30-minute occurrence at that quarter hour, pre-filled
-  in the create modal. Dragging still sets an exact span, and a long press does it on touch - but the
-  cheapest gesture now does the most common thing, which is the calendar's whole job here.
-- Drag-to-move and resize on existing blocks, snapping to 15 minutes. Clicking a block opens the
-  occurrence detail modal. A dragged block is held inside its day **by its end, not by the pointer**:
-  it stops when its bottom edge reaches midnight, however deep into the block it was grabbed. So an
-  occurrence cannot be dragged across midnight - the model and the grid both still handle ones that
-  do, they are just made in the edit modal.
-- **Done and skipped occurrences stay on the calendar**, styled apart (see `design.md`), and can be
-  opened, moved and resized like any block.
-- **Dropping a pending occurrence on a different date asks first**, since that gesture reads two ways:
-  *Move* changes the occurrence's date, and *Skip & reschedule* marks the original day skipped and puts
-  a new pending copy on the new date. Dismissing the dialog leaves it where it was. A same-day drag is
-  only a time change and commits with no prompt, as does moving a done or skipped occurrence - only a
-  pending one can be skipped.
-- **Holding Ctrl while dropping a mouse drag duplicates** instead of moving: the original stays put and
-  a new pending occurrence of the same activity is created at the drop position (grid, all-day or
-  FLOAT). No prompt is shown. Not available on touch.
-- A sticky **Due** row keeps due pins and overdue items visible while scrolling.
-- The header's **DUE** and **SOON** rows are anchored to *today*, not to the view: DUE lists every
-  occurrence still pending and dated before today - all-day or timed, planned or not - so nothing
-  unfinished can scroll out of reach; SOON lists due pins from today onward. DUE is deliberately not
-  the overdue rule: a planned occurrence is never *overdue* but is still listed. Both drop anything the
-  visible range already draws, so paging weeks never changes what they hold.
-- Adjustable slot height (zoom controls and pinch, persisted).
-- **Compact mode** (toolbar toggle, persisted) drops each day's empty stretches entirely: the day's
-  events sit in a straight stack, each block keeping its real duration-proportional height, with no
-  grid lines and no now line (the axis is discontinuous, so neither would mean anything). In a
-  multi-day view every column collapses its own emptiness, so hours do not line up across columns.
-- **Any drag restores the full 0-24 grid** for the length of the gesture, so moving, resizing,
-  creating and dropping in from the header rows all address real times. The grid re-collapses on
-  release. Whatever was under the pointer holds its position across both switches, and across zoom.
-- On touch only a **deliberate tap** counts: short, still, on a grid that is not moving and was not
-  gliding when the finger landed. A scrolling finger looks like a tap at several points - stopping
-  momentum, resting before a flick - and none of those may create anything.
+- Scheduled blocks solid, planned dashed. Overlaps sit side by side. Due pins take no width from blocks.
+- Sticky **all-day** and **FLOAT** rows; items drag between rows, into the grid (gaining a time) and
+  across days.
+- **Clicking empty grid creates** a 30-minute occurrence there; dragging (long press on touch) sets a span.
+  On touch only a deliberate, still tap creates; a tap that stops scrolling does not.
+- Blocks move and resize in 15-minute steps and cannot be dragged across midnight. Done and skipped
+  stay visible and editable.
+- **Dropping a pending occurrence on another date asks**: Move, or Skip & reschedule. Same-day drags
+  and done/skipped items move without asking. **Ctrl-drop duplicates** (mouse only).
+- Header **DUE** lists everything pending dated before today (planned too); **SOON** lists due pins
+  from today on. Both are anchored to today and leave out what the visible range already shows.
+- Zoom (buttons and pinch, remembered). **Compact mode** drops empty stretches of each day (no grid
+  lines, no now line); any drag restores the full grid for the gesture.
 
 ### Occurrences
 
-One list over every occurrence, narrowed by filters and split by a grouping.
+One list over every occurrence.
 
-**Filters** combine: **status** (Open = pending, the default; Done; Skipped; All), **category**,
-**tag**, **goal** (each takes one value, "Any" by default, or "No category" / "No tag" / "No goal"
-for the absence of one) and a text search over the title, notes, category, tag and goal names.
-On `/occurrences/all`, status, category, tag and goal live in the URL (`?status=done&tag={id}`), so
-the Categories and Tags pages and the sidebar link straight to a filtered view; search does not.
-"Reset filters" returns to Open with everything else cleared.
-
-**Grouping** (remembered in `localStorage`): **When** (the default), **Category**, **Tag**, **Goal**,
-**Activity** or **None**. When groups into Overdue → Today → Planned → Upcoming → Floating → No date →
-Completed/Skipped, with overdue winning over the day grouping; Completed/Skipped lists the most
-recent first. The other groupings sort each section by date, undated last, and put the "No ..."
-section last; an occurrence with several tags (its own plus its activity's) or goals is listed under each of them.
-Sections collapse and carry counts.
-
-The toolbar is the search box and a "Filters" button (with a count of the active filters) at every
-width; the status, category, tag and goal filters and the grouping open beneath it on tap.
-
-**Lists** are saved filter presets: a name plus status, category, tag, goal, search text and grouping.
-A list has no icon or colour of its own: it shows its goal filter's (when that goal has either), else its
-category filter's, else a plain default; "none" and deleted targets lend nothing.
-They hold no occurrences and create none; opening one runs its filters over the same full list.
-`/occurrences` shows them first (each with its filters summarised and a count of what matches now),
-then "All occurrences". Inside a list the filters stay editable; once they differ from what is saved,
-"Save to list" writes them back and "Revert" restores them. On All occurrences, "Save as list" opens
-the list modal pre-filled with the current filters. The header menu edits (same modal) or deletes the list.
-Stored per user (`/api/lists`, `GET`/`POST`/`PUT` full replace/`DELETE`), names unique ignoring case.
-Category, tag and goal are stored as the filter value (an id or `none`), not as a foreign key, so
-deleting the target leaves the list matching nothing (summarised as "Deleted tag") rather than
-silently widening to "any".
-
-Filtering and grouping run in the client over the full occurrence list (`GET /api/occurrences`).
-Grouped by Activity under one tag, a course reads as its Lecture, Lab and Homework sections. A tag
-set on an occurrence puts it in that tag's view without touching its activity, so one Lecture
-activity tagged per course per entry reads the same way under Group: Tag.
+- **Filters:** status (All by default), category, tag, goal (each with "No ..." for none) and text
+  search. All but search live in the URL, so other pages link to filtered views.
+- **Grouping** (remembered): **When** (Overdue → Today → Planned → Upcoming → Floating → No date →
+  Completed → Skipped), **Category**, **Tag**, **Goal**, **Activity**, **Related** (a section per
+  source with its follow-ups, then "Not linked") or **None**. An occurrence with several tags or goals
+  appears under each. Sections collapse and show counts.
+- **Manual order:** drag a row by its grip within its section. The order belongs to the occurrence, so
+  it holds in every list and grouping; unranked rows follow ranked ones.
+- **Lists** are saved filter presets (name, filters, grouping) and create nothing. A list takes its
+  goal's or category's icon and colour. `/occurrences` shows each with a live count, in an order set
+  by dragging (new lists go last), which the sidebar follows. Inside a list,
+  changed filters can be saved back or reverted. A list whose tag, category or goal was deleted
+  matches nothing rather than widening to "any".
 
 ### Activities
 
-One flat list: title search and a grouping select (beside the search) over **Goal / Category / Tag / None** (persisted in
-`localStorage`). Sections collapse and carry counts; rows sort by title within a section. Grouped by
-goal, an activity with several goals is listed under each of them, and its row still shows the other
-goals. Grouped by tag works the same way, with a "No tag" section last. Search also matches tag names.
-`?category=<id>` and `?tag=<id>` narrow the list (the Categories and Tags pages link here with
-"View activities"); each shows as a chip in the toolbar that clears it.
-Tags are created from the Tags field of the activity dialog, the Tags field of the occurrence dialog,
-or on the Tags page, which also renames and deletes them and shows, per tag, how many activities
-carry it and how many occurrences it reaches (the activity's tags and its own).
+Title search and grouping by Goal / Category / Tag / None (remembered); sections collapse with counts.
+An activity with several goals or tags appears under each. Category and tag filters come from links on
+those pages. Rows show a category-coloured tile and a menu: history, edit, duplicate (pre-filled create
+with the template, work types and settings, no occurrences), delete. **Multi-select** bulk-assigns goals
+(add, remove, replace) and category, or deletes.
 
-Each row leads with a tile in its **category's colour and icon** - the same colour that draws its
-occurrences everywhere else - then title and a meta line dropping whatever the section header already
-says, then an action menu (history, edit, duplicate, delete). **Duplicate** (`POST
-/api/activities/{id}/duplicate`) creates "<title> (copy)" with the same category, goals, tags, repeat
-gap, subtask template and non-archived work types, but no occurrences, and opens it in the edit
-dialog. **Multi-select mode** turns the tiles into
-checkboxes and the row actions into a bottom bar: assign, delete, with per-section select-all. Bulk
-assign changes goals and category across the selection (tags are carried through untouched), each defaulting to "keep current". Goals can
-be added to, removed from, or replaced on every selected activity; it fans
-out over the single-item PUT, resending unchanged fields.
-
-**Activity history** opens read-only from a row's action menu: last done, cadence, usual time, usual
-length, an eight-week grid of one cell per day laid out as a calendar, and the ten most recent
-occurrences. Every figure is derived in the client from that activity's own occurrences, so it stays
-correct however little else is logged.
+**Activity history** (read-only): last done, cadence, usual time and length, an eight-week grid, and
+dated occurrences newest first (future pending ones left out). Derived from that activity alone.
 
 ---
 
 ## Insights
 
-Read-only totals over **done occurrences**, computed server-side (`GET /api/insights?period=N`; the
-page offers 7, 30, 90 and 365 days and defaults to 7) in the user's day context. Occurrences with no `StartAt` are
-excluded - they have no day to count on.
+Totals over **done, dated occurrences** in a 7 / 30 / 90 / 365-day window (default 7).
 
 | Stat | Rule |
 |---|---|
-| Summary | Total timed minutes, done count (timed or not) and number of distinct days with something done, over the window. Time and done also carry the difference against the previous window of the same length, shown only when that window had something to compare. |
-| Time by activity | Per activity over the window: summed minutes and count, from occurrences with both timestamps and positive elapsed time. Sorted by time. Bars in the activity's category colour. |
-| Time by work type | Under each activity, its time split summed per work type (resolved minutes, archived types included), largest first, with whatever was not split shown as "Not split". Absent when the activity has no split time in the window. |
-| Time by category | Same set grouped by the activity's category; uncategorized completions form a "No category" bucket. |
-| Time by goal | Same set grouped by each goal the activity is linked to, so an occurrence counts once per goal; the rows do not add up to the total. Absent when no goal-linked time. |
-| Time by tag | Same set grouped by effective tag (the activity's tags plus the occurrence's own, once each); same overlap as goals. Absent when no tagged time. |
+| Summary | Timed minutes, done count, days with something done; time and done also compared to the previous window. |
+| By activity | Minutes and count, sorted by time, bars in category colour. |
+| By work type | Under each activity, split time per work type plus "Not split". |
+| By category | Including "No category". |
+| By goal | Once per goal, so rows overlap the total. |
+| By tag | By effective tag; overlaps like goals. |
 
-All are sums over what the user chose to log. **There is deliberately no stat whose denominator is
-the length of a day** - no unaccounted time, no gap analysis, no "usually free" profile. Those all
-answer "what is missing from the calendar", which is only a meaningful question if the calendar is
-supposed to be complete, and here it is not. Today counts like any other day, since nothing is
-averaged over days.
+**No stat has the length of a day as its denominator**: no unaccounted time, no gap analysis.
 
 ---
 
@@ -663,20 +367,15 @@ averaged over days.
 
 | Setting | Notes |
 |---|---|
-| Timezone | Captured from the browser on registration; editable here. |
-| Day start | The time the day rolls over. |
-| Max focus goals | Hard limit on simultaneous Focus goals, 1-20. |
-| Theme | Light / dark / system. Client-side preference in `localStorage`, defaults to system. |
-| Calendar colours | `category` (default) or `goal`, saved on its own when picked. By goal, an occurrence takes its activity's goal colour when its coloured goals agree on one colour; none, or two different ones, falls back to the category colour (`occurrenceColor` in `lib/calendarLayout.ts`). Only the calendar follows it. A PUT without `calendarColorBy` keeps the stored value. |
-| Daily overdue reminder | Native shells only: a switch and a time for the daily overdue notification. Saved with the planning values; a PUT without `dailyDigestTime` keeps it, `null` turns it off. |
-| Server URL | Native shells only: where the app points its API calls. |
-| Notifications | Native shells only: sends a test notification to this account's devices. |
-| Export data | Downloads `loom-export-<date>.json`. |
-| Delete history | Confirmed, permanent; the user picks "only the past" (dated before today, by `DayMath`; today, upcoming and undated stay) or "everything" (`DELETE /api/occurrences[?pastOnly=true]`). Deletes occurrences and events; activities, categories, goals and checkpoints are kept, for a fresh start after a break. |
+| Timezone | From the browser at registration; editable. |
+| Day start | When the day rolls over. |
+| Max focus goals | 1-20. |
+| Theme | Light / dark / system, per device. |
+| Calendar colours | By category (default) or goal. By goal, a block takes its goal colour when its coloured goals agree, else the category colour. Calendar only. |
+| Deadlines ahead | How far the Plan's Deadlines section looks, 0-365 days; empty = no limit. |
+| Daily overdue reminder | Native only: on/off and time. |
+| Server URL | Native only. |
+| Notifications | Native only: send a test push. |
+| Export data | One JSON file of everything, for reading or handing to an LLM; not a backup (no import). |
+| Delete history | Confirmed: only the past, or everything. Deletes occurrences and events; keeps activities, categories, goals and checkpoints. |
 | Account | Username and sign out. |
-
-Settings holds preferences only.
-
-**Data export** (`GET /api/export`) is a single JSON document: user, settings, categories, tags, goals with
-checkpoints, activities with tags, subtasks and work types, and flat occurrences (effective title, notes, time split, own tags, no nested activity). Good enough to hand to a person or an LLM for analysis; not a
-backup format, since there is no import path and the shape may change freely.

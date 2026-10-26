@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Trash2, Plus } from 'lucide-react'
+import { ChevronDown, Trash2, Plus } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
@@ -8,12 +8,14 @@ import { Select } from '@/components/ui/Select'
 import { DateTimePicker } from '@/components/ui/DateTimePicker'
 import { occurrencesApi, activitiesApi, categoriesApi, goalsApi, tagsApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
-import type { Activity, ActivityKind, Occurrence } from '@/lib/types'
+import type { Activity, ActivityKind, Occurrence, OccurrenceRef } from '@/lib/types'
 import { invalidateOccurrences } from '@/lib/invalidate'
 import { GoalPicker } from '@/components/goals/GoalPicker'
 import { TagPicker } from '@/components/tags/TagPicker'
 import { ReminderPicker } from '@/components/reminders/ReminderPicker'
 import { pickableGoals } from '@/lib/goals'
+import { isDue } from '@/lib/calendarLayout'
+import { weekdayDate } from '@/lib/dates'
 
 // Draft subtask row: id present = existing subtask, absent = added in this edit session.
 interface DraftSubtask {
@@ -30,6 +32,7 @@ interface FormState {
   startAt: string
   endAt: string
   deadlineId: string
+  sourceId: string
 }
 
 interface Errors {
@@ -67,6 +70,24 @@ function toInputValue(iso: string | null | undefined): string {
   const d = new Date(iso)
   const z = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`
+}
+
+// How far back the "Related to" picker looks, counted from the start of today.
+const SOURCE_LOOKBACK_DAYS = 60
+
+function sourceCutoffIso(): string {
+  const d = new Date()
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() - SOURCE_LOOKBACK_DAYS)
+  return d.toISOString()
+}
+
+// Sublabel for the Deadline and Related pickers. Goals first: several occurrences can share a
+// title ("Lab 2") across courses.
+function linkSublabel(o: { startAt: string | null; endAt: string | null; activity?: Occurrence['activity'] }) {
+  const iso = o.startAt ?? o.endAt
+  const parts = [o.activity?.goals.map((g) => g.title).join(', ') ?? '', iso ? weekdayDate(iso) : '']
+  return parts.filter(Boolean).join(' · ') || undefined
 }
 
 function toIso(local: string): string | null {
@@ -110,9 +131,11 @@ interface OccurrenceModalProps {
   defaultEndAt?: string
   defaultActivity?: Activity
   scheduleOnly?: boolean
+  /** Opens a new occurrence that follows up on this one. */
+  followUpOf?: OccurrenceRef
 }
 
-export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStartAt, defaultStartAt, defaultEndAt, defaultActivity, scheduleOnly }: OccurrenceModalProps) {
+export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStartAt, defaultStartAt, defaultEndAt, defaultActivity, scheduleOnly, followUpOf }: OccurrenceModalProps) {
   const qc = useQueryClient()
   const isEdit = Boolean(occurrence)
 
@@ -133,6 +156,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
       ? toAllDayEndInput(source.endAt)
       : (occurrence ? toInputValue(occurrence.endAt) : (duplicateFrom ? toInputValue(duplicateFrom.endAt) : (defaultEndAt ?? ''))),
     deadlineId: source?.deadline && (occurrence || source.deadline.status === 'pending') ? source.deadline.id : '',
+    sourceId: followUpOf?.id ?? source?.sourceOccurrenceId ?? '',
   }))
 
   const [errors, setErrors] = useState<Errors>({})
@@ -153,11 +177,12 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   })
 
   const [showAdvanced, setShowAdvanced] = useState(() => {
-    if (isEdit || scheduleOnly) return true
+    if (isEdit || scheduleOnly || followUpOf) return true
     if (!source) return false
     if (source.title) return true
     if (source.activity?.categoryId || source.activity?.goals.length) return true
-    if (source.deadlineOccurrenceId) return true
+    if (source.deadlineOccurrenceId || source.sourceOccurrenceId) return true
+    if (source.tags.length || source.reminders?.length) return true
     return false
   })
 
@@ -208,10 +233,25 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     enabled: open && !scheduleOnly,
   })
 
-  const { data: pendingEvents = [] } = useQuery({
+  const { data: pendingTargets = [] } = useQuery({
     queryKey: ['events', 'pending-deadlines'],
     queryFn: () => occurrencesApi.list({ status: 'pending' }),
     enabled: open && !scheduleOnly,
+  })
+
+  // One level only, so an occurrence that already has follow-ups gets no picker at all.
+  const canFollowUp = !scheduleOnly && !(occurrence && occurrence.followUpCount > 0)
+  const [sourceCutoff] = useState(sourceCutoffIso)
+  const { data: sourceCandidates = [] } = useQuery({
+    queryKey: ['events', 'follow-up-sources', sourceCutoff],
+    queryFn: () => occurrencesApi.list({ startFrom: sourceCutoff }),
+    enabled: open && canFollowUp,
+  })
+  // Undated todos (a book, a lesson) have no date to fall inside the lookback, so they come separately.
+  const { data: undatedSourceCandidates = [] } = useQuery({
+    queryKey: ['events', 'follow-up-sources', 'undated'],
+    queryFn: () => occurrencesApi.list({ undated: true, status: 'pending' }),
+    enabled: open && canFollowUp,
   })
 
   const createActivityMutation = useMutation({
@@ -251,6 +291,8 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
             tagIds: form.tagIds,
             deadlineOccurrenceId: form.deadlineId || null,
             clearDeadline: isEdit && !form.deadlineId && Boolean(occurrence?.deadlineOccurrenceId),
+            // Events only: their PUT is a full replace, so the link goes every time.
+            sourceOccurrenceId: form.sourceId || null,
           }
 
       if (kind === 'event') {
@@ -272,6 +314,8 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
         title: form.title.trim() || null,
         ...schedulePayload,
         ...(scheduleOnly ? {} : { deadlineOccurrenceId: form.deadlineId || null, tagIds: form.tagIds, reminders }),
+        // Omitted while the picker is hidden, so the patch leaves the link alone.
+        ...(canFollowUp ? { sourceOccurrenceId: form.sourceId || null } : {}),
       }
       return isEdit
         ? occurrencesApi.patch(occurrence!.id, occurrencePayload)
@@ -292,6 +336,13 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
     },
     onError: (err) => toastError(err, 'Could not delete the occurrence.'),
   })
+
+  function switchKind(next: ActivityKind) {
+    setKind(next)
+    setErrors({})
+    // An edited event's activityId is its backing row, which the picker never offers.
+    if (isEdit && isEventKind) setForm((f) => ({ ...f, activityId: next === 'event' ? source!.activityId : '' }))
+  }
 
   function addSubtask() {
     const title = newSubtaskTitle.trim()
@@ -358,7 +409,9 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
 
   const effectiveReminders = reminders ?? (kind === 'activity' ? selectedActivity?.reminders ?? [] : [])
   // Planned, floating and no-date occurrences have no time to remind about.
-  const canRemind = !isUndated(timeMode) && !isPlanned
+  // Mirrors ReminderMath.Anchor: a planned occurrence fires only as a timed Due pin.
+  const isDuePin = timeMode === 'due' || (timeMode === 'scheduled' && !form.endAt)
+  const canRemind = !isUndated(timeMode) && (!isPlanned || (isDuePin && !isAllDay))
 
   // Most-used first (occurrences in the last year, from the server), so the activities the user
   // keeps logging are at the top of the picker. Never-used ones fall to the tail, alphabetically.
@@ -372,18 +425,43 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
   const goalOptions = pickableGoals(goals, source?.activity.goals.map((g) => g.id) ?? [])
   const newActivityGoalOptions = pickableGoals(goals, [])
 
+  // Both link pickers lift the occurrences sharing a goal, then a category, with the one being
+  // edited; the sort is stable, so each picker's own order holds within those groups.
+  const matchGoalIds = kind === 'event' ? form.goalIds : (selectedActivity?.goals.map((g) => g.id) ?? [])
+  const matchCategoryId = kind === 'event' ? form.categoryId : (selectedActivity?.categoryId ?? '')
+  const matchGoalKey = matchGoalIds.join(',')
+  const byMatch = useMemo(() => {
+    const goalIds = matchGoalKey ? matchGoalKey.split(',') : []
+    const score = (o: Occurrence) =>
+      (o.activity.goals.some((g) => goalIds.includes(g.id)) ? 2 : 0)
+      + (matchCategoryId && o.activity.categoryId === matchCategoryId ? 1 : 0)
+    return (a: Occurrence, b: Occurrence) => score(b) - score(a)
+  }, [matchGoalKey, matchCategoryId])
+
   const deadlineOptions = useMemo(() => {
-    const dateLabel = (iso: string | null) =>
-      iso ? new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) : undefined
-    const fromList = pendingEvents
-      .filter((o) => o.activity.kind === 'event' && o.id !== occurrence?.id)
-      .map((o) => ({ value: o.id, label: o.effectiveTitle, sublabel: dateLabel(o.startAt ?? o.endAt) }))
-    const current = source?.deadline
-    if (current && !fromList.some((o) => o.value === current.id) && (occurrence || current.status === 'pending')) {
-      fromList.push({ value: current.id, label: current.effectiveTitle, sublabel: dateLabel(current.startAt ?? current.endAt) })
-    }
+    // Pending events of any shape, plus Due-shaped activity occurrences. A link whose target was
+    // completed or skipped later is not offered: the field shows empty, but the stored id is sent
+    // back unchanged on save, so the link survives unless another option is picked.
+    const fromList = pendingTargets
+      .filter((o) => (o.activity.kind === 'event' || isDue(o)) && o.id !== occurrence?.id)
+      .sort(byMatch)
+      .map((o) => ({ value: o.id, label: o.effectiveTitle, sublabel: linkSublabel(o) }))
     return [{ value: '', label: 'No deadline', sublabel: undefined }, ...fromList]
-  }, [pendingEvents, occurrence, source])
+  }, [pendingTargets, occurrence, byMatch])
+
+  const sourceOptions = useMemo(() => {
+    // Undated ones sort after the dated, newest first.
+    const fromList = [...sourceCandidates, ...undatedSourceCandidates]
+      .filter((o) => !o.sourceOccurrenceId && o.id !== occurrence?.id)
+      .sort((a, b) => (b.startAt ?? b.endAt ?? '').localeCompare(a.startAt ?? a.endAt ?? ''))
+      .sort(byMatch)
+      .map((o) => ({ value: o.id, label: o.effectiveTitle, sublabel: linkSublabel(o) }))
+    // The current source may sit outside the lookback window; keep it pickable.
+    const current = followUpOf ?? source?.source
+    if (current && form.sourceId === current.id && !fromList.some((o) => o.value === current.id))
+      fromList.unshift({ value: current.id, label: current.effectiveTitle, sublabel: linkSublabel(current) })
+    return [{ value: '', label: 'None', sublabel: undefined }, ...fromList]
+  }, [sourceCandidates, undatedSourceCandidates, occurrence, followUpOf, source, form.sourceId, byMatch])
 
   const segmentClass = (active: boolean) =>
     `flex-1 rounded-md py-2 text-xs font-medium transition-colors ${
@@ -476,27 +554,28 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
                     options={activityOptions}
                     placeholder="Select an activity..."
                     error={Boolean(errors.activityId)}
-                    onCreateNew={!isEdit ? () => setShowNewActivity(true) : undefined}
+                    onCreateNew={!isEdit || isEventKind ? () => setShowNewActivity(true) : undefined}
                     createNewLabel="+ Create new activity"
                   />
                 </>
               )}
             </div>
 
-            {!isEdit && (
+            {/* An event can be linked to an activity later; an activity's occurrence can't become an event. */}
+            {(!isEdit || isEventKind) && (
               <div className="flex shrink-0 flex-col gap-1.5">
                 <span className="invisible text-sm font-medium">T</span>
                 <div className="flex h-10 gap-0.5 rounded-lg border border-border bg-muted p-0.5">
                   <button
                     type="button"
-                    onClick={() => { setKind('activity'); setErrors({}) }}
+                    onClick={() => switchKind('activity')}
                     className={`flex flex-1 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors ${kind === 'activity' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                   >
                     Activity
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setKind('event'); setErrors({}) }}
+                    onClick={() => switchKind('event')}
                     className={`flex flex-1 items-center justify-center rounded-md px-3 text-sm font-medium transition-colors ${kind === 'event' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                   >
                     Event
@@ -509,7 +588,7 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
           {kind === 'event' && errors.title && <p className="text-xs text-destructive">{errors.title}</p>}
           {kind === 'activity' && errors.activityId && <p className="text-xs text-destructive">{errors.activityId}</p>}
 
-          {kind === 'activity' && showNewActivity && !isEdit && (
+          {kind === 'activity' && showNewActivity && (!isEdit || isEventKind) && (
             <div className="flex flex-col gap-2 rounded-lg border border-border bg-muted/40 p-3">
               <input
                 type="text"
@@ -570,6 +649,23 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
               {selectedActivity.category && (
                 <span className="text-xs text-muted-foreground">Category: {selectedActivity.category.name}</span>
               )}
+            </div>
+          )}
+
+          {/* Activity: title override */}
+          {kind === 'activity' && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">
+                Title <span className="font-normal text-muted-foreground">(optional)</span>
+              </label>
+              <input
+                type="text"
+                placeholder={selectedActivity ? selectedActivity.title : 'Override activity title...'}
+                value={form.title}
+                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
+                className="h-11 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              />
             </div>
           )}
         </div>
@@ -712,162 +808,149 @@ export function EventModal({ open, onClose, occurrence, duplicateFrom, focusStar
         </div>
       )}
 
-      {/* More options toggle */}
+      {/* More options: an inset panel whose header row is the toggle */}
       {!scheduleOnly && (
-        <button
-          type="button"
-          onClick={() => setShowAdvanced((v) => !v)}
-          className="flex items-center gap-1.5 self-start text-xs text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <svg
-            className={`h-3 w-3 transition-transform ${showAdvanced ? 'rotate-180' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
+        <div className={`rounded-lg border border-border ${showAdvanced ? 'bg-muted/40' : ''}`}>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            aria-expanded={showAdvanced}
+            className="flex w-full items-center justify-between px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-          {showAdvanced ? 'Fewer options' : 'More options'}
-        </button>
-      )}
-
-      {!scheduleOnly && (
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium text-foreground">
-            Tags <span className="font-normal text-muted-foreground">(optional)</span>
-          </span>
-          <TagPicker
-            tags={tags}
-            value={form.tagIds}
-            onChange={(ids) => setForm((f) => ({ ...f, tagIds: ids }))}
-          />
-          {kind === 'activity' && inheritedTags.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Also from the activity: {inheritedTags.map((t) => t.name).join(', ')}
-            </p>
-          )}
-        </div>
-      )}
-
-      {!scheduleOnly && canRemind && (
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-foreground">
-              Reminders <span className="font-normal text-muted-foreground">(optional)</span>
-            </span>
-            {kind === 'activity' && reminders !== null && (
-              <button
-                type="button"
-                onClick={() => setReminders(null)}
-                className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-              >
-                Use activity's
-              </button>
-            )}
-          </div>
-          <ReminderPicker value={effectiveReminders} onChange={setReminders} />
-        </div>
-      )}
-
-      {/* Details */}
-      {!scheduleOnly && showAdvanced && (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-foreground">
-              Deadline <span className="font-normal text-muted-foreground">(optional)</span>
-            </label>
-            <Select
-              value={form.deadlineId}
-              onChange={(v) => setForm((f) => ({ ...f, deadlineId: v }))}
-              options={deadlineOptions}
-            />
-          </div>
-
-          {/* Activity: title override */}
-          {kind === 'activity' && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">
-                Title <span className="font-normal text-muted-foreground">(optional)</span>
-              </label>
-              <input
-                type="text"
-                placeholder={selectedActivity ? selectedActivity.title : 'Override activity title...'}
-                value={form.title}
-                onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
-                className="h-11 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-          )}
-
-          {/* Event: category + goals */}
-          {kind === 'event' && (
-            <>
+            {showAdvanced ? 'Fewer options' : 'More options'}
+            <ChevronDown className={`h-4 w-4 transition-transform ${showAdvanced ? 'rotate-180' : ''}`} strokeWidth={2} />
+          </button>
+          {showAdvanced && (
+            <div className="flex flex-col gap-3 border-t border-border p-3">
               <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-foreground">Category</label>
+                <label className="text-sm font-medium text-foreground">
+                  Deadline <span className="font-normal text-muted-foreground">(optional)</span>
+                </label>
                 <Select
-                  value={form.categoryId}
-                  onChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}
-                  options={[
-                    { value: '', label: 'No category' },
-                    ...categories.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
+                  value={form.deadlineId}
+                  onChange={(v) => setForm((f) => ({ ...f, deadlineId: v }))}
+                  options={deadlineOptions}
                 />
               </div>
-              {goalOptions.length > 0 && (
+
+              {canFollowUp && (
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium text-foreground">
-                    Goals <span className="font-normal text-muted-foreground">(optional)</span>
-                  </span>
-                  <GoalPicker
-                    goals={goalOptions}
-                    value={form.goalIds}
-                    onChange={(ids) => setForm((f) => ({ ...f, goalIds: ids }))}
+                  <label className="text-sm font-medium text-foreground">
+                    Related to <span className="font-normal text-muted-foreground">(optional)</span>
+                  </label>
+                  <Select
+                    value={form.sourceId}
+                    onChange={(v) => setForm((f) => ({ ...f, sourceId: v }))}
+                    options={sourceOptions}
                   />
                 </div>
               )}
-            </>
-          )}
-        </div>
-      )}
 
-      {isEdit && !scheduleOnly && (
-        <div className="flex flex-col gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Subtasks</span>
-          {subtasks.length > 0 && (
-            <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
-              {subtasks.map((s, i) => (
-                <li key={s.id ?? `new-${i}`} className="flex items-center gap-3 px-3 py-2.5">
-                  <span className="flex-1 text-sm text-foreground">{s.title}</span>
-                  <button
-                    type="button"
-                    onClick={() => removeSubtask(i)}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-destructive"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
-                  </button>
-                </li>
-              ))}
-            </ul>
+              {/* Event: category + goals */}
+              {kind === 'event' && (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-sm font-medium text-foreground">Category</label>
+                    <Select
+                      value={form.categoryId}
+                      onChange={(v) => setForm((f) => ({ ...f, categoryId: v }))}
+                      options={[
+                        { value: '', label: 'No category' },
+                        ...categories.map((c) => ({ value: c.id, label: c.name })),
+                      ]}
+                    />
+                  </div>
+                  {goalOptions.length > 0 && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium text-foreground">
+                        Goals <span className="font-normal text-muted-foreground">(optional)</span>
+                      </span>
+                      <GoalPicker
+                        goals={goalOptions}
+                        value={form.goalIds}
+                        onChange={(ids) => setForm((f) => ({ ...f, goalIds: ids }))}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium text-foreground">
+                  Tags <span className="font-normal text-muted-foreground">(optional)</span>
+                </span>
+                <TagPicker
+                  tags={tags}
+                  value={form.tagIds}
+                  onChange={(ids) => setForm((f) => ({ ...f, tagIds: ids }))}
+                />
+                {kind === 'activity' && inheritedTags.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Also from the activity: {inheritedTags.map((t) => t.name).join(', ')}
+                  </p>
+                )}
+              </div>
+
+              {canRemind && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-foreground">
+                      Reminders <span className="font-normal text-muted-foreground">(optional)</span>
+                    </span>
+                    {kind === 'activity' && reminders !== null && (
+                      <button
+                        type="button"
+                        onClick={() => setReminders(null)}
+                        className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        Use activity's
+                      </button>
+                    )}
+                  </div>
+                  <ReminderPicker value={effectiveReminders} onChange={setReminders} />
+                </div>
+              )}
+
+              {isEdit && (
+                <div className="flex flex-col gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Subtasks</span>
+                  {subtasks.length > 0 && (
+                    <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
+                      {subtasks.map((s, i) => (
+                        <li key={s.id ?? `new-${i}`} className="flex items-center gap-3 px-3 py-2.5">
+                          <span className="flex-1 text-sm text-foreground">{s.title}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeSubtask(i)}
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground transition-colors hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      value={newSubtaskTitle}
+                      onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSubtask() } }}
+                      placeholder="Add subtask..."
+                      className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={addSubtask}
+                      disabled={!newSubtaskTitle.trim()}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
           )}
-          <div className="flex gap-2">
-            <input
-              value={newSubtaskTitle}
-              onChange={(e) => setNewSubtaskTitle(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSubtask() } }}
-              placeholder="Add subtask..."
-              className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
-            />
-            <Button
-              type="button"
-              size="sm"
-              onClick={addSubtask}
-              disabled={!newSubtaskTitle.trim()}
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </Button>
-          </div>
         </div>
       )}
 

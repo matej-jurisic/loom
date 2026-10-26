@@ -13,7 +13,7 @@ public static class OccurrenceEndpoints
 
         group.MapGet("/", async (
             ClaimsPrincipal principal, OccurrenceService svc,
-            string? status, DateTimeOffset? startFrom, DateTimeOffset? endBefore, bool floating = false, Guid? goalId = null, Guid? activityId = null) =>
+            string? status, DateTimeOffset? startFrom, DateTimeOffset? endBefore, bool floating = false, Guid? goalId = null, Guid? activityId = null, Guid? sourceId = null, bool undated = false) =>
         {
             var userId = principal.GetUserId();
             if (userId is null) return Results.Unauthorized();
@@ -22,7 +22,7 @@ public static class OccurrenceEndpoints
             if (status is not null && Enum.TryParse<EventStatus>(status, ignoreCase: true, out var parsed))
                 filter = parsed;
 
-            return Results.Ok(await svc.ListAsync(userId.Value, filter, startFrom, endBefore, floating, goalId, activityId));
+            return Results.Ok(await svc.ListAsync(userId.Value, filter, startFrom, endBefore, floating, goalId, activityId, sourceId, undated));
         });
 
         group.MapDelete("/", async (ClaimsPrincipal principal, OccurrenceService svc, bool pastOnly = false) =>
@@ -83,6 +83,14 @@ public static class OccurrenceEndpoints
             return result.IsSuccess
                 ? Results.Created($"/api/occurrences/{result.Value!.Id}", result.Value)
                 : result.Error!.ToProblem();
+        });
+
+        group.MapPut("/order", async (ReorderOccurrencesRequest req, ClaimsPrincipal principal, OccurrenceService svc) =>
+        {
+            var userId = principal.GetUserId();
+            if (userId is null) return Results.Unauthorized();
+            var result = await svc.ReorderAsync(userId.Value, req);
+            return result.IsSuccess ? Results.NoContent() : result.Error!.ToProblem();
         });
 
         group.MapPut("/{id:guid}/time-split", async (Guid id, SetTimeSplitRequest req, ClaimsPrincipal principal, OccurrenceService svc) =>

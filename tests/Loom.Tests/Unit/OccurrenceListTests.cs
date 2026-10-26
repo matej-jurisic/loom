@@ -86,4 +86,34 @@ public class OccurrenceListTests : IDisposable
         Assert.True((await _ctx.OccurrenceListService.DeleteAsync(list.Id, userId)).IsSuccess);
         Assert.Empty(await _ctx.OccurrenceListService.ListAsync(userId));
     }
+
+    [Fact]
+    public async Task ListAsync_keeps_creation_order_until_reordered()
+    {
+        var userId = await CreateUserAsync();
+        var b = (await _ctx.OccurrenceListService.CreateAsync(userId, Req("B"))).Value!;
+        var a = (await _ctx.OccurrenceListService.CreateAsync(userId, Req("A"))).Value!;
+        var c = (await _ctx.OccurrenceListService.CreateAsync(userId, Req("C"))).Value!;
+        Assert.Equal(["B", "A", "C"], (await _ctx.OccurrenceListService.ListAsync(userId)).Select(l => l.Name));
+
+        var result = await _ctx.OccurrenceListService.ReorderAsync(userId, new([c.Id, a.Id, b.Id]));
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(["C", "A", "B"], (await _ctx.OccurrenceListService.ListAsync(userId)).Select(l => l.Name));
+    }
+
+    [Fact]
+    public async Task ReorderAsync_requires_every_own_list_exactly_once()
+    {
+        var userId = await CreateUserAsync();
+        var otherId = await CreateUserAsync();
+        var a = (await _ctx.OccurrenceListService.CreateAsync(userId, Req("A"))).Value!;
+        var b = (await _ctx.OccurrenceListService.CreateAsync(userId, Req("B"))).Value!;
+        var theirs = (await _ctx.OccurrenceListService.CreateAsync(otherId, Req("T"))).Value!;
+
+        Assert.Equal(ErrorType.Validation, (await _ctx.OccurrenceListService.ReorderAsync(userId, new([a.Id]))).Error!.Type);
+        Assert.Equal(ErrorType.Validation, (await _ctx.OccurrenceListService.ReorderAsync(userId, new([a.Id, a.Id]))).Error!.Type);
+        Assert.Equal(ErrorType.Validation, (await _ctx.OccurrenceListService.ReorderAsync(userId, new([a.Id, theirs.Id]))).Error!.Type);
+        Assert.Equal(["A", "B"], (await _ctx.OccurrenceListService.ListAsync(userId)).Select(l => l.Name));
+    }
 }

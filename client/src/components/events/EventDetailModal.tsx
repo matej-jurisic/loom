@@ -1,7 +1,7 @@
 import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { Check, X, Pencil, Trash2, Clock, CalendarPlus, Copy, History, MoreHorizontal, Pin, PinOff, Layers, Flag, CalendarOff } from 'lucide-react'
+import { Check, X, Pencil, Trash2, Clock, CalendarPlus, Copy, History, MoreHorizontal, Pin, PinOff, Layers, Flag, CalendarOff, CornerDownRight, ListPlus, Link2 } from 'lucide-react'
 import { Modal } from '@/components/ui/Modal'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -12,15 +12,15 @@ import { SkipRescheduleModal } from '@/components/events/SkipRescheduleModal'
 import { TimeSplitEditor } from '@/components/events/TimeSplitEditor'
 import { OccurrenceNotes } from '@/components/events/OccurrenceNotes'
 import { ActivityHistoryModal } from '@/components/activities/ActivityHistoryModal'
+import { RelatedOccurrencesModal } from '@/components/events/RelatedOccurrencesModal'
 import { occurrencesApi } from '@/lib/api'
 import { toastError } from '@/store/toasts'
-import type { Activity, Occurrence, OccurrenceSubtask, EventStatus } from '@/lib/types'
+import type { Activity, Occurrence, OccurrenceRef, OccurrenceSubtask, EventStatus } from '@/lib/types'
 import { invalidateOccurrences } from '@/lib/invalidate'
 import { addNextOccurrence, formatDay, nextRepeatFor } from '@/lib/repeat'
-
-function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-}
+import { timeLabel as formatTime } from '@/lib/calendarDates'
+import { weekdayDate } from '@/lib/dates'
+import { hasRelated } from '@/lib/occurrenceView'
 
 function formatDuration(minutes: number | null): string {
   if (!minutes) return ''
@@ -46,7 +46,7 @@ function formatOccurrenceTime(o: Occurrence): string {
   let dateLabel: string
   if (sameDay(d, today)) dateLabel = 'Today'
   else if (sameDay(d, tomorrow)) dateLabel = 'Tomorrow'
-  else dateLabel = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  else dateLabel = weekdayDate(d)
 
   if (o.isAllDay) {
     if (o.endAt) {
@@ -56,7 +56,7 @@ function formatOccurrenceTime(o: Occurrence): string {
         let endLabel: string
         if (sameDay(endInclusive, today)) endLabel = 'Today'
         else if (sameDay(endInclusive, tomorrow)) endLabel = 'Tomorrow'
-        else endLabel = endInclusive.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+        else endLabel = weekdayDate(endInclusive)
         return `${dateLabel} - ${endLabel}`
       }
     }
@@ -80,13 +80,16 @@ interface EventDetailModalProps {
   onDuplicate?: (o: Occurrence) => void
   /** Edits the parent activity rather than this occurrence. Only offered for the activity kind. */
   onEditActivity?: (a: Activity) => void
+  /** Called with the occurrence to follow up on: this one, or its own source when it is a follow-up. */
+  onAddFollowUp?: (source: OccurrenceRef) => void
 }
 
-export function EventDetailModal({ open, onClose, event: occurrence, onEdit, onSchedule, onDuplicate, onEditActivity }: EventDetailModalProps) {
+export function EventDetailModal({ open, onClose, event: occurrence, onEdit, onSchedule, onDuplicate, onEditActivity, onAddFollowUp }: EventDetailModalProps) {
   const qc = useQueryClient()
   const [moreOpen, setMoreOpen] = useState(false)
   const [skipOpen, setSkipOpen] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [relatedOpen, setRelatedOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [menuPos, setMenuPos] = useState<{ bottom: number; left: number } | null>(null)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
@@ -213,6 +216,13 @@ const statusMutation = useMutation({
       onClose={() => setHistoryOpen(false)}
     />
   )
+  if (relatedOpen) return (
+    <RelatedOccurrencesModal
+      open={relatedOpen}
+      occurrence={occurrence}
+      onClose={() => setRelatedOpen(false)}
+    />
+  )
   const busy = statusMutation.isPending || deleteMutation.isPending || planMutation.isPending || floatMutation.isPending
   const timeLabel = formatOccurrenceTime(occurrence)
   const category = occurrence.activity.category
@@ -304,6 +314,15 @@ const statusMutation = useMutation({
                 <History className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2} />
                 History
               </button>
+              {hasRelated(occurrence) && (
+                <button
+                  onClick={() => { setMoreOpen(false); setRelatedOpen(true) }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+                >
+                  <Link2 className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2} />
+                  See related
+                </button>
+              )}
               {onDuplicate && (
                 <button
                   onClick={() => { setMoreOpen(false); onDuplicate(occurrence) }}
@@ -311,6 +330,15 @@ const statusMutation = useMutation({
                 >
                   <Copy className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2} />
                   Duplicate
+                </button>
+              )}
+              {onAddFollowUp && (
+                <button
+                  onClick={() => { setMoreOpen(false); onAddFollowUp(occurrence.source ?? occurrence) }}
+                  className="flex w-full items-center gap-2.5 px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
+                >
+                  <ListPlus className="h-4 w-4 shrink-0 text-muted-foreground" strokeWidth={2} />
+                  Add related
                 </button>
               )}
               {isPending && (occurrence.isPlanned || isFloat) && onSchedule && (
@@ -414,8 +442,30 @@ const statusMutation = useMutation({
             <span>
               {occurrence.deadline.effectiveTitle}
               {(occurrence.deadline.startAt ?? occurrence.deadline.endAt) && (
-                <> - {new Date((occurrence.deadline.startAt ?? occurrence.deadline.endAt)!).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}</>
+                <> - {weekdayDate((occurrence.deadline.startAt ?? occurrence.deadline.endAt)!)}</>
               )}
+            </span>
+          </div>
+        )}
+
+        {occurrence.source && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <CornerDownRight className="h-4 w-4 shrink-0" strokeWidth={2} />
+            <span>
+              {occurrence.source.effectiveTitle}
+              {(occurrence.source.startAt ?? occurrence.source.endAt) && (
+                <> - {weekdayDate((occurrence.source.startAt ?? occurrence.source.endAt)!)}</>
+              )}
+            </span>
+          </div>
+        )}
+
+        {occurrence.followUpCount > 0 && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <ListPlus className="h-4 w-4 shrink-0" strokeWidth={2} />
+            <span>
+              {occurrence.followUpDoneCount}/{occurrence.followUpCount} related done
+              {occurrence.followUpDoneMinutes > 0 && `, ${formatDuration(occurrence.followUpDoneMinutes)}`}
             </span>
           </div>
         )}

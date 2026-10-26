@@ -93,13 +93,11 @@ export const activitiesApi = {
     return request<Activity[]>(`/api/activities${q.size ? `?${q}` : ''}`)
   },
 
-  create: (body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds?: string[]; repeatAfterDays?: number | null; showAsOverdue?: boolean; reminders?: number[] }) =>
+  create: (body: { title: string; shortLabel?: string | null; categoryId?: string | null; goalIds?: string[]; tagIds?: string[]; repeatAfterDays?: number | null; showAsOverdue?: boolean; reminders?: number[]; subtasks?: string[]; workTypes?: string[] }) =>
     request<Activity>('/api/activities', { method: 'POST', body: JSON.stringify(body) }),
 
-  update: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; tagIds: string[]; repeatAfterDays: number | null; showAsOverdue: boolean; reminders: number[] }) =>
+  update: (id: string, body: { title: string; shortLabel: string | null; categoryId?: string | null; goalIds?: string[]; tagIds: string[]; repeatAfterDays: number | null; showAsOverdue: boolean; reminders: number[] }) =>
     request<Activity>(`/api/activities/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
-
-  duplicate: (id: string) => request<Activity>(`/api/activities/${id}/duplicate`, { method: 'POST' }),
 
   delete: (id: string) => request<void>(`/api/activities/${id}`, { method: 'DELETE' }),
 }
@@ -157,7 +155,7 @@ export interface SubtaskInput {
 }
 
 export const occurrencesApi = {
-  list: (params?: { status?: string; startFrom?: string; endBefore?: string; floating?: boolean; goalId?: string; activityId?: string }) => {
+  list: (params?: { status?: string; startFrom?: string; endBefore?: string; floating?: boolean; goalId?: string; activityId?: string; sourceId?: string; undated?: boolean }) => {
     const q = new URLSearchParams()
     if (params?.status) q.set('status', params.status)
     if (params?.startFrom) q.set('startFrom', params.startFrom)
@@ -165,18 +163,24 @@ export const occurrencesApi = {
     if (params?.floating) q.set('floating', 'true')
     if (params?.goalId) q.set('goalId', params.goalId)
     if (params?.activityId) q.set('activityId', params.activityId)
+    if (params?.sourceId) q.set('sourceId', params.sourceId)
+    if (params?.undated) q.set('undated', 'true')
     return request<Occurrence[]>(`/api/occurrences${q.size ? `?${q}` : ''}`)
   },
 
   get: (id: string) => request<Occurrence>(`/api/occurrences/${id}`),
 
-  create: (body: { activityId: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; deadlineOccurrenceId?: string | null; tagIds?: string[]; reminders?: number[] | null }) =>
+  create: (body: { activityId: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; deadlineOccurrenceId?: string | null; sourceOccurrenceId?: string | null; tagIds?: string[]; reminders?: number[] | null }) =>
     request<Occurrence>('/api/occurrences', { method: 'POST', body: JSON.stringify(body) }),
 
-  patch: (id: string, body: { activityId?: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; notes?: string | null; tagIds?: string[]; reminders?: number[] | null }) =>
+  patch: (id: string, body: { activityId?: string; title?: string | null; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; sourceOccurrenceId?: string | null; notes?: string | null; tagIds?: string[]; reminders?: number[] | null }) =>
     request<Occurrence>(`/api/occurrences/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   delete: (id: string) => request<void>(`/api/occurrences/${id}`, { method: 'DELETE' }),
+
+  // One list section's occurrences, top to bottom, after a drag.
+  reorder: (occurrenceIds: string[]) =>
+    request<void>('/api/occurrences/order', { method: 'PUT', body: JSON.stringify({ occurrenceIds }) }),
 
   // Wipes occurrences (and events); activities, categories and goals stay. pastOnly keeps today onward.
   clearAll: (pastOnly = false) =>
@@ -194,10 +198,11 @@ export const occurrencesApi = {
   setTimeSplit: (id: string, rows: TimeSplitInput[]) =>
     request<Occurrence>(`/api/occurrences/${id}/time-split`, { method: 'PUT', body: JSON.stringify({ rows }) }),
 
-  createEvent: (body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; deadlineOccurrenceId?: string | null; tagIds?: string[]; reminders?: number[] | null }) =>
+  createEvent: (body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; deadlineOccurrenceId?: string | null; sourceOccurrenceId?: string | null; tagIds?: string[]; reminders?: number[] | null }) =>
     request<Occurrence>('/api/occurrences/event', { method: 'POST', body: JSON.stringify(body) }),
 
-  updateEvent: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; clearDeadline?: boolean; tagIds?: string[]; reminders?: number[] | null }) =>
+  // A full replace: an omitted sourceOccurrenceId clears the follow-up link.
+  updateEvent: (id: string, body: { title: string; categoryId?: string | null; goalIds?: string[]; startAt?: string | null; endAt?: string | null; isAllDay?: boolean; isPlanned?: boolean; isNoDate?: boolean; subtasks?: SubtaskInput[]; deadlineOccurrenceId?: string | null; clearDeadline?: boolean; sourceOccurrenceId?: string | null; tagIds?: string[]; reminders?: number[] | null }) =>
     request<Occurrence>(`/api/occurrences/${id}/event`, { method: 'PUT', body: JSON.stringify(body) }),
 }
 
@@ -262,7 +267,7 @@ export const notificationsApi = {
 
 export const settingsApi = {
   get: () => request<UserSettings>('/api/settings'),
-  update: (body: { maxFocusGoals: number; dayBoundaryTime: string; timezone: string; calendarColorBy: CalendarColorBy; dailyDigestTime?: string | null }) =>
+  update: (body: { maxFocusGoals: number; dayBoundaryTime: string; timezone: string; calendarColorBy: CalendarColorBy; dailyDigestTime?: string | null; deadlineHorizonDays?: number | null }) =>
     request<UserSettings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
 }
 
@@ -291,6 +296,9 @@ export const listsApi = {
   update: (id: string, body: SaveOccurrenceListBody) =>
     request<OccurrenceList>(`/api/lists/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   delete: (id: string) => request<void>(`/api/lists/${id}`, { method: 'DELETE' }),
+  // Every list, top to bottom, after a drag.
+  reorder: (listIds: string[]) =>
+    request<void>('/api/lists/order', { method: 'PUT', body: JSON.stringify({ listIds }) }),
 }
 
 export const insightsApi = {

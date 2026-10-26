@@ -16,6 +16,7 @@ import { GoalTile } from '@/components/goals/GoalIcon'
 import { ActionMenu, type ActionMenuEntry } from '@/components/ui/ActionMenu'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog'
 import { invalidateGoals } from '@/lib/invalidate'
+import { shortDate } from '@/lib/dates'
 
 // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -59,9 +60,6 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.min(Math.max(n, lo), hi)
 }
 
-function shortDate(ms: number): string {
-  return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
 
 const STATUS_TRANSITIONS: Record<GoalStatus, { label: string; value: GoalStatus }[]> = {
   focus: [{ label: 'Move to Active', value: 'active' }, { label: 'Move to Bench', value: 'bench' }, { label: 'Close', value: 'closed' }],

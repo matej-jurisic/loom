@@ -56,6 +56,7 @@ export function BulkAssignModal({
         activities.map((a) =>
           activitiesApi.update(a.id, {
             title: a.title,
+            shortLabel: a.shortLabel,
             goalIds: nextGoalIds(a.goals.map((g) => g.id), goalMode, pickedGoalIds),
             categoryId:
               categoryId === KEEP ? a.categoryId : categoryId === CLEAR ? null : categoryId,
