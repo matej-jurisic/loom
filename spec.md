@@ -161,8 +161,8 @@ A push to the native app some minutes before an occurrence. It creates nothing.
   unconfirmed date); planned windows and all-day ones never do.
 - Each fire time sends once, only within 10 minutes after it and not if it predates the occurrence,
   so new items and outages cause no bursts. Moving an occurrence gives new fire times. Reminders due
-  together send one push: effective title, time in the user's timezone ("Today, 10:00 - 11:00"),
-  tapping opens it on the Daily Plan.
+  together send one push: effective title, time in the user's timezone ("Today, 10:00 - 11:00") and
+  its goals that are not closed; tapping opens it on the Daily Plan.
 - The app registers its device on sign-in and drops it on sign-out; dead tokens are pruned. Without a
   Firebase credential on the server nothing is sent.
 

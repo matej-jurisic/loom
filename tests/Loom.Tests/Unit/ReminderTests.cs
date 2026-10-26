@@ -178,6 +178,24 @@ public class ReminderTests : IDisposable
     }
 
     [Fact]
+    public async Task SendDueRemindersAsync_lists_open_goals_in_the_body()
+    {
+        var userId = await CreateUserAsync();
+        await _notifications.RegisterDeviceAsync(userId, "tok");
+        var strength = (await _ctx.GoalService.CreateAsync(userId, new CreateGoalRequest("Strength", null))).Value!;
+        var health = (await _ctx.GoalService.CreateAsync(userId, new CreateGoalRequest("health", null))).Value!;
+        var old = (await _ctx.GoalService.CreateAsync(userId, new CreateGoalRequest("Old", null))).Value!;
+        await _ctx.GoalService.SetStatusAsync(old.Id, userId, GoalStatus.closed);
+        var activity = (await _ctx.ActivityService.CreateAsync(userId,
+            new CreateActivityRequest("Gym", null, GoalIds: [strength.Id, health.Id, old.Id], Reminders: [0]))).Value!;
+        await CreateOccurrenceAsync(userId, activity.Id, Start, Start.AddHours(1));
+
+        await _notifications.SendDueRemindersAsync(Start);
+
+        Assert.Equal("Today, 10:00 - 11:00 · health, Strength", Assert.Single(_sender.Sent).Message.Body);
+    }
+
+    [Fact]
     public async Task SendDueRemindersAsync_skips_reminders_older_than_the_grace()
     {
         var userId = await CreateUserAsync();

@@ -73,7 +73,7 @@ public class NotificationService(LoomDbContext db, UserSettingsService settings,
             // SQLite can't compare DateTimeOffset, so the time window is applied in memory.
             var candidates = await db.Occurrences
                 .AsNoTracking()
-                .Include(o => o.Activity)
+                .Include(o => o.Activity).ThenInclude(a => a.Goals)
                 .Where(o => o.UserId == userId && o.Status == EventStatus.pending && !o.IsNoDate
                     && (o.StartAt != null || o.EndAt != null))
                 .ToListAsync(ct);
@@ -183,8 +183,20 @@ public class NotificationService(LoomDbContext db, UserSettingsService settings,
             await db.ReminderDeliveries.Where(d => chunk.Contains(d.Id)).ExecuteDeleteAsync(ct);
     }
 
-    /// <summary>The notification body: when the occurrence is, in the user's timezone, 24-hour.</summary>
+    /// <summary>The notification body: when the occurrence is, in the user's timezone, 24-hour, then
+    /// the activity's open goals.</summary>
     public static string Describe(Occurrence o, DayContext ctx, DateTimeOffset nowUtc)
+    {
+        var goals = o.Activity.Goals
+            .Where(g => g.Status != GoalStatus.closed)
+            .Select(g => g.Title)
+            .Order(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var when = DescribeTime(o, ctx, nowUtc);
+        return goals.Count == 0 ? when : $"{when} · {string.Join(", ", goals)}";
+    }
+
+    private static string DescribeTime(Occurrence o, DayContext ctx, DateTimeOffset nowUtc)
     {
         var today = DayMath.LocalDate(nowUtc, ctx);
         string Day(DateTimeOffset at)
