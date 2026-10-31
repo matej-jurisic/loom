@@ -1,9 +1,14 @@
 # Loom
 
 A brain space for goals, deadlines and motivation, built around **Goals**, **Activities** and
-**Occurrences**. It does not ask you to log your life: nothing in it needs sleep, work or commuting
-entered, and nothing computes a wrong answer when they are missing. The calendar is a visualization and
-a fast way to add things, not a planner.
+**Occurrences**. You only log what you care about. The calendar shows your occurrences and gives you
+a quick way to add new ones.
+
+![Daily plan](images/screenshot-plan.png)
+
+| Goals | Calendar |
+|---|---|
+| ![Goals](images/screenshot-goals.png) | ![Calendar](images/screenshot-calendar.png) |
 
 - `spec.md` describes what the app does and its domain rules.
 - `design.md` describes the visual language.
