@@ -4,11 +4,11 @@ A brain space for goals, deadlines and motivation, built around **Goals**, **Act
 **Occurrences**. You only log what you care about. The calendar shows your occurrences and gives you
 a quick way to add new ones.
 
-![Daily plan](images/screenshot-plan.png)
-
-| Goals | Calendar |
+| Daily plan | Goals |
 |---|---|
-| ![Goals](images/screenshot-goals.png) | ![Calendar](images/screenshot-calendar.png) |
+| ![Daily plan](images/screenshot-plan.png) | ![Goals](images/screenshot-goals.png) |
+
+![Calendar](images/screenshot-calendar.png)
 
 - `spec.md` describes what the app does and its domain rules.
 - `design.md` describes the visual language.
