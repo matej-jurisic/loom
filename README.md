@@ -4,9 +4,9 @@ A brain space for goals, deadlines and motivation, built around **Goals**, **Act
 **Occurrences**. You only log what you care about. The calendar shows your occurrences and gives you
 a quick way to add new ones.
 
-| Daily plan | Goals |
-|---|---|
-| ![Daily plan](images/screenshot-plan.png) | ![Goals](images/screenshot-goals.png) |
+![Daily plan](images/screenshot-plan.png)
+
+![Goals](images/screenshot-goals.png)
 
 ![Calendar](images/screenshot-calendar.png)
 
